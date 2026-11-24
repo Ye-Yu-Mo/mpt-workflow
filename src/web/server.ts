@@ -10,7 +10,12 @@ import { logEvent } from '../core/state.js';
 import { readText, exists } from '../core/fsutil.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const PUBLIC_DIR = path.resolve(here, '..', '..', 'src', 'web', 'public');
+// Prefer the build output (dist/web/public); fall back to the source tree when
+// running through tsx during development.
+const PUBLIC_DIR = [
+  path.resolve(here, 'public'),
+  path.resolve(here, '..', '..', 'src', 'web', 'public'),
+].find((p) => exists(p)) || path.resolve(here, 'public');
 
 function json(res: http.ServerResponse, data: unknown, code = 200) {
   const body = JSON.stringify(data, null, 2);
