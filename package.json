@@ -1,0 +1,31 @@
+{
+  "name": "workflow-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Multi-agent, multi-repo workflow state machine: MCP server + CLI + local dashboard",
+  "type": "module",
+  "bin": {
+    "workflow-mcp": "dist/cli.js",
+    "wf": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/cli.ts",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.20.0",
+    "yaml": "^2.6.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "jsdom": "^29.1.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

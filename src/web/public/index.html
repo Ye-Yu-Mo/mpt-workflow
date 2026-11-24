@@ -1,0 +1,697 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>workflow · 开发看板</title>
+<style>
+/* Palette: dataviz reference. State colours are paired with a symbol AND a text
+   label everywhere, so colour never carries meaning alone. */
+:root {
+  color-scheme: light;
+  --surface-1: #fcfcfb;
+  --page: #f9f9f7;
+  --card: #ffffff;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --line: #c3c2b7;
+  --ring: rgba(11,11,11,0.10);
+  --blue: #2a78d6;
+  --yellow: #eda100;
+  --violet: #6250d6;
+  --good: #0ca30c;
+  --critical: #d03b3b;
+  --serious: #ec835a;
+  --warning: #fab219;
+  --good-text: #006300;
+  --track: #f0efec;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --surface-1: #1a1a19;
+    --page: #0d0d0d;
+    --card: #1a1a19;
+    --ink: #f0efec;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --grid: #2c2c2a;
+    --line: #383835;
+    --ring: rgba(255,255,255,0.10);
+    --blue: #3987e5;
+    --yellow: #c98500;
+    --violet: #9085e9;
+    --good: #0ca30c;
+    --critical: #e66767;
+    --serious: #ec835a;
+    --warning: #fab219;
+    --good-text: #0ca30c;
+    --track: #262624;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-1: #1a1a19;
+  --page: #0d0d0d;
+  --card: #1a1a19;
+  --ink: #f0efec;
+  --ink-2: #c3c2b7;
+  --muted: #898781;
+  --grid: #2c2c2a;
+  --line: #383835;
+  --ring: rgba(255,255,255,0.10);
+  --blue: #3987e5;
+  --yellow: #c98500;
+  --violet: #9085e9;
+  --good: #0ca30c;
+  --critical: #e66767;
+  --serious: #ec835a;
+  --warning: #fab219;
+  --good-text: #0ca30c;
+  --track: #262624;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--page);
+  color: var(--ink);
+  font: 14px/1.55 system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+a { color: var(--blue); text-decoration: none; }
+a:hover { text-decoration: underline; }
+button { font: inherit; }
+
+.wrap { max-width: 1440px; margin: 0 auto; padding: 0 24px 64px; }
+
+/* header */
+header.top {
+  display: flex; align-items: center; gap: 20px;
+  padding: 20px 0 16px; border-bottom: 1px solid var(--grid); margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.brand { display: flex; align-items: center; gap: 10px; min-width: 220px; }
+.brand .mark {
+  width: 26px; height: 26px; border-radius: 7px;
+  background: var(--blue); display: grid; place-items: center;
+  color: #fff; font-weight: 700; font-size: 13px;
+}
+.brand h1 { font-size: 15px; margin: 0; font-weight: 650; letter-spacing: .2px; }
+.brand .sub { color: var(--muted); font-size: 12px; }
+.hero { display: flex; align-items: baseline; gap: 10px; margin-left: 8px; }
+.hero .num { font-size: 48px; line-height: 1; font-weight: 650; letter-spacing: -1.5px; }
+.hero .of { font-size: 18px; color: var(--muted); }
+.hero .lbl { color: var(--ink-2); font-size: 12px; margin-left: 4px; }
+.top-tools { margin-left: auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--ring); border-radius: 999px;
+  padding: 3px 10px; font-size: 12px; color: var(--ink-2); background: var(--card);
+}
+.pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.pill.active .dot { background: var(--good); }
+.btn {
+  border: 1px solid var(--ring); background: var(--card); color: var(--ink);
+  border-radius: 8px; padding: 6px 12px; cursor: pointer; font-size: 13px;
+}
+.btn:hover { border-color: var(--line); }
+.btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+.btn.primary:hover { filter: brightness(1.06); }
+.btn.ghost { background: transparent; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+
+/* tiles */
+.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+.tile {
+  background: var(--card); border: 1px solid var(--ring); border-radius: 12px; padding: 14px 16px;
+  min-height: 92px; display: flex; flex-direction: column; justify-content: space-between;
+}
+.tile .label { color: var(--ink-2); font-size: 12px; display: flex; align-items: center; gap: 7px; }
+.tile .value { font-size: 28px; font-weight: 640; letter-spacing: -.5px; }
+.tile .hint { color: var(--muted); font-size: 11px; }
+.tile .sym { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; color: #fff; font-weight: 700; }
+.sym.good { background: var(--good); }
+.sym.warn { background: var(--warning); color: #0b0b0b; }
+.sym.crit { background: var(--critical); }
+.sym.info { background: var(--blue); }
+
+/* layout */
+.grid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(320px, 1fr); gap: 20px; align-items: start; }
+.col { display: flex; flex-direction: column; gap: 20px; }
+section.card {
+  background: var(--card); border: 1px solid var(--ring); border-radius: 12px; overflow: hidden;
+}
+.card-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 13px 16px; border-bottom: 1px solid var(--grid);
+}
+.card-head h2 { font-size: 13px; margin: 0; font-weight: 650; letter-spacing: .2px; }
+.card-head .count { color: var(--muted); font-size: 12px; }
+.card-body { padding: 14px 16px; }
+.card-body.flush { padding: 0; }
+
+/* repo */
+.repo + .repo { border-top: 1px solid var(--grid); }
+.repo { padding: 15px 16px; }
+.repo-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.repo-head h3 { font-size: 14px; margin: 0; font-weight: 650; }
+.repo-meta { color: var(--muted); font-size: 12px; }
+.repo-meta .dirty { color: var(--serious); }
+.meter { height: 4px; background: var(--track); border-radius: 999px; margin: 10px 0 12px; overflow: hidden; }
+.meter > i { display: block; height: 100%; background: var(--blue); border-radius: 999px; }
+
+.track { display: flex; gap: 6px; flex-wrap: wrap; }
+.ms {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--ring); background: var(--surface-1);
+  border-radius: 8px; padding: 5px 9px; font-size: 12px; color: var(--ink-2);
+  cursor: pointer; text-align: left; white-space: nowrap;
+}
+.ms:hover { border-color: var(--line); }
+.ms .id { font-weight: 650; color: var(--ink); }
+.ms .sy { width: 14px; text-align: center; font-size: 11px; }
+.ms.accepted { border-color: color-mix(in srgb, var(--good) 45%, transparent); }
+.ms.accepted .sy { color: var(--good-text); }
+.ms.review { border-color: color-mix(in srgb, var(--violet) 45%, transparent); }
+.ms.review .sy { color: var(--violet); }
+.ms.implementing { border-color: color-mix(in srgb, var(--yellow) 50%, transparent); }
+.ms.implementing .sy { color: var(--yellow); }
+.ms.rejected { border-color: color-mix(in srgb, var(--critical) 50%, transparent); }
+.ms.rejected .sy { color: var(--critical); }
+.ms.todo_ready .sy { color: var(--blue); }
+.ms.planned { opacity: .72; }
+
+.legend { display: flex; gap: 14px; flex-wrap: wrap; color: var(--muted); font-size: 11px; padding: 0 16px 12px; }
+.legend span { display: inline-flex; align-items: center; gap: 5px; }
+.legend i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+
+details.ms-detail { margin-top: 10px; }
+details.ms-detail summary {
+  cursor: pointer; color: var(--ink-2); font-size: 12px; list-style: none;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+details.ms-detail summary::-webkit-details-marker { display: none; }
+details.ms-detail summary::before { content: "▸"; color: var(--muted); }
+details.ms-detail[open] summary::before { content: "▾"; }
+.detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; }
+.detail-box { background: var(--surface-1); border: 1px solid var(--ring); border-radius: 8px; padding: 10px 12px; }
+.detail-box h4 { margin: 0 0 6px; font-size: 11px; text-transform: none; color: var(--muted); font-weight: 600; }
+.detail-box ul { margin: 0; padding-left: 16px; }
+.detail-box li { font-size: 12px; color: var(--ink-2); margin: 2px 0; }
+.ev { border-top: 1px solid var(--grid); padding: 8px 0; }
+.ev:first-child { border-top: 0; }
+.ev .cmd { font-family: ui-monospace, monospace; font-size: 11.5px; color: var(--ink); word-break: break-all; }
+.ev .meta { color: var(--muted); font-size: 11px; }
+.tag { display: inline-block; border-radius: 5px; padding: 0 6px; font-size: 11px; border: 1px solid var(--ring); color: var(--ink-2); }
+.tag.ok { color: var(--good-text); border-color: color-mix(in srgb, var(--good) 45%, transparent); }
+.tag.bad { color: var(--critical); border-color: color-mix(in srgb, var(--critical) 45%, transparent); }
+
+/* questions */
+.q { padding: 14px 16px; border-top: 1px solid var(--grid); }
+.q:first-child { border-top: 0; }
+.q-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.q-id { font-family: ui-monospace, monospace; font-weight: 650; font-size: 12px; }
+.q-flow { color: var(--muted); font-size: 12px; }
+.q-context { white-space: pre-wrap; color: var(--ink-2); font-size: 13px; margin: 6px 0; }
+.q-context.clamp { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.q-opts { display: flex; flex-direction: column; gap: 3px; margin: 8px 0; }
+.q-opt { display: flex; gap: 8px; font-size: 12.5px; color: var(--ink-2); }
+.q-opt b { color: var(--ink); font-weight: 650; min-width: 14px; }
+.q-rec { font-size: 12.5px; color: var(--ink-2); margin: 6px 0; padding-left: 10px; border-left: 2px solid var(--violet); }
+.q-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.q-form { display: none; margin-top: 10px; }
+.q-form.open { display: block; }
+.q-form textarea, .q-form input {
+  width: 100%; background: var(--surface-1); color: var(--ink);
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 13px;
+}
+.q-form textarea { min-height: 76px; resize: vertical; }
+.q-form .row { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
+
+.status {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 11px;
+  padding: 1px 7px; border-radius: 999px; border: 1px solid var(--ring); color: var(--ink-2);
+}
+.status .d { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
+.status.open .d { background: var(--critical); }
+.status.answered .d { background: var(--blue); }
+.status.applied .d { background: var(--good); }
+.status.closed { opacity: .6; }
+
+/* side lists */
+.list { display: flex; flex-direction: column; }
+.row-item { padding: 11px 16px; border-top: 1px solid var(--grid); display: flex; gap: 10px; }
+.row-item:first-child { border-top: 0; }
+.row-item .k { color: var(--muted); font-size: 11px; min-width: 64px; }
+.row-item .v { font-size: 12.5px; color: var(--ink-2); }
+.next-actor {
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: .5px; font-weight: 650;
+  color: var(--ink-2); background: var(--track); border-radius: 4px; padding: 1px 6px; height: fit-content;
+}
+.timeline { max-height: 320px; overflow: auto; }
+.ev-row { display: grid; grid-template-columns: 66px 1fr; gap: 10px; padding: 7px 16px; border-top: 1px solid var(--grid); font-size: 12px; }
+.ev-row:first-child { border-top: 0; }
+.ev-row .t { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 11px; }
+.ev-row .what { color: var(--ink-2); }
+.ev-row .what b { color: var(--ink); font-weight: 600; }
+.doctor-row { display: flex; gap: 9px; padding: 9px 16px; border-top: 1px solid var(--grid); font-size: 12.5px; }
+.doctor-row:first-child { border-top: 0; }
+.doctor-row .lv { font-weight: 700; font-size: 10.5px; padding: 1px 6px; border-radius: 4px; height: fit-content; }
+.lv.FAIL { background: color-mix(in srgb, var(--critical) 16%, transparent); color: var(--critical); }
+.lv.WARN { background: color-mix(in srgb, var(--warning) 22%, transparent); color: var(--ink); }
+.lv.OK { background: color-mix(in srgb, var(--good) 14%, transparent); color: var(--good-text); }
+.empty { padding: 16px; color: var(--muted); font-size: 12.5px; }
+.footer { color: var(--muted); font-size: 11.5px; margin-top: 24px; display: flex; gap: 14px; flex-wrap: wrap; }
+
+@media (max-width: 1000px) {
+  .grid { grid-template-columns: 1fr; }
+  .tiles { grid-template-columns: repeat(2, 1fr); }
+  .hero .num { font-size: 38px; }
+}
+@media (max-width: 620px) {
+  .wrap { padding: 0 14px 48px; }
+  .tiles { grid-template-columns: 1fr; }
+  .detail-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <div class="mark">wf</div>
+      <div>
+        <h1 id="program-name">workflow</h1>
+        <div class="sub" id="root-path">正在加载…</div>
+      </div>
+    </div>
+    <div class="hero">
+      <span class="num" id="hero-num">–</span>
+      <span class="of" id="hero-of">/ –</span>
+      <span class="lbl">个里程碑已验收</span>
+    </div>
+    <div class="top-tools">
+      <span class="pill" id="active-repo"><span class="dot"></span><span>无 active repo</span></span>
+      <button class="btn ghost" id="refresh">刷新</button>
+      <button class="btn ghost" id="theme">切换主题</button>
+    </div>
+  </header>
+
+  <div class="tiles" id="tiles"></div>
+
+  <div class="grid">
+    <div class="col">
+      <section class="card">
+        <div class="card-head"><h2>仓库与里程碑</h2><span class="count" id="repo-count"></span></div>
+        <div class="card-body flush" id="repos"></div>
+        <div class="legend" id="legend">
+          <span><i style="background:var(--muted)"></i>草稿/无 TODO</span>
+          <span><i style="background:var(--blue)"></i>待实现</span>
+          <span><i style="background:var(--yellow)"></i>实现中</span>
+          <span><i style="background:var(--violet)"></i>待验收</span>
+          <span><i style="background:var(--good)"></i>已验收</span>
+          <span><i style="background:var(--critical)"></i>已打回</span>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head"><h2>问题收件箱</h2><span class="count" id="question-count"></span>
+          <label class="pill" style="margin-left:auto;cursor:pointer">
+            <input type="checkbox" id="show-closed" style="margin:0" /> 显示已关闭
+          </label>
+        </div>
+        <div class="card-body flush" id="questions"></div>
+      </section>
+    </div>
+
+    <aside class="col">
+      <section class="card">
+        <div class="card-head"><h2>下一步</h2><span class="count" id="next-count"></span></div>
+        <div class="list" id="next"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-head"><h2>待批准提交</h2></div>
+        <div class="list" id="approvals"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-head"><h2>环境体检</h2></div>
+        <div class="list" id="doctor"></div>
+      </section>
+
+      <section class="card">
+        <div class="card-head"><h2>时间线</h2><span class="count">最近 60 条</span></div>
+        <div class="timeline" id="timeline"></div>
+      </section>
+    </aside>
+  </div>
+
+  <div class="footer">
+    <span>本地只读看板 · 写操作只有：回答/关闭问题、批准提交、切换 active repo</span>
+    <span>数据源：Markdown + .workflow/runtime</span>
+    <span id="generated"></span>
+  </div>
+</div>
+
+<script>
+const $ = (s, el = document) => el.querySelector(s);
+const el = (tag, cls, html) => { const n = document.createElement(tag); if (cls) n.className = cls; if (html != null) n.innerHTML = html; return n; };
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
+const STATE = {
+  planned:      { label: '草稿',   sym: '○' },
+  todo_ready:   { label: '待实现', sym: '●' },
+  implementing: { label: '实现中', sym: '◐' },
+  review:       { label: '待验收', sym: '◆' },
+  accepted:     { label: '已验收', sym: '✓' },
+  committed:    { label: '已提交', sym: '✓' },
+  rejected:     { label: '已打回', sym: '✕' },
+};
+const QSTATUS = { open: '待回答', answered: '已回答', applied: '已应用', closed: '已关闭', canceled: '已取消' };
+
+let data = null;
+let showClosed = false;
+
+async function get(path) {
+  const r = await fetch(path);
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+async function post(path, body) {
+  const r = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+function ago(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  if (isNaN(d)) return ts;
+  const s = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (s < 60) return s + 's';
+  if (s < 3600) return Math.floor(s / 60) + 'm';
+  if (s < 86400) return Math.floor(s / 3600) + 'h';
+  return Math.floor(s / 86400) + 'd';
+}
+
+function renderTiles(st) {
+  const milestones = st.repos.flatMap(r => r.milestones);
+  const accepted = milestones.filter(m => m.status === 'accepted' || m.status === 'committed').length;
+  $('#hero-num').textContent = accepted;
+  $('#hero-of').textContent = '/ ' + milestones.length;
+  $('#program-name').textContent = st.program;
+  $('#root-path').textContent = st.root;
+
+  const active = $('#active-repo');
+  active.classList.toggle('active', !!st.activeRepo);
+  active.innerHTML = `<span class="dot"></span><span>${st.activeRepo ? 'active: ' + esc(st.activeRepo) : '无 active repo'}</span>`;
+
+  const blocking = st.blockingQuestions.length;
+  const inProgress = milestones.filter(m => ['implementing', 'review'].includes(m.status)).length;
+  const dirty = st.repos.filter(r => r.git.dirty).length;
+
+  const tiles = [
+    { label: '阻塞问题', value: blocking, hint: blocking ? '实现必须先停下回答' : '没有阻塞', sym: blocking ? 'crit' : 'good', ch: blocking ? '!' : '✓' },
+    { label: '进行中的 M', value: inProgress, hint: '实现中 + 待验收', sym: 'info', ch: '◐' },
+    { label: '待批准提交', value: (window.__approvals || []).filter(a => !a.used_at).length, hint: '需要用户 review diff', sym: 'warn', ch: '!' },
+    { label: '工作区有改动', value: dirty + ' / ' + st.repos.length, hint: '仓库未提交状态', sym: dirty ? 'warn' : 'good', ch: dirty ? '●' : '✓' },
+  ];
+  const box = $('#tiles');
+  box.innerHTML = '';
+  for (const t of tiles) {
+    const n = el('div', 'tile');
+    n.innerHTML = `
+      <div class="label"><span class="sym ${t.sym}">${t.ch}</span>${esc(t.label)}</div>
+      <div class="value">${esc(t.value)}</div>
+      <div class="hint">${esc(t.hint)}</div>`;
+    box.appendChild(n);
+  }
+}
+
+function renderRepos(st) {
+  const box = $('#repos');
+  box.innerHTML = '';
+  $('#repo-count').textContent = st.repos.length + ' 个仓库';
+  for (const r of st.repos) {
+    const total = r.milestones.length;
+    const done = r.milestones.filter(m => ['accepted', 'committed'].includes(m.status)).length;
+    const pct = total ? Math.round(done / total * 100) : 0;
+    const wrap = el('div', 'repo');
+    const cur = r.currentMilestone;
+    const head = el('div', 'repo-head');
+    head.innerHTML = `
+      <h3>${esc(r.id)}</h3>
+      ${st.activeRepo === r.id ? '<span class="pill active"><span class="dot"></span>active</span>' : ''}
+      <span class="repo-meta">${esc(r.git.branch || '?')}@${esc(r.git.shortHead || '?')}
+        ${r.git.dirty ? '<span class="dirty"> · dirty ' + (r.git.changed.length + r.git.untracked.length) + '</span>' : ''}
+      </span>
+      <span class="repo-meta" style="margin-left:auto">${done}/${total} M</span>`;
+    wrap.appendChild(head);
+
+    const meter = el('div', 'meter');
+    meter.innerHTML = `<i style="width:${pct}%"></i>`;
+    wrap.appendChild(meter);
+
+    const track = el('div', 'track');
+    for (const m of r.milestones) {
+      const s = STATE[m.status] || STATE.planned;
+      const b = el('button', 'ms ' + m.status);
+      b.innerHTML = `<span class="sy">${s.sym}</span><span class="id">${esc(m.id)}</span><span>${s.label}</span>`;
+      b.title = m.title + (m.sha ? ' · ' + m.sha : '');
+      b.onclick = () => toggleDetail(wrap, r, m, b);
+      track.appendChild(b);
+    }
+    wrap.appendChild(track);
+
+    const sum = el('div', 'repo-meta');
+    sum.style.marginTop = '9px';
+    sum.textContent = cur
+      ? `当前 ${cur.id}「${cur.title}」 · ${(STATE[cur.status] || {}).label || cur.status}` + (cur.evidence.length ? ` · ${cur.evidence.length} 条证据` : '')
+      : (total === 0 ? '无 M（缺 PLAN）' : '全部里程碑已验收') + (r.problems.length ? ' · ' + r.problems.join('；') : '');
+    wrap.appendChild(sum);
+    if (r.problems.length && cur) {
+      const p = el('div', 'repo-meta');
+      p.style.marginTop = '4px';
+      p.innerHTML = r.problems.map(x => '<span style="color:var(--serious)">! ' + esc(x) + '</span>').join(' · ');
+      wrap.appendChild(p);
+    }
+    box.appendChild(wrap);
+  }
+}
+
+function toggleDetail(wrap, repo, m, btn) {
+  const existing = wrap.querySelector('details.ms-detail');
+  if (existing) {
+    const same = existing.dataset.ms === m.id;
+    existing.remove();
+    if (same) return;
+  }
+  const d = el('details', 'ms-detail');
+  d.dataset.ms = m.id;
+  d.open = true;
+  const evs = (m.evidence || []).map(e => `
+    <div class="ev">
+      <div class="cmd">${esc(e.command || '(未记录命令)')} <span class="tag ${e.exitCode === 0 ? 'ok' : 'bad'}">exit ${e.exitCode}</span></div>
+      <div class="meta">${esc(e.id)} · ${esc(e.at)} · head ${esc(e.head || '?')}${e.dirty ? ' (dirty)' : ''}</div>
+    </div>`).join('') || '<div class="meta" style="color:var(--muted)">还没有证据</div>';
+  const acc = (m.acceptance || []).map(a => `<li>${esc(a)}</li>`).join('') || '<li style="color:var(--muted)">未声明</li>';
+  d.innerHTML = `
+    <summary>${esc(m.id)}「${esc(m.title)}」详情</summary>
+    <div class="detail-grid">
+      <div class="detail-box"><h4>验收标准</h4><ul>${acc}</ul></div>
+      <div class="detail-box"><h4>状态</h4>
+        <div style="font-size:12px;color:var(--ink-2)">
+          ${esc((STATE[m.status] || {}).label || m.status)}
+          ${m.sha ? '<br>受验 SHA: <code>' + esc(m.sha) + '</code>' : ''}
+          ${m.todoFile ? '<br>TODO: <code>' + esc(m.todoFile) + '</code>' : ''}
+        </div>
+      </div>
+      <div class="detail-box" style="grid-column:1 / -1"><h4>证据（${(m.evidence || []).length}）</h4>${evs}</div>
+    </div>`;
+  wrap.appendChild(d);
+}
+
+function renderQuestions(st) {
+  const box = $('#questions');
+  box.innerHTML = '';
+  const all = st.questions;
+  const list = all.filter(q => showClosed ? true : (q.status !== 'closed' && q.status !== 'canceled'));
+  $('#question-count').textContent = `${list.length} 条 · ${all.filter(q => q.blocking && q.status === 'open').length} 阻塞`;
+  if (!list.length) { box.appendChild(el('div', 'empty', '没有需要处理的问题。')); return; }
+  for (const q of list) {
+    const n = el('div', 'q');
+    const opts = q.options.map(o => `<div class="q-opt"><b>${esc(o.id)}</b><span>${esc(o.text)}</span></div>`).join('');
+    n.innerHTML = `
+      <div class="q-head">
+        <span class="q-id">${esc(q.id)}</span>
+        <span class="status ${q.status}"><span class="d"></span>${esc(QSTATUS[q.status] || q.status)}</span>
+        ${q.blocking ? '<span class="tag bad">blocking</span>' : ''}
+        <span class="q-flow">${esc(q.from)} → ${esc(q.to)} · ${esc(q.repo || 'root')}</span>
+      </div>
+      <div class="q-context clamp">${esc(q.context)}</div>
+      ${opts ? '<div class="q-opts">' + opts + '</div>' : ''}
+      ${q.recommendation ? '<div class="q-rec">建议：' + esc(q.recommendation) + '</div>' : ''}
+      ${q.answer ? '<div class="q-rec" style="border-color:var(--good)">回答：' + esc(q.answer) + '</div>' : ''}
+      <div class="q-actions">
+        ${q.status !== 'closed' ? '<button class="btn primary" data-act="answer">回答</button>' : ''}
+        ${q.status !== 'closed' ? '<button class="btn" data-act="close">关闭</button>' : ''}
+        <button class="btn ghost" data-act="relay">复制转发文本</button>
+      </div>
+      <div class="q-form">
+        <textarea placeholder="写下决定（会写入 docs/agent-questions.md 的 answer 字段）"></textarea>
+        <input placeholder="resolution（回写 PLAN/TODO/decisions 的位置，可选）" />
+        <div class="row"><button class="btn primary" data-act="submit">提交回答</button><span class="repo-meta" data-msg></span></div>
+      </div>`;
+    const form = n.querySelector('.q-form');
+    const msg = n.querySelector('[data-msg]');
+    n.querySelectorAll('[data-act]').forEach(b => {
+      b.onclick = async () => {
+        const act = b.dataset.act;
+        if (act === 'answer') { form.classList.toggle('open'); return; }
+        if (act === 'relay') {
+          const text = relayText(q);
+          try { await navigator.clipboard.writeText(text); msg.textContent = '已复制'; }
+          catch { window.prompt('复制以下文本', text); }
+          return;
+        }
+        try {
+          if (act === 'close') {
+            await post(`/api/question/${encodeURIComponent(q.id)}/close`, {});
+          } else {
+            const answer = form.querySelector('textarea').value.trim();
+            const resolution = form.querySelector('input').value.trim();
+            if (!answer) { msg.textContent = '先写回答'; return; }
+            await post(`/api/question/${encodeURIComponent(q.id)}/answer`, { answer, resolution });
+          }
+          await load();
+        } catch (e) { msg.textContent = '失败：' + e.message; }
+      };
+    });
+    box.appendChild(n);
+  }
+}
+
+function relayText(q) {
+  const lines = [
+    `【${q.id}】${q.from} → ${q.to}（${q.blocking ? 'blocking' : '非阻塞'}）`,
+    '',
+    q.context,
+  ];
+  if (q.options.length) { lines.push('', '选项：', ...q.options.map(o => `${o.id}) ${o.text}`)); }
+  if (q.recommendation) lines.push('', '建议：' + q.recommendation);
+  if (q.answer) lines.push('', '回答：' + q.answer);
+  if (q.resolution) lines.push('', 'resolution：' + q.resolution);
+  return lines.join('\n');
+}
+
+function renderNext(st) {
+  const box = $('#next');
+  box.innerHTML = '';
+  $('#next-count').textContent = st.next.length ? st.next.length + ' 项' : '';
+  if (!st.next.length) { box.appendChild(el('div', 'empty', '没有识别到待办。')); return; }
+  for (const n of st.next) {
+    const r = el('div', 'row-item');
+    r.innerHTML = `
+      <span class="next-actor">${esc(n.actor)}</span>
+      <div class="v">
+        <div style="color:var(--ink);font-weight:600">${esc(n.action)}${n.repo ? ' <span class="repo-meta">' + esc(n.repo) + (n.milestone ? '/' + esc(n.milestone) : '') + '</span>' : ''}</div>
+        <div>${esc(n.detail)}</div>
+      </div>`;
+    box.appendChild(r);
+  }
+}
+
+function renderApprovals() {
+  const box = $('#approvals');
+  const list = (window.__approvals || []).filter(a => !a.used_at);
+  box.innerHTML = '';
+  if (!list.length) { box.appendChild(el('div', 'empty', '没有待批准的提交。')); return; }
+  for (const a of list) {
+    const r = el('div', 'row-item');
+    r.innerHTML = `
+      <div class="v" style="flex:1">
+        <div><code>${esc(a.id)}</code> · ${esc(a.repo)}</div>
+        <div style="color:var(--ink-2)">${esc(a.message)}</div>
+        <div class="repo-meta">${a.files.length} 个文件 · tree ${esc(a.tree_hash)} · ${a.approved_at ? '已批准' : '等待批准'}</div>
+        <div style="margin-top:6px">${a.approved_at ? '' : '<button class="btn primary" data-approve="' + esc(a.id) + '">批准提交</button>'}</div>
+      </div>`;
+    const b = r.querySelector('[data-approve]');
+    if (b) b.onclick = async () => {
+      b.disabled = true;
+      try { await post('/api/approve', { id: a.id }); await load(); }
+      catch (e) { alert(e.message); b.disabled = false; }
+    };
+    box.appendChild(r);
+  }
+}
+
+function renderDoctor(rows) {
+  const box = $('#doctor');
+  box.innerHTML = '';
+  const order = { FAIL: 0, WARN: 1, OK: 2 };
+  rows.sort((a, b) => order[a.level] - order[b.level]);
+  for (const f of rows.slice(0, 12)) {
+    const r = el('div', 'doctor-row');
+    r.innerHTML = `<span class="lv ${f.level}">${f.level}</span>
+      <div><div>${esc(f.message)}${f.repo ? ' <span class="repo-meta">[' + esc(f.repo) + ']</span>' : ''}</div>
+      ${f.hint ? '<div class="repo-meta">' + esc(f.hint) + '</div>' : ''}</div>`;
+    box.appendChild(r);
+  }
+}
+
+function renderTimeline(events) {
+  const box = $('#timeline');
+  box.innerHTML = '';
+  if (!events.length) { box.appendChild(el('div', 'empty', '暂无事件。')); return; }
+  for (const e of events.slice(0, 60)) {
+    const r = el('div', 'ev-row');
+    const where = [e.repo, e.milestone, e.question].filter(Boolean).join('/');
+    r.innerHTML = `<span class="t">${esc(ago(e.ts))}</span>
+      <span class="what"><b>${esc(e.role)}</b> ${esc(e.tool)}${where ? ' · ' + esc(where) : ''}
+      ${e.ok === false ? '<span class="tag bad">失败</span>' : ''}</span>`;
+    box.appendChild(r);
+  }
+}
+
+async function load() {
+  try {
+    const [st, approvals, events, doctor] = await Promise.all([
+      get('/api/status'), get('/api/approvals'), get('/api/events?limit=120'), get('/api/doctor'),
+    ]);
+    data = st;
+    window.__approvals = approvals;
+    renderTiles(st);
+    renderRepos(st);
+    renderQuestions(st);
+    renderNext(st);
+    renderApprovals();
+    renderDoctor(doctor);
+    renderTimeline(events);
+    $('#generated').textContent = '更新于 ' + new Date(st.generatedAt).toLocaleTimeString();
+  } catch (e) {
+    $('#root-path').textContent = '加载失败：' + e.message;
+  }
+}
+
+$('#refresh').onclick = load;
+$('#show-closed').onchange = (e) => { showClosed = e.target.checked; if (data) renderQuestions(data); };
+$('#theme').onclick = () => {
+  const cur = document.documentElement.getAttribute('data-theme');
+  const next = cur === 'dark' ? 'light' : cur === 'light' ? 'dark' : (matchMedia('(prefers-color-scheme: dark)').matches ? 'light' : 'dark');
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem('wf-theme', next);
+};
+const saved = localStorage.getItem('wf-theme');
+if (saved) document.documentElement.setAttribute('data-theme', saved);
+
+load();
+setInterval(load, 15000);
+</script>
+</body>
+</html>
