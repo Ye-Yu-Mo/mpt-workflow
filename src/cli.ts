@@ -2,7 +2,9 @@
 import path from 'node:path';
 import process from 'node:process';
 import { init, formatInitResult } from './core/init.js';
+import { createDemoWorkspace } from './core/demo.js';
 import { Workflow } from './core/workflow.js';
+import { VERSION } from './version.js';
 import { findRoot } from './core/config.js';
 import { runPretool, runSessionStart, runPreCommit, setRoleLease, readRoleLease } from './core/hooks.js';
 import { runMcpServer } from './mcp/server.js';
@@ -18,6 +20,8 @@ function usage(): string {
 用法:
   mpt-workflow init [--root DIR] [--program NAME] [--repo NAME]... [--install-hooks]
                   [--no-adopt]
+  mpt-workflow demo
+  mpt-workflow --version
   mpt-workflow status [--root DIR] [--json]
   mpt-workflow next [--root DIR]
   mpt-workflow doctor [--root DIR]
@@ -136,6 +140,11 @@ async function main() {
   const { positional, flags } = parseArgs(argv);
   const cmd = positional[0] || 'help';
 
+  if (flags.version) {
+    console.log(VERSION);
+    return;
+  }
+
   try {
     switch (cmd) {
       case 'help':
@@ -143,6 +152,23 @@ async function main() {
       case '-h':
         console.log(usage());
         return;
+
+      case 'version':
+      case '-v':
+      case '--version':
+        console.log(VERSION);
+        return;
+
+      case 'demo': {
+        const { root } = createDemoWorkspace();
+        const wf = new Workflow(root);
+        console.log(`Demo workspace: ${root}\n`);
+        printStatus(wf, false);
+        console.log('');
+        console.log(`打开看板: mpt-workflow web --root ${JSON.stringify(root)} --port 7788`);
+        console.log('演示目录在 $TMPDIR 下；没有改动任何现有仓库。');
+        return;
+      }
 
       case 'init': {
         const root = typeof flags.root === 'string' ? flags.root : process.cwd();
