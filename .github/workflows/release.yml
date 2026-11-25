@@ -35,8 +35,8 @@ jobs:
           fi
 
       - run: npm run typecheck
-      - run: npm test
       - run: npm run build
+      - run: npm test
 
       - name: publish with provenance
         run: npm publish --provenance --access public
