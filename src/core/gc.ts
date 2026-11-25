@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { approvalsDir, evidenceDir, eventsPath, locksDir, runtimeDir } from './config.js';
+import { approvalsDir, eventsPath, evidenceDir, locksDir, runtimeDir } from './config.js';
 import { exists } from './fsutil.js';
 
 export interface GcOptions {
@@ -115,10 +115,20 @@ export function runGc(root: string, opts: GcOptions = {}): GcReport {
     for (const name of fs.readdirSync(msgDir)) {
       if (!name.endsWith('.json')) continue;
       const p = path.join(msgDir, name);
-      const m = readJson<{ status?: string; created_at?: string; acked_at?: string; expires_at?: string }>(p);
+      const m = readJson<{
+        status?: string;
+        created_at?: string;
+        acked_at?: string;
+        expires_at?: string;
+      }>(p);
       if (!m) continue;
       messages.total++;
-      const ts = m.status === 'acked' ? m.acked_at || m.created_at : m.status === 'expired' ? m.expires_at || m.created_at : undefined;
+      const ts =
+        m.status === 'acked'
+          ? m.acked_at || m.created_at
+          : m.status === 'expired'
+            ? m.expires_at || m.created_at
+            : undefined;
       if (olderThan(ts, cutoffMs)) {
         messages.removable.push(p);
         messages.bytes += fileSize(p);
@@ -231,7 +241,9 @@ export function formatGcReport(r: GcReport): string {
     `在线状态: ${r.presence.removable.length} 个 (${formatBytes(r.presence.bytes)})`,
     `锁: ${r.locks.removable.length} 个 (${formatBytes(r.locks.bytes)})`,
     `证据: ${r.evidence.files} 个文件, ${formatBytes(r.evidence.bytes)}` +
-      (r.evidence.removable.length ? `；可删除 ${r.evidence.removable.length} 个 (${formatBytes(r.evidence.removableBytes)})` : ''),
+      (r.evidence.removable.length
+        ? `；可删除 ${r.evidence.removable.length} 个 (${formatBytes(r.evidence.removableBytes)})`
+        : ''),
     `事件日志: ${formatBytes(r.events.bytes)}（不自动清理）`,
     '',
     r.apply ? '已删除符合条件的文件。' : '未删除任何文件。确认无误后加 --apply。',

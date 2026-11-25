@@ -1,11 +1,11 @@
-import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { test } from 'node:test';
+import { approvalsDir, evidenceDir, locksDir, runtimeDir } from '../src/core/config.js';
 import { runGc } from '../src/core/gc.js';
 import { Workflow } from '../src/core/workflow.js';
-import { approvalsDir, evidenceDir, locksDir, runtimeDir } from '../src/core/config.js';
 
 const OLD = '2020-01-01T00:00:00.000Z';
 const NOW = new Date().toISOString();
@@ -31,7 +31,11 @@ function fixture() {
     created_at: NOW,
     acked_at: NOW,
   });
-  writeJson(path.join(msgDir, 'old-unread.json'), { id: 'old-unread', status: 'unread', created_at: OLD });
+  writeJson(path.join(msgDir, 'old-unread.json'), {
+    id: 'old-unread',
+    status: 'unread',
+    created_at: OLD,
+  });
   writeJson(path.join(msgDir, 'old-expired.json'), {
     id: 'old-expired',
     status: 'expired',
@@ -72,10 +76,10 @@ test('gc dry-run reports eligible state without deleting anything', () => {
 
   assert.equal(r.apply, false);
   assert.equal(r.messages.total, 4);
-  assert.deepEqual(
-    r.messages.removable.map((p) => path.basename(p)).sort(),
-    ['old-acked.json', 'old-expired.json'],
-  );
+  assert.deepEqual(r.messages.removable.map((p) => path.basename(p)).sort(), [
+    'old-acked.json',
+    'old-expired.json',
+  ]);
   assert.equal(r.approvals.removable.length, 1);
   assert.equal(r.presence.removable.length, 1);
   assert.equal(r.locks.removable.length, 1);
@@ -96,7 +100,10 @@ test('gc apply deletes only eligible state', () => {
   assert.ok(!fs.existsSync(path.join(msgDir, 'old-acked.json')));
   assert.ok(!fs.existsSync(path.join(msgDir, 'old-expired.json')));
   assert.ok(fs.existsSync(path.join(msgDir, 'new-acked.json')));
-  assert.ok(fs.existsSync(path.join(msgDir, 'old-unread.json')), 'unread messages are never removed');
+  assert.ok(
+    fs.existsSync(path.join(msgDir, 'old-unread.json')),
+    'unread messages are never removed',
+  );
   assert.ok(!fs.existsSync(path.join(msgDir, 'presence/old.json')));
   assert.ok(fs.existsSync(path.join(msgDir, 'presence/new.json')));
   assert.ok(!fs.existsSync(lock));

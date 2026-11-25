@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Tooling: Biome 2 now formats and lints `src/`, `tests/`, `scripts/` and the
+  JSON configs (`npm run lint` in CI). TypeScript is on 7.x, GitHub Actions
+  checkout/setup-node on v7. `@types/node` stays on 22 and jsdom on 29 to match
+  the advertised Node >=22 runtime (jsdom 30+ needs Node 22.22.2).
+
 ### Added
 
 - Runnable [examples](examples/) for a minimal repo, a multi-repo program with

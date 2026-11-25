@@ -1,12 +1,12 @@
-import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
-import { Workflow } from '../src/core/workflow.js';
+import { test } from 'node:test';
 import { init } from '../src/core/init.js';
-import { canSend, actorKey } from '../src/core/messages.js';
+import { actorKey, canSend } from '../src/core/messages.js';
+import { Workflow } from '../src/core/workflow.js';
 
 const CLI = path.resolve(process.cwd(), 'dist/cli.js');
 
@@ -240,7 +240,7 @@ test('question lifecycle notifies and clears the blocker', async () => {
 
 test('session-start hook injects unread messages', () => {
   if (!fs.existsSync(CLI)) return;
-  const { root, abs, wf } = fixture();
+  const { abs, wf } = fixture();
   const plan = { role: 'plan' as const, repo: 'repo-a' };
   wf.msgs.send({
     from: { role: 'todo', repo: 'repo-a' },

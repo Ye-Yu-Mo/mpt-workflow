@@ -48,10 +48,7 @@ export function isDir(p: string): boolean {
 /** Atomic write: write to temp file in the same dir, then rename. */
 export function writeAtomic(p: string, content: string): void {
   ensureDir(path.dirname(p));
-  const tmp = path.join(
-    path.dirname(p),
-    `.${path.basename(p)}.${process.pid}.${Date.now()}.tmp`,
-  );
+  const tmp = path.join(path.dirname(p), `.${path.basename(p)}.${process.pid}.${Date.now()}.tmp`);
   fs.writeFileSync(tmp, content, 'utf8');
   fs.renameSync(tmp, p);
 }

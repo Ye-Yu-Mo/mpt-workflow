@@ -1,7 +1,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { appendLine, ensureDir, exists, readText, writeAtomic, isoNow, slugDate } from './fsutil.js';
-import { eventsPath, approvalsDir, locksDir } from './config.js';
+import { approvalsDir, eventsPath, locksDir } from './config.js';
+import {
+  appendLine,
+  ensureDir,
+  exists,
+  isoNow,
+  readText,
+  slugDate,
+  writeAtomic,
+} from './fsutil.js';
 import type { Role } from './types.js';
 
 export interface EventRecord {

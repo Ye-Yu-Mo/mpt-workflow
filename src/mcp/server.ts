@@ -1,20 +1,24 @@
+import path from 'node:path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { Workflow } from '../core/workflow.js';
-import { VERSION } from '../version.js';
 import { describeAcl } from '../core/acl.js';
 import { loadConfig } from '../core/config.js';
 import { setRoleLease } from '../core/hooks.js';
-import { questionsFile, appendQuestion, nextQuestionId } from '../core/questions.js';
+import {
+  type Actor,
+  actorKey,
+  canSend,
+  formatMessage,
+  type MessageKind,
+} from '../core/messages.js';
+import { appendQuestion, nextQuestionId, questionsFile } from '../core/questions.js';
 import { logEvent } from '../core/state.js';
-import { actorKey, formatMessage, canSend, type Actor, type MessageKind } from '../core/messages.js';
-import path from 'node:path';
 import type { Role } from '../core/types.js';
+import { Workflow } from '../core/workflow.js';
+import { VERSION } from '../version.js';
 
-type ToolReturn =
-  | string
-  | { content: { type: 'text'; text: string }[]; isError: boolean };
+type ToolReturn = string | { content: { type: 'text'; text: string }[]; isError: boolean };
 
 interface ToolSpec {
   name: string;
@@ -53,7 +57,9 @@ function statusText(wf: Workflow, role: Role | null, repo: string | null): strin
   const unread = me ? wf.msgs.unreadCount(me) : 0;
   const blocking = me ? wf.msgs.blockingFor(me) : [];
   if (me && (unread || blocking.length)) {
-    lines.push(`未读 ${unread} 条${blocking.length ? ` · blocking ${blocking.length} 条` : ''}（用 inbox 查看）`);
+    lines.push(
+      `未读 ${unread} 条${blocking.length ? ` · blocking ${blocking.length} 条` : ''}（用 inbox 查看）`,
+    );
     for (const m of blocking) {
       lines.push(`  [blocking] ${m.id} ${m.subject}`);
     }
@@ -185,7 +191,9 @@ function buildTools(_opts: ServerOptions): ToolSpec[] {
         if (st.questions.length) {
           lines.push('', '问题:');
           for (const q of st.questions) {
-            lines.push(`  ${q.id} [${q.status}] ${q.from} → ${q.to}${q.blocking ? ' [blocking]' : ''}`);
+            lines.push(
+              `  ${q.id} [${q.status}] ${q.from} → ${q.to}${q.blocking ? ' [blocking]' : ''}`,
+            );
           }
         }
         if (st.problems.length) lines.push('', '注意:', ...st.problems.map((p) => `  ! ${p}`));
@@ -299,9 +307,10 @@ function buildTools(_opts: ServerOptions): ToolSpec[] {
               : { role: 'user' };
         const acl = canSend(meActor(ctx), toActor, 'question');
         if (!acl.ok) return err(`不能向 ${actorKey(toActor)} 提问：${acl.reason}`);
-        const file = toUserFromMain && !repoId
-          ? path.join(ctx.wf.root, 'docs', 'agent-questions.md')
-          : questionsFile(ctx.wf.repoRef(repoId as string).abs);
+        const file =
+          toUserFromMain && !repoId
+            ? path.join(ctx.wf.root, 'docs', 'agent-questions.md')
+            : questionsFile(ctx.wf.repoRef(repoId as string).abs);
         const existing = ctx.wf.allQuestions();
         const id = nextQuestionId(existing);
         const rawOptions = (args.options as string[] | undefined) || [];
@@ -343,7 +352,7 @@ function buildTools(_opts: ServerOptions): ToolSpec[] {
           ctx.wf.msgs.ping(meActor(ctx));
           return [
             `已创建 ${id} → ${to}（${path.relative(ctx.wf.root, file)}），已通知 ${actorKey(toActor)}（${message.id}）。`,
-            Boolean(args.blocking) ? 'blocking: yes —— 现在停下等待回答，不要继续实现。' : '',
+            args.blocking ? 'blocking: yes —— 现在停下等待回答，不要继续实现。' : '',
             '用户可以在看板里直接回答，或转发给对方 agent。',
           ]
             .filter(Boolean)
@@ -410,7 +419,12 @@ function buildTools(_opts: ServerOptions): ToolSpec[] {
         if (!isAsker && ctx.role !== 'user' && ctx.role !== 'main') {
           return err(`只有提问方（${q.from}）或用户/主 agent 能关闭 ${q.id}`);
         }
-        if (!q.status.startsWith('answered') && !q.answer && ctx.role !== 'user' && ctx.role !== 'main') {
+        if (
+          !q.status.startsWith('answered') &&
+          !q.answer &&
+          ctx.role !== 'user' &&
+          ctx.role !== 'main'
+        ) {
           return err(`${q.id} 还没有回答，不能关闭`);
         }
         ctx.wf.closeQuestion(
@@ -418,14 +432,19 @@ function buildTools(_opts: ServerOptions): ToolSpec[] {
           args.resolution ? String(args.resolution) : q.resolution,
           meActor(ctx),
         );
-        logEvent(ctx.wf.root, { role: ctx.role, tool: 'question_close', question: q.id, repo: q.repo, ok: true });
+        logEvent(ctx.wf.root, {
+          role: ctx.role,
+          tool: 'question_close',
+          question: q.id,
+          repo: q.repo,
+          ok: true,
+        });
         return `已关闭 ${q.id}，已通知对方。记得确认 PLAN/TODO 已经反映结论。`;
       },
     },
     {
       name: 'send_message',
-      description:
-        '向另一个 agent 定向发送工作流消息（持久化、可查、可 ack）。受发送 ACL 限制。',
+      description: '向另一个 agent 定向发送工作流消息（持久化、可查、可 ack）。受发送 ACL 限制。',
       roles: READ_ROLES,
       schema: {
         to: z.enum(['main', 'plan', 'todo', 'user']),
@@ -712,7 +731,8 @@ function buildTools(_opts: ServerOptions): ToolSpec[] {
       },
       handler: (args, ctx) => {
         const repo = requireRepo(args, ctx);
-        const asRole = (args.as_role as Role | undefined) || (ctx.role === 'todo' ? 'todo' : 'plan');
+        const asRole =
+          (args.as_role as Role | undefined) || (ctx.role === 'todo' ? 'todo' : 'plan');
         const r = ctx.wf.scopeCheck(repo, args.milestone as string | undefined, asRole, {
           enforceAcl: asRole === 'todo',
         });
@@ -743,7 +763,11 @@ function buildTools(_opts: ServerOptions): ToolSpec[] {
       },
       handler: (args, ctx) => {
         const repo = requireRepo(args, ctx);
-        const r = ctx.wf.requestCommit({ repoId: repo, message: String(args.message), role: ctx.role });
+        const r = ctx.wf.requestCommit({
+          repoId: repo,
+          message: String(args.message),
+          role: ctx.role,
+        });
         return [
           `审批已创建: ${r.approval.id}`,
           `仓库: ${repo}  文件: ${r.files.length}`,
@@ -788,7 +812,12 @@ function buildTools(_opts: ServerOptions): ToolSpec[] {
         const repo = String(args.repo || '');
         ctx.wf.setActiveRepo(repo || null);
         if (args.phase) ctx.wf.updatePhase(String(args.phase), 'active');
-        logEvent(ctx.wf.root, { role: ctx.role, tool: 'phase_activate', repo: repo || undefined, ok: true });
+        logEvent(ctx.wf.root, {
+          role: ctx.role,
+          tool: 'phase_activate',
+          repo: repo || undefined,
+          ok: true,
+        });
         return repo
           ? `active repo = ${repo}${args.phase ? `，阶段 ${args.phase} = active` : ''}`
           : 'active repo 已清空';
@@ -912,4 +941,4 @@ export async function invokeTool(
   }
 }
 
-export type { Ctx, ToolSpec, ToolReturn };
+export type { Ctx, ToolReturn, ToolSpec };

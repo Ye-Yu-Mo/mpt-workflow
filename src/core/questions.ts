@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { exists, readText, readTextRequired, writeAtomic, ensureDir, today } from './fsutil.js';
+import { ensureDir, exists, readText, readTextRequired, today, writeAtomic } from './fsutil.js';
 import type { Question, QuestionStatus, Role } from './types.js';
 
 const HEADING_RE = /^##\s+(Q-[\w-]+)\s*(?:\[([a-z_]+)\])?\s*to:\s*([^\s]+)\s*$/;
@@ -60,7 +60,7 @@ export function parseQuestionsFile(fileAbs: string, repo?: string): Question[] {
     const answer = get('answer');
     const resolution = get('resolution');
     const blockingRaw = get('blocking') || 'no';
-    const optionLines = fields['options'] || [];
+    const optionLines = fields.options || [];
     const options = optionLines
       .map((l) => /^\s*-\s*([A-Za-z0-9]+)\s*[:：]\s*(.*)$/.exec(l))
       .filter((m): m is RegExpExecArray => !!m)
@@ -119,7 +119,9 @@ export function renderQuestion(q: NewQuestion & { id: string }): string {
   out.push(`## ${q.id} [open] to: ${q.to}`);
   out.push(`- from: ${q.from}`);
   out.push(`- date: ${today()}`);
-  out.push(`- blocking: ${q.blocking ? 'yes' : 'no'}${q.blockingNote ? `（${q.blockingNote}）` : ''}`);
+  out.push(
+    `- blocking: ${q.blocking ? 'yes' : 'no'}${q.blockingNote ? `（${q.blockingNote}）` : ''}`,
+  );
   out.push(...indentContinuation('- context: ' + q.context));
   if (q.options?.length) {
     out.push('- options:');
@@ -134,10 +136,7 @@ export function renderQuestion(q: NewQuestion & { id: string }): string {
   return out.join('\n');
 }
 
-export function appendQuestion(
-  fileAbs: string,
-  q: NewQuestion & { id: string },
-): string {
+export function appendQuestion(fileAbs: string, q: NewQuestion & { id: string }): string {
   ensureDir(path.dirname(fileAbs));
   const prev = exists(fileAbs) ? readTextRequired(fileAbs) : defaultQuestionsHeader();
   const next = prev.replace(/\s*$/, '\n\n') + renderQuestion(q);

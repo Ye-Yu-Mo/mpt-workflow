@@ -18,6 +18,7 @@ opinion are more welcome than changes that add surface area.
 node --version        # must be >= 22
 npm install
 npm run typecheck
+npm run lint          # Biome: formatting + lint
 npm run build
 npm test
 ```
@@ -89,6 +90,7 @@ the README.
 ## PR checklist
 
 - [ ] `npm run typecheck` passes
+- [ ] `npm run lint` passes (run `npm run format` first)
 - [ ] `npm test` passes
 - [ ] New behaviour is covered by a test
 - [ ] `README.md` / `README.zh-CN.md` updated if user-facing

@@ -59,9 +59,7 @@ export function section(text: string, headingPattern: RegExp): string | null {
 /** Extract all inline-code spans (`...`) from a chunk of markdown. */
 export function inlineCode(text: string): string[] {
   const out: string[] = [];
-  const re = /`([^`\n]+)`/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text))) out.push(m[1].trim());
+  for (const m of text.matchAll(/`([^`\n]+)`/g)) out.push(m[1].trim());
   return out;
 }
 

@@ -349,6 +349,8 @@ docs/         architecture and requirement notes
 
 ```bash
 npm run typecheck   # tsc --noEmit
+npm run lint        # Biome: formatting + lint
+npm run format      # Biome: write safe fixes
 npm test            # runs the 45 tests via tsx
 npm run build       # tsc + copies the dashboard assets into dist/
 ```

@@ -1,21 +1,30 @@
-import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
-import { Workflow } from '../src/core/workflow.js';
-import { init } from '../src/core/init.js';
+import { test } from 'node:test';
 import { checkAcl } from '../src/core/acl.js';
-import { parseQuestionsFile, appendQuestion, updateQuestion, nextQuestionId } from '../src/core/questions.js';
 import { parseTodo, setTodoStatus } from '../src/core/docs.js';
 import { workingTreeHash } from '../src/core/git.js';
+import { init } from '../src/core/init.js';
+import {
+  appendQuestion,
+  nextQuestionId,
+  parseQuestionsFile,
+  updateQuestion,
+} from '../src/core/questions.js';
+import { Workflow } from '../src/core/workflow.js';
 
 function sh(cwd: string, cmd: string, args: string[]) {
   return execFileSync(cmd, args, { cwd, encoding: 'utf8' });
 }
 
-function makeRepo(root: string, id: string, opts: { plan?: boolean; todos?: Record<string, string> } = {}) {
+function makeRepo(
+  root: string,
+  id: string,
+  opts: { plan?: boolean; todos?: Record<string, string> } = {},
+) {
   const abs = path.join(root, id);
   fs.mkdirSync(path.join(abs, 'docs'), { recursive: true });
   fs.mkdirSync(path.join(abs, 'src'), { recursive: true });
@@ -134,7 +143,10 @@ test('acl: roles cannot cross boundaries', () => {
   ];
   assert.equal(checkAcl('plan', '/r/repo-a/PLAN.md', root, 'repo-a', repo, repos).allowed, true);
   assert.equal(checkAcl('plan', '/r/repo-a/src/x.rs', root, 'repo-a', repo, repos).allowed, false);
-  assert.equal(checkAcl('plan', '/r/docs/decisions.md', root, 'repo-a', repo, repos).allowed, false);
+  assert.equal(
+    checkAcl('plan', '/r/docs/decisions.md', root, 'repo-a', repo, repos).allowed,
+    false,
+  );
   assert.equal(checkAcl('plan', '/r/repo-b/PLAN.md', root, 'repo-a', repo, repos).allowed, false);
   assert.equal(checkAcl('todo', '/r/repo-a/src/x.rs', root, 'repo-a', repo, repos).allowed, true);
   assert.equal(checkAcl('todo', '/r/repo-a/PLAN.md', root, 'repo-a', repo, repos).allowed, false);
@@ -159,7 +171,12 @@ test('milestone transitions and acceptance gates', async () => {
   // complete requires evidence
   assert.throws(() => wf.complete('repo-a', 'M1', 'todo'), /没有任何证据/);
 
-  const ev = await wf.runEvidence({ repoId: 'repo-a', milestone: 'M1', command: 'echo ok', role: 'todo' });
+  const ev = await wf.runEvidence({
+    repoId: 'repo-a',
+    milestone: 'M1',
+    command: 'echo ok',
+    role: 'todo',
+  });
   assert.equal(ev.exitCode, 0);
   assert.match(ev.todoFile, /TODO-M1\.md/);
 
@@ -216,21 +233,19 @@ test('evidence recorded after acceptance stays inside the evidence section', asy
   );
 });
 
-test(
-  'mutations refuse to overwrite an unreadable TODO',
-  { skip: typeof process.getuid === 'function' && process.getuid() === 0 },
-  () => {
-    const { wf } = setup();
-    const file = path.join(wf.root, 'repo-a/TODO-M1.md');
-    fs.chmodSync(file, 0o000);
-    try {
-      assert.throws(() => wf.claim('repo-a', 'M1', 'todo'), /EACCES|permission denied/i);
-    } finally {
-      fs.chmodSync(file, 0o644);
-    }
-    assert.match(fs.readFileSync(file, 'utf8'), /TODO-M1/);
-  },
-);
+test('mutations refuse to overwrite an unreadable TODO', {
+  skip: typeof process.getuid === 'function' && process.getuid() === 0,
+}, () => {
+  const { wf } = setup();
+  const file = path.join(wf.root, 'repo-a/TODO-M1.md');
+  fs.chmodSync(file, 0o000);
+  try {
+    assert.throws(() => wf.claim('repo-a', 'M1', 'todo'), /EACCES|permission denied/i);
+  } finally {
+    fs.chmodSync(file, 0o644);
+  }
+  assert.match(fs.readFileSync(file, 'utf8'), /TODO-M1/);
+});
 
 test('accepted milestone becomes committed once its TODO record is committed', async () => {
   const { wf } = setup();
@@ -293,7 +308,8 @@ test('commit requires an approved token bound to the exact tree', () => {
   const repoAbs = path.join(wf.root, 'repo-a');
 
   fs.writeFileSync(path.join(repoAbs, 'src/lib.rs'), 'fn f() { 2 }\n');
-  const req = wf.requestCommit({ repoId: 'repo-a', message: 'feat: x', role: 'todo' });  assert.throws(
+  const req = wf.requestCommit({ repoId: 'repo-a', message: 'feat: x', role: 'todo' });
+  assert.throws(
     () => wf.commitApproved({ repoId: 'repo-a', approvalId: req.approval.id, role: 'todo' }),
     /尚未由用户批准/,
   );

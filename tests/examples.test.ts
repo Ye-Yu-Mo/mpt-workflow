@@ -1,7 +1,7 @@
-import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { test } from 'node:test';
 import { loadConfig } from '../src/core/config.js';
 import { listTodoFiles, parsePlan, parseTodo } from '../src/core/docs.js';
 import { parseQuestionsFile, questionsFile } from '../src/core/questions.js';
@@ -31,7 +31,10 @@ test('checked-in examples parse and point at real paths', () => {
       const qf = questionsFile(abs);
       if (fs.existsSync(qf)) {
         const qs = parseQuestionsFile(qf, repo.id);
-        assert.ok(qs.every((q) => q.id.startsWith('Q-')), `${repo.id}: questions parse`);
+        assert.ok(
+          qs.every((q) => q.id.startsWith('Q-')),
+          `${repo.id}: questions parse`,
+        );
       }
     }
   }

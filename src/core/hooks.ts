@@ -1,12 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { Workflow, isMachineManagedFile } from './workflow.js';
 import { checkAcl } from './acl.js';
-import { exists, readText, writeAtomic, within } from './fsutil.js';
 import { runtimeDir } from './config.js';
-import { stagedFiles, workingTreeHash, gitInfo } from './git.js';
 import { parseTodo } from './docs.js';
+import { exists, readText, within, writeAtomic } from './fsutil.js';
+import { gitInfo, stagedFiles, workingTreeHash } from './git.js';
 import type { Role } from './types.js';
+import { isMachineManagedFile, Workflow } from './workflow.js';
 
 export interface HookInput {
   session_id?: string;
@@ -114,9 +114,7 @@ export function runPretool(): number {
 function guardPush(input: HookInput): boolean {
   const cmd = String(input.tool_input?.command || '');
   if (/\bgit\s+push\b/.test(cmd)) {
-    process.stderr.write(
-      '[workflow] push 必须由用户手动执行：agent 只做本地 commit。\n',
-    );
+    process.stderr.write('[workflow] push 必须由用户手动执行：agent 只做本地 commit。\n');
     return true;
   }
   return false;
@@ -150,7 +148,8 @@ function guardBash(
   }
 
   if (/\bgit\s+commit\b/.test(cmd)) {
-    const repoId = lease.repo || wf.cfg.repos.find((r) => within(path.join(wf.root, r.path), cwd))?.id;
+    const repoId =
+      lease.repo || wf.cfg.repos.find((r) => within(path.join(wf.root, r.path), cwd))?.id;
     if (!repoId) return null;
     const ref = wf.repoRef(repoId);
     const hash = workingTreeHash(ref.abs);
@@ -193,7 +192,9 @@ export function runSessionStart(): number {
   lines.push('# workflow 状态（自动注入）');
   lines.push(
     `程序 ${st.program} · active repo: ${st.activeRepo ?? '(none)'}` +
-      (lease ? ` · 本会话角色: ${lease.role}${lease.repo ? `@${lease.repo}` : ''}` : ' · 本会话角色: 未声明'),
+      (lease
+        ? ` · 本会话角色: ${lease.role}${lease.repo ? `@${lease.repo}` : ''}`
+        : ' · 本会话角色: 未声明'),
   );
 
   for (const r of st.repos) {
@@ -223,8 +224,11 @@ export function runSessionStart(): number {
       const blocking = wf.msgs.blockingFor(me);
       if (unread || blocking.length) {
         lines.push('');
-        lines.push(`## 未读消息 ${unread} 条${blocking.length ? `（blocking ${blocking.length}）` : ''}`);
-        for (const m of blocking) lines.push(`- [blocking] ${m.id} ${m.subject}（ack 后才能推进 M）`);
+        lines.push(
+          `## 未读消息 ${unread} 条${blocking.length ? `（blocking ${blocking.length}）` : ''}`,
+        );
+        for (const m of blocking)
+          lines.push(`- [blocking] ${m.id} ${m.subject}（ack 后才能推进 M）`);
         for (const m of wf.msgs.forActor(me, { limit: 3 })) {
           if (blocking.some((b) => b.id === m.id)) continue;
           lines.push(`- ${m.id} [${m.kind}] ${m.subject}`);
@@ -240,7 +244,9 @@ export function runSessionStart(): number {
     lines.push('');
     lines.push('## 建议下一步');
     for (const n of st.next.slice(0, 5)) {
-      lines.push(`- [${n.actor}] ${n.action}${n.repo ? ` (${n.repo}${n.milestone ? '/' + n.milestone : ''})` : ''} — ${n.detail}`);
+      lines.push(
+        `- [${n.actor}] ${n.action}${n.repo ? ` (${n.repo}${n.milestone ? '/' + n.milestone : ''})` : ''} — ${n.detail}`,
+      );
     }
   }
 
@@ -303,7 +309,9 @@ export function runPreCommit(): number {
   }
 
   const gi = gitInfo(owned.abs);
-  process.stderr.write(`[workflow] scope 检查通过：${files.length} 个文件 (${gi.branch}@${gi.shortHead})\n`);
+  process.stderr.write(
+    `[workflow] scope 检查通过：${files.length} 个文件 (${gi.branch}@${gi.shortHead})\n`,
+  );
   return 0;
 }
 
@@ -320,8 +328,8 @@ function matchPath(file: string, pattern: string): boolean {
   if (p === file) return true;
   const esc = p
     .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-    .replace(/\*\*/g, '\u0000')
+    .replace(/\*\*/g, '')
     .replace(/\*/g, '[^/]*')
-    .replace(/\u0000/g, '.*');
+    .replace(//g, '.*');
   return new RegExp('^' + esc + '$').test(file);
 }

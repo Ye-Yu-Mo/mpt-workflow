@@ -1,5 +1,5 @@
-import path from 'node:path';
 import fs from 'node:fs';
+import path from 'node:path';
 import { exists, readText } from './fsutil.js';
 import { appendToSection, inlineCode, section, splitFrontMatter } from './markdown.js';
 import type { MilestoneStatus, TodoDoc } from './types.js';
@@ -152,8 +152,7 @@ export function parseTodo(fileAbs: string): TodoDoc | null {
     for (const f of fm.data.files as unknown[]) if (typeof f === 'string') allowed.add(f);
   }
 
-  const acceptanceText =
-    section(body, /验收标准/) || '';
+  const acceptanceText = section(body, /验收标准/) || '';
   const acceptance = collectCheckboxes(acceptanceText).length
     ? collectCheckboxes(acceptanceText)
     : collectCheckboxes(body);

@@ -1,7 +1,7 @@
-import path from 'node:path';
 import fs from 'node:fs';
+import path from 'node:path';
 import YAML from 'yaml';
-import { exists, readText, writeAtomic, ensureDir, isDir } from './fsutil.js';
+import { ensureDir, exists, isDir, readText, writeAtomic } from './fsutil.js';
 import type { ProgramConfig, RepoConfig } from './types.js';
 
 export const WORKFLOW_DIR = '.workflow';

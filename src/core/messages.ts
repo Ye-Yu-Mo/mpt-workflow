@@ -1,15 +1,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { runtimeDir } from './config.js';
 import {
+  appendLine,
   ensureDir,
   exists,
-  readText,
-  writeAtomic,
-  appendLine,
   isoNow,
+  readText,
   truncate,
+  writeAtomic,
 } from './fsutil.js';
-import { runtimeDir } from './config.js';
 import type { Role } from './types.js';
 
 export type MsgRole = Role | 'system';
@@ -174,7 +174,7 @@ export class MessageStore {
     for (const n of names) {
       try {
         const m = JSON.parse(readText(path.join(this.dir, n))) as Message;
-        if (m && m.id) out.push(m);
+        if (m?.id) out.push(m);
       } catch {
         /* skip corrupt messages */
       }
@@ -232,7 +232,10 @@ export class MessageStore {
           return null;
         }
       })
-      .filter((x): x is { actor: Actor; session: string | null; last_seen: string; online: boolean } => !!x);
+      .filter(
+        (x): x is { actor: Actor; session: string | null; last_seen: string; online: boolean } =>
+          !!x,
+      );
   }
 
   isOnline(a: Actor): boolean {
@@ -244,7 +247,9 @@ export class MessageStore {
   send(input: SendInput): { message: Message; duplicate: boolean } {
     const body = input.body || '';
     if (body.length > MAX_BODY) {
-      throw new Error(`消息体 ${body.length} 字节，超过 32KB；大段内容请放 evidence 文件并只引用路径`);
+      throw new Error(
+        `消息体 ${body.length} 字节，超过 32KB；大段内容请放 evidence 文件并只引用路径`,
+      );
     }
 
     if (input.idempotency_key) {
@@ -287,7 +292,13 @@ export class MessageStore {
       auto: input.auto,
     };
     this.save(msg);
-    this.audit({ action: 'create', id: msg.id, from: actorKey(msg.from), to: actorKey(msg.to), kind: msg.kind });
+    this.audit({
+      action: 'create',
+      id: msg.id,
+      from: actorKey(msg.from),
+      to: actorKey(msg.to),
+      kind: msg.kind,
+    });
     return { message: msg, duplicate: false };
   }
 
@@ -300,9 +311,7 @@ export class MessageStore {
   ): Message[] {
     const out: Message[] = [];
     for (const to of input.to) {
-      const key = input.idempotencyBase
-        ? `${input.idempotencyBase}:${actorKey(to)}`
-        : undefined;
+      const key = input.idempotencyBase ? `${input.idempotencyBase}:${actorKey(to)}` : undefined;
       const { message } = this.send({ ...input, to, auto: true, idempotency_key: key });
       out.push(message);
     }
@@ -311,7 +320,11 @@ export class MessageStore {
 
   /* ---------------------------- transitions ---------------------------- */
 
-  private transition(id: string, patch: Partial<Message>, audit: Record<string, unknown>): Message | null {
+  private transition(
+    id: string,
+    patch: Partial<Message>,
+    audit: Record<string, unknown>,
+  ): Message | null {
     const m = this.get(id);
     if (!m) return null;
     Object.assign(m, patch);
@@ -332,11 +345,7 @@ export class MessageStore {
     const m = this.get(id);
     if (!m) return null;
     if (m.status === 'unread' || m.status === 'queued') {
-      return this.transition(
-        id,
-        { status: 'read', read_at: isoNow() },
-        { action: 'read' },
-      );
+      return this.transition(id, { status: 'read', read_at: isoNow() }, { action: 'read' });
     }
     return m;
   }
@@ -389,18 +398,13 @@ export class MessageStore {
   blockingFor(a: Actor): Message[] {
     return this.list()
       .filter(
-        (m) =>
-          sameActor(m.to, a) &&
-          m.blocking &&
-          ['queued', 'unread', 'read'].includes(m.status),
+        (m) => sameActor(m.to, a) && m.blocking && ['queued', 'unread', 'read'].includes(m.status),
       )
       .sort((x, y) => x.created_at.localeCompare(y.created_at));
   }
 
   allBlocking(): Message[] {
-    return this.list().filter(
-      (m) => m.blocking && ['queued', 'unread', 'read'].includes(m.status),
-    );
+    return this.list().filter((m) => m.blocking && ['queued', 'unread', 'read'].includes(m.status));
   }
 
   /* ------------------------------ expiry ------------------------------- */
@@ -481,7 +485,9 @@ export function formatMessage(m: Message, opts: { full?: boolean } = {}): string
   }
   const refs = Object.entries(m.refs).filter(([, v]) => (Array.isArray(v) ? v.length : v));
   if (refs.length) {
-    lines.push('  refs: ' + refs.map(([k, v]) => `${k}=${Array.isArray(v) ? v.join(',') : v}`).join(' '));
+    lines.push(
+      '  refs: ' + refs.map(([k, v]) => `${k}=${Array.isArray(v) ? v.join(',') : v}`).join(' '),
+    );
   }
   if (m.expires_at) lines.push(`  expires: ${m.expires_at}`);
   if (m.ack_note) lines.push(`  ack: ${m.ack_note}`);

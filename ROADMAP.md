@@ -21,7 +21,7 @@ feature surface.
 - [x] `mpt-workflow demo` and `--version`; npx-stable init configuration.
 - English model-facing contract (MCP tool descriptions and server instructions);
   decide the locale strategy for CLI output and the dashboard.
-- Biome lint + formatter.
+- [x] Biome lint + formatter (`npm run lint` in CI).
 - More MCP clients in the docs (Cursor, Codex CLI, VS Code).
 
 ## 0.6 — operations
