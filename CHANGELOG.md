@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   JSON configs (`npm run lint` in CI). TypeScript is on 7.x, GitHub Actions
   checkout/setup-node on v7. `@types/node` stays on 22 and jsdom on 29 to match
   the advertised Node >=22 runtime (jsdom 30+ needs Node 22.22.2).
+- Documented the support scope: Chinese-first runtime, dashboard and MCP tool
+  descriptions; Claude Code is the only supported client. Other MCP clients and
+  a full locale layer are demand-driven.
 
 ### Added
 

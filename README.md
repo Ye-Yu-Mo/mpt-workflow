@@ -88,8 +88,23 @@ Three principles:
 - git
 - macOS, Linux, or WSL2. Native Windows is not supported yet — see
   [docs/platform-support.md](docs/platform-support.md).
-- [Claude Code](https://claude.com/claude-code) (for the MCP server and hooks;
-  the CLI and dashboard work without it)
+- [Claude Code](https://claude.com/claude-code) — the supported MCP client and
+  hook host. Other MCP stdio clients can connect, but hook-based enforcement is
+  Claude Code-specific.
+
+## Language and clients
+
+This project is **Chinese-first**: CLI output, the dashboard, MCP tool
+descriptions and server instructions are Chinese. The English README is for
+discovery. We do not ship half-translations; a full locale layer is a
+demand-driven, post-1.0 option.
+
+**Claude Code is the supported client.** It provides the `PreToolUse` /
+`SessionStart` hooks that enforce the role ACL and commit gate. Other MCP stdio
+clients are not documented yet: without those hooks, only the MCP tools and the
+git pre-commit hook enforce anything. See
+[docs/support-scope.md](docs/support-scope.md) for the reasoning and what would
+change it.
 
 ## Install
 

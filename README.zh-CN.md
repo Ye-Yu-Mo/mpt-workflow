@@ -227,6 +227,17 @@ mpt-workflow gc --apply --evidence-days 90   # 同时删除 90 天前的完整�
 证据默认保留，只有显式 `--evidence-days` 才清理（TODO 里仍有截断副本）。
 `--older-than N` 可以改已处理状态的阈值。
 
+## 语言与客户端
+
+本项目**中文优先**：CLI 输出、看板、MCP 工具描述和 server instructions 都是中文；
+英文 README 用于发现项目。我们不做“只翻译一半”的 UI；完整 locale 层是 1.0 之后
+按需求决定的事情。
+
+**当前只支持 Claude Code**：它提供 `PreToolUse` / `SessionStart` hook，是角色 ACL
+和提交门禁真正的执行边界。其他 MCP stdio 客户端可以连上，但不在支持范围内；没有
+这些 hook 时，只有 MCP 工具和 git pre-commit 还有约束力。详见
+[docs/support-scope.md](docs/support-scope.md)。
+
 ## 与现有文档系统的关系
 
 - **保留**：伞仓 `docs/` 的调研事实、契约文档、MS-N 快照、`milestone/SKILL.md`。
