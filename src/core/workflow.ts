@@ -14,6 +14,7 @@ import {
   loadConfig,
   saveConfig,
   findRoot,
+  runtimeDir,
   evidenceDir,
 } from './config.js';
 import {
@@ -42,6 +43,7 @@ import {
 } from './git.js';
 import { checkAcl } from './acl.js';
 import { appendToSection } from './markdown.js';
+import { dirSize, formatBytes } from './gc.js';
 import {
   createApproval,
   readApproval,
@@ -1094,11 +1096,36 @@ export class Workflow {
       });
     }
 
+    const runtimeBytes = dirSize(runtimeDir(this.root));
+    push(
+      runtimeBytes > 100 * 1024 * 1024
+        ? {
+            level: 'WARN',
+            code: 'runtime-size',
+            message: `runtime 已占用 ${formatBytes(runtimeBytes)}`,
+            hint: 'mpt-workflow gc --apply 清理已处理的旧消息/审批',
+          }
+        : {
+            level: 'OK',
+            code: 'runtime-size',
+            message: `runtime ${formatBytes(runtimeBytes)}`,
+          },
+    );
+
+    const stale = staleCliPaths(this.root, this.repoRefs().map((r) => r.abs));
+    if (stale.length) {
+      push({
+        level: 'WARN',
+        code: 'stale-cli',
+        message: `配置指向不存在的 CLI: ${stale.join(', ')}`,
+        hint: '重新运行 mpt-workflow init --install-hooks，或先 npm run build',
+      });
+    }
+
     if (!out.some((f) => f.level === 'FAIL')) {
       push({ level: 'OK', code: 'overall', message: '没有阻断性问题' });
     }
-    return out;
-  }
+    return out;  }
 }
 
 /* ------------------------------ helpers ------------------------------ */
@@ -1121,6 +1148,26 @@ export function isMachineManagedFile(file: string): boolean {
 /** Machine-managed files plus the plan itself (derived-scope checks only). */
 export function isWorkflowManaged(file: string): boolean {
   return file === 'PLAN.md' || isMachineManagedFile(file);
+}
+
+/**
+ * Find absolute CLI paths in generated MCP/hook config that no longer exist.
+ * This catches an evicted npx cache, a moved checkout, or a missing build.
+ */
+function staleCliPaths(root: string, repoDirs: string[]): string[] {
+  const targets = ['.mcp.json', '.claude/settings.json', '.git/hooks/pre-commit'];
+  const missing = new Set<string>();
+  for (const dir of [root, ...repoDirs]) {
+    for (const rel of targets) {
+      const p = path.join(dir, rel);
+      if (!exists(p)) continue;
+      const text = readText(p);
+      for (const m of text.matchAll(/["']?(\/[^"'\s]+?cli\.js)["']?/g)) {
+        if (!exists(m[1])) missing.add(m[1]);
+      }
+    }
+  }
+  return [...missing];
 }
 
 function assertCommitScope(
