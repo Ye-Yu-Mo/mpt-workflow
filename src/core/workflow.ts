@@ -1,5 +1,4 @@
 import path from 'node:path';
-import fs from 'node:fs';
 import { spawn } from 'node:child_process';
 import {
   exists,
@@ -15,7 +14,6 @@ import {
   loadConfig,
   saveConfig,
   findRoot,
-  runtimeDir,
   evidenceDir,
 } from './config.js';
 import {
@@ -31,9 +29,7 @@ import {
 import {
   parseQuestionsFile,
   questionsFile,
-  appendQuestion,
   updateQuestion,
-  nextQuestionId,
 } from './questions.js';
 import {
   gitInfo,
@@ -55,7 +51,7 @@ import {
   withLock,
   type Approval,
 } from './state.js';
-import { MessageStore, actorKey, actorFromRole, type Actor, type Message } from './messages.js';
+import { MessageStore, actorKey, actorFromRole, type Actor } from './messages.js';
 import type {
   ProgramConfig,
   ProgramStatus,

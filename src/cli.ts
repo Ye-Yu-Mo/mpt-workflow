@@ -3,7 +3,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { init, formatInitResult } from './core/init.js';
 import { Workflow } from './core/workflow.js';
-import { findRoot, detectRepos } from './core/config.js';
+import { findRoot } from './core/config.js';
 import { runPretool, runSessionStart, runPreCommit, setRoleLease, readRoleLease } from './core/hooks.js';
 import { runMcpServer } from './mcp/server.js';
 import { startWebServer } from './web/server.js';
