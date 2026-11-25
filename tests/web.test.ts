@@ -203,3 +203,16 @@ test('dashboard rejects encoded path traversal ids', async () => {
     await server.close();
   }
 });
+
+test('approval API marks a changed worktree as stale', async () => {
+  const { root, wf } = fixture();
+  fs.writeFileSync(path.join(root, 'repo-a/src/lib.rs'), 'fn f() { 3 }\n');
+  const server = await startWebServer(wf, 0);
+  try {
+    const res = await fetch(`${server.url}/api/approvals`);
+    const list = (await res.json()) as { stale?: boolean }[];
+    assert.equal(list[0]?.stale, true);
+  } finally {
+    await server.close();
+  }
+});

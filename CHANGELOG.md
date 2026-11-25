@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Acceptance gate.** `milestone_accept` now requires the latest evidence entry
+  to pass; an older success can no longer hide a newer failing command.
+- **Commit scope and approvals.** The commit uses the accepted milestone's TODO
+  (not the next implementation milestone), `commit_request` stages the tree and
+  records a staged hash, `approve` refuses a stale worktree, and `commit`
+  re-checks the staged content. The dashboard marks stale approvals and disables
+  the approve button.
+- **Concurrency.** Question-board writes, TODO transitions and evidence writes
+  take directory locks; config mutations reload the file before saving.
+- **Parsing.** Bare `受验 SHA` values, `**改什么**` file lists and `**/` / `?`
+  globs are parsed correctly; the claim notification no longer collides after a
+  rework loop; status lines with annotations are replaced cleanly.
+- `next` now offers the pending commit after acceptance instead of skipping to
+  the next milestone.
 - **Permission boundary.** MCP seeds the session role from `WF_ROLE`/`WF_REPO`
   and refuses state changes until `bootstrap`; `plan`/`todo` are repo-bound in
   MCP and in the hooks; hooks fail closed on invalid roles, malformed config and

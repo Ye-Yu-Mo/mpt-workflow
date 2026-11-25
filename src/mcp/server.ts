@@ -13,7 +13,7 @@ import {
   type MessageKind,
 } from '../core/messages.js';
 import { appendQuestion, nextQuestionId, questionsFile } from '../core/questions.js';
-import { logEvent } from '../core/state.js';
+import { logEvent, withLock } from '../core/state.js';
 import type { Role } from '../core/types.js';
 import { isRole } from '../core/types.js';
 import { Workflow } from '../core/workflow.js';
@@ -322,22 +322,24 @@ function buildTools(_opts: ServerOptions): ToolSpec[] {
           toUserFromMain && !repoId
             ? path.join(ctx.wf.root, 'docs', 'agent-questions.md')
             : questionsFile(ctx.wf.repoRef(repoId as string).abs);
-        const existing = ctx.wf.allQuestions();
-        const id = nextQuestionId(existing);
         const rawOptions = (args.options as string[] | undefined) || [];
         const options = rawOptions.map((s, i) => {
           const m = /^([A-Za-z0-9]+)\s*[:：]\s*(.*)$/.exec(s);
           return m ? { id: m[1], text: m[2] } : { id: String.fromCharCode(65 + i), text: s };
         });
-        appendQuestion(file, {
-          id,
-          to,
-          from: ctx.role,
-          blocking: Boolean(args.blocking),
-          blockingNote: args.blocking_note as string | undefined,
-          context: String(args.context),
-          options,
-          recommendation: args.recommendation as string | undefined,
+        const id = withLock(ctx.wf.root, 'questions', () => {
+          const qid = nextQuestionId(ctx.wf.allQuestions());
+          appendQuestion(file, {
+            id: qid,
+            to,
+            from: ctx.role,
+            blocking: Boolean(args.blocking),
+            blockingNote: args.blocking_note as string | undefined,
+            context: String(args.context),
+            options,
+            recommendation: args.recommendation as string | undefined,
+          });
+          return qid;
         });
         logEvent(ctx.wf.root, {
           role: ctx.role,
@@ -781,6 +783,7 @@ function buildTools(_opts: ServerOptions): ToolSpec[] {
       schema: {
         message: z.string().describe('commit message'),
         repo: repoParam,
+        milestone: msParam.optional().describe('要提交的里程碑；默认取已验收待提交的 M'),
       },
       handler: (args, ctx) => {
         const repo = requireRepo(args, ctx);
@@ -788,6 +791,7 @@ function buildTools(_opts: ServerOptions): ToolSpec[] {
           repoId: repo,
           message: String(args.message),
           role: ctx.role,
+          milestone: args.milestone as string | undefined,
         });
         return [
           `审批已创建: ${r.approval.id}`,

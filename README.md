@@ -229,9 +229,10 @@ agent: commit(approval="ap-xxx")   (MCP tool)
 
 The approval is a **guardrail against mistakes**, not an authorization system:
 the server runs as your OS user. It exists so a human sees the diff before it
-lands. Agent Bash calls to `git commit` / `git push` (and
-`mpt-workflow approve|commit`) are refused by the hook; commits go through the
-MCP tool, and the human pushes.
+lands. `commit_request` stages the tree to bind the approval to exactly that
+content; the MCP `commit` re-checks the staged hash. Agent Bash calls to
+`git commit` / `git push` (and `mpt-workflow approve|commit`) are refused by the
+hook; commits go through the MCP tool, and the human pushes.
 
 ## Messaging and notifications
 
@@ -358,7 +359,7 @@ src/core/     parsing, state machine, ACL, git, evidence, approvals, messages
 src/mcp/      MCP server (25 tools)
 src/web/      HTTP API + single-page dashboard
 src/cli.ts    init / status / doctor / web / mcp / hook / inbox / send ...
-tests/        node:test suites (58 tests, incl. real examples + MCP stdio)
+tests/        node:test suites (67 tests, incl. real examples + MCP stdio)
 docs/         architecture and requirement notes
 ```
 
@@ -368,7 +369,7 @@ docs/         architecture and requirement notes
 npm run typecheck   # tsc --noEmit
 npm run lint        # Biome: formatting + lint
 npm run format      # Biome: write safe fixes
-npm test            # runs the 58 tests via tsx
+npm test            # runs the 67 tests via tsx
 npm run build       # tsc + copies the dashboard assets into dist/
 ```
 

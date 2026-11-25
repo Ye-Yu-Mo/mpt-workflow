@@ -15,6 +15,7 @@ import {
 import { formatInitResult, init } from './core/init.js';
 import { formatMessage, type MessageKind } from './core/messages.js';
 import { updateQuestion } from './core/questions.js';
+import { withLock } from './core/state.js';
 import { isRole, type Role } from './core/types.js';
 import { Workflow } from './core/workflow.js';
 import { runMcpServer } from './mcp/server.js';
@@ -281,11 +282,13 @@ async function main() {
         if (!id || !answer) throw new Error('用法: mpt-workflow answer Q-001 --answer "..."');
         const q = wf.findQuestion(id);
         if (!q) throw new Error(`找不到 ${id}`);
-        updateQuestion(q.file, id, {
-          status: 'answered',
-          answer,
-          resolution: typeof flags.resolution === 'string' ? flags.resolution : undefined,
-        });
+        withLock(wf.root, 'questions', () =>
+          updateQuestion(q.file, id, {
+            status: 'answered',
+            answer,
+            resolution: typeof flags.resolution === 'string' ? flags.resolution : undefined,
+          }),
+        );
         console.log(`已回答 ${id}。记得回写 PLAN/TODO。`);
         return;
       }

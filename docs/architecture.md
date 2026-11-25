@@ -150,10 +150,11 @@ which is out of scope.
 the tree changed after the latest evidence. It records the acceptor and the
 review note; a `todo`-role session cannot accept.
 
-`commit_request` snapshots a content hash of the working tree (tracked diff +
-untracked file contents) and returns an approval id. `approve` is a separate,
-human-only action (CLI or dashboard). `commit` refuses if the hash has changed,
-so approval always refers to exactly what was reviewed. The approval is
+`commit_request` resolves the milestone being committed (the accepted,
+not-yet-committed one by default), stages the worktree, and records both a
+working-tree hash and a staged-tree hash in the approval. `approve` refuses a
+stale worktree; `commit` re-checks the staged hash before the local commit, so
+the approval always refers to what the user reviewed. The approval is
 single-use and local-only; there is no push path.
 
 ## 7. Messages

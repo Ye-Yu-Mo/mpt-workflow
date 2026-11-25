@@ -29,9 +29,11 @@ import {
   commit as gitCommit,
   gitInfo,
   stageAll,
+  stagedTreeHash,
   workingTreeHash,
   workingTreeOid,
 } from './git.js';
+import { matchGlob } from './glob.js';
 import { appendToSection } from './markdown.js';
 import { type Actor, actorFromRole, actorKey, MessageStore } from './messages.js';
 import { parseQuestionsFile, questionsFile, updateQuestion } from './questions.js';
@@ -192,7 +194,9 @@ export class Workflow {
 
   /** Answer a question: update the file, notify the asker, clear the blocker. */
   answerQuestion(q: Question, answer: string, resolution: string | undefined, by: Actor): void {
-    updateQuestion(q.file, q.id, { status: 'answered', answer, resolution });
+    withLock(this.root, 'questions', () =>
+      updateQuestion(q.file, q.id, { status: 'answered', answer, resolution }),
+    );
     const asker = actorFromRole(String(q.from), q.repo);
     try {
       this.msgs.send({
@@ -219,7 +223,9 @@ export class Workflow {
 
   /** Close a question: update the file, notify the other party. */
   closeQuestion(q: Question, resolution: string | undefined, by: Actor): void {
-    updateQuestion(q.file, q.id, { status: 'closed', resolution });
+    withLock(this.root, 'questions', () =>
+      updateQuestion(q.file, q.id, { status: 'closed', resolution }),
+    );
     const asker = actorFromRole(String(q.from), q.repo);
     const addressee = actorFromRole(String(q.to), q.repo);
     const other = actorKey(by) === actorKey(asker) ? addressee : asker;
@@ -307,7 +313,10 @@ export class Workflow {
     if (milestones.length === 0) problems.push('PLAN 中未解析到任何 M，且无 TODO-Mn.md');
     if (git.dirty)
       problems.push(`工作区有未提交改动: ${git.changed.length + git.untracked.length} 个文件`);
-    if (current && current.status === 'accepted') problems.push(`${current.id} 已验收但尚未提交`);
+    const acceptedMilestones = milestones.filter((m) => m.status === 'accepted');
+    if (acceptedMilestones.length) {
+      problems.push(`${acceptedMilestones.map((m) => m.id).join(', ')} 已验收但尚未提交`);
+    }
     for (const q of questions.filter((q) => q.blocking && q.status === 'open')) {
       problems.push(`阻塞问题未回答: ${q.id}`);
     }
@@ -402,6 +411,19 @@ export class Workflow {
       return out;
     }
 
+    const pendingCommit = active.milestones.filter((x) => x.status === 'accepted');
+    if (pendingCommit.length) {
+      out.push({
+        actor: 'user',
+        action: '评审并 commit',
+        detail: `${pendingCommit.map((x) => x.id).join(', ')} 已验收，等待 review diff 后批准提交`,
+        repo: activeId,
+        milestone: pendingCommit[pendingCommit.length - 1].id,
+        blocking: false,
+      });
+      return out;
+    }
+
     const m = active.currentMilestone;
     if (active.milestones.length === 0) {
       out.push({
@@ -492,6 +514,8 @@ export class Workflow {
       if (!exists(ref.abs)) throw new Error(`仓库目录不存在: ${ref.abs}`);
     }
     withLock(this.root, 'program', () => {
+      const fresh = loadConfig(this.root);
+      if (fresh) this.cfg = fresh;
       this.cfg.active_repo = id;
       this.save();
     });
@@ -512,15 +536,16 @@ export class Workflow {
   }
 
   updatePhase(id: string, status: 'planned' | 'active' | 'accepted' | 'done'): void {
-    const p = this.cfg.phases.find((x) => x.id === id);
-    if (!p) throw new Error(`未知阶段 ${id}`);
     withLock(this.root, 'program', () => {
-      const idx = this.cfg.phases.indexOf(p);
+      const fresh = loadConfig(this.root);
+      if (fresh) this.cfg = fresh;
+      const p = this.cfg.phases.find((x) => x.id === id);
+      if (!p) throw new Error(`未知阶段 ${id}`);
       // keep only one active phase
       if (status === 'active') {
         for (const q of this.cfg.phases) if (q.status === 'active') q.status = 'accepted';
       }
-      this.cfg.phases[idx].status = status;
+      p.status = status;
       this.save();
     });
   }
@@ -537,11 +562,18 @@ export class Workflow {
   }
 
   claim(repoId: string, milestone: string, role: Role): MilestoneState {
+    return withLock(this.root, `todo-${repoId}-${milestone}`, () =>
+      this.claimUnlocked(repoId, milestone, role),
+    );
+  }
+
+  private claimUnlocked(repoId: string, milestone: string, role: Role): MilestoneState {
     this.assertNotBlocked(role, repoId);
     const { abs, doc } = this.requireTodo(repoId, milestone);
     if (!['todo_ready', 'rejected', 'planned'].includes(doc.status)) {
       throw new Error(`${milestone} 当前状态为 ${doc.statusRaw}，不能 claim（需 待实现/已打回）`);
     }
+    const attempts = (doc.body.match(/^\s*-\s.*\*\*(?:通过|打回)\*\*/gm) ?? []).length;
     writeAtomic(abs, setTodoStatus(readTextRequired(abs), 'implementing'));
     logEvent(this.root, { role, tool: 'milestone_claim', repo: repoId, milestone, ok: true });
     this.notifyEvent({
@@ -551,12 +583,18 @@ export class Workflow {
       kind: 'event',
       subject: `${repoId}/${milestone} 开始实现`,
       refs: { repo: repoId, milestone },
-      key: `${repoId}:${milestone}:claim`,
+      key: `${repoId}:${milestone}:claim:${attempts}`,
     });
     return this.milestone(repoId, milestone);
   }
 
   complete(repoId: string, milestone: string, role: Role): MilestoneState {
+    return withLock(this.root, `todo-${repoId}-${milestone}`, () =>
+      this.completeUnlocked(repoId, milestone, role),
+    );
+  }
+
+  private completeUnlocked(repoId: string, milestone: string, role: Role): MilestoneState {
     this.assertNotBlocked(role, repoId);
     const { abs, doc } = this.requireTodo(repoId, milestone);
     if (doc.status !== 'implementing') {
@@ -598,6 +636,17 @@ export class Workflow {
     role: Role,
     opts: { note?: string; force?: boolean } = {},
   ): MilestoneState {
+    return withLock(this.root, `todo-${repoId}-${milestone}`, () =>
+      this.acceptUnlocked(repoId, milestone, role, opts),
+    );
+  }
+
+  private acceptUnlocked(
+    repoId: string,
+    milestone: string,
+    role: Role,
+    opts: { note?: string; force?: boolean } = {},
+  ): MilestoneState {
     if (role !== 'plan' && role !== 'main') {
       throw new Error(`只有 PLAN/主 agent 能验收；当前角色 ${role}`);
     }
@@ -609,15 +658,17 @@ export class Workflow {
       );
     }
     const evidence = parseEvidence(doc);
-    const passing = evidence.filter((e) => e.exitCode === 0);
-    if (passing.length === 0 && !opts.force) {
-      throw new Error(`${milestone} 没有成功的证据（exit=0）；拒绝验收`);
+    const latest = evidence[evidence.length - 1];
+    if (!opts.force) {
+      if (!latest) throw new Error(`${milestone} 没有证据；拒绝验收`);
+      if (latest.exitCode !== 0) {
+        throw new Error(`${milestone} 最新证据 exit=${latest.exitCode}；拒绝验收`);
+      }
     }
 
     const ref = this.repoRef(repoId);
     const gi = gitInfo(ref.abs);
     const currentHash = workingTreeHash(ref.abs);
-    const latest = passing[passing.length - 1];
     let note = opts.note || '';
     if (latest?.tree && latest.tree !== workingTreeOid(ref.abs)) {
       note += '\n⚠️ 最新证据之后工作区又发生了变化，建议重新跑 evidence_run。';
@@ -658,6 +709,17 @@ export class Workflow {
   }
 
   reject(repoId: string, milestone: string, role: Role, reason: string): MilestoneState {
+    return withLock(this.root, `todo-${repoId}-${milestone}`, () =>
+      this.rejectUnlocked(repoId, milestone, role, reason),
+    );
+  }
+
+  private rejectUnlocked(
+    repoId: string,
+    milestone: string,
+    role: Role,
+    reason: string,
+  ): MilestoneState {
     if (role !== 'plan' && role !== 'main') {
       throw new Error(`只有 PLAN/主 agent 能打回；当前角色 ${role}`);
     }
@@ -721,7 +783,7 @@ export class Workflow {
   }> {
     const { repoId, milestone, command, role } = input;
     const ref = this.repoRef(repoId);
-    const { abs, doc } = this.requireTodo(repoId, milestone);
+    this.requireTodo(repoId, milestone); // validate early
     const cwd = input.cwd ? path.resolve(ref.abs, input.cwd) : ref.abs;
     if (!within(ref.abs, cwd)) throw new Error(`evidence cwd 必须在仓库内: ${cwd}`);
 
@@ -729,40 +791,43 @@ export class Workflow {
     const result = await runCommand(command, cwd, input.timeoutMs ?? 900_000);
     const gi = gitInfo(ref.abs);
     const tree = workingTreeOid(ref.abs);
-    const list = parseEvidence(doc);
-    const id = `E${list.length + 1}`;
-    const at = isoNow();
 
-    const fullOutput = [
-      `$ ${command}`,
-      `exit: ${result.code}`,
-      `head: ${gi.head}`,
-      `tree: ${tree}`,
-      `dirty: ${gi.dirty}`,
-      '',
-      '--- stdout ---',
-      result.stdout,
-      '--- stderr ---',
-      result.stderr,
-    ].join('\n');
+    const recorded = withLock(this.root, `todo-${repoId}-${milestone}`, () => {
+      const { abs, doc } = this.requireTodo(repoId, milestone);
+      const list = parseEvidence(doc);
+      const id = `E${list.length + 1}`;
+      const at = isoNow();
+      const fullOutput = [
+        `$ ${command}`,
+        `exit: ${result.code}`,
+        `head: ${gi.head}`,
+        `tree: ${tree}`,
+        `dirty: ${gi.dirty}`,
+        '',
+        '--- stdout ---',
+        result.stdout,
+        '--- stderr ---',
+        result.stderr,
+      ].join('\n');
 
-    const dir = path.join(evidenceDir(this.root), repoId, milestone);
-    ensureDir(dir);
-    writeAtomic(path.join(dir, `${id}-${Date.now()}.log`), fullOutput);
+      const dir = path.join(evidenceDir(this.root), repoId, milestone);
+      ensureDir(dir);
+      writeAtomic(path.join(dir, `${id}-${Date.now()}.log`), fullOutput);
 
-    const tail = truncate([result.stdout, result.stderr].filter(Boolean).join('\n'), 4000);
-
-    const text = appendEvidenceSection(readTextRequired(abs), {
-      id,
-      at,
-      command,
-      exitCode: result.code,
-      head: gi.shortHead,
-      tree,
-      dirty: gi.dirty,
-      output: tail,
+      const tail = truncate([result.stdout, result.stderr].filter(Boolean).join('\n'), 4000);
+      const text = appendEvidenceSection(readTextRequired(abs), {
+        id,
+        at,
+        command,
+        exitCode: result.code,
+        head: gi.shortHead,
+        tree,
+        dirty: gi.dirty,
+        output: tail,
+      });
+      writeAtomic(abs, text);
+      return { id, output: tail, todoFile: path.relative(this.root, abs) };
     });
-    writeAtomic(abs, text);
 
     logEvent(this.root, {
       role,
@@ -774,13 +839,13 @@ export class Workflow {
     });
 
     return {
-      id,
+      id: recorded.id,
       exitCode: result.code,
       head: gi.shortHead,
       tree,
       dirty: gi.dirty,
-      output: tail,
-      todoFile: path.relative(this.root, abs),
+      output: recorded.output,
+      todoFile: recorded.todoFile,
     };
   }
 
@@ -816,7 +881,7 @@ export class Workflow {
     if (allowed.length > 0) {
       for (const f of changed) {
         if (isWorkflowManaged(f)) continue;
-        const ok = allowed.some((a) => globMatchPath(f, a));
+        const ok = allowed.some((a) => matchGlob(f, a.replace(/^\.\//, '')));
         if (!ok) {
           outOfScope.push(f);
           warnings.push(`${f} 不在 TODO 声明的「影响文件」里`);
@@ -834,13 +899,26 @@ export class Workflow {
       outOfScope,
       violations,
       warnings,
-      pass: violations.length === 0,
+      pass: violations.length === 0 && !(role === 'todo' && outOfScope.length > 0),
     };
   }
 
   /* ----------------------------- commit ------------------------------ */
 
-  requestCommit(input: { repoId: string; message: string; role: Role }): {
+  /** The milestone being committed: explicit, accepted-but-uncommitted, or current. */
+  private milestoneForCommit(repoId: string, explicit?: string): MilestoneState | null {
+    const st = this.repoState(repoId);
+    if (explicit) {
+      const found = st.milestones.find((m) => m.id === explicit);
+      if (!found) throw new Error(`${repoId} 没有里程碑 ${explicit}`);
+      return found;
+    }
+    const accepted = st.milestones.filter((m) => m.status === 'accepted');
+    if (accepted.length) return accepted[accepted.length - 1];
+    return st.currentMilestone;
+  }
+
+  requestCommit(input: { repoId: string; message: string; role: Role; milestone?: string }): {
     approval: Approval;
     diffStat: string;
     files: string[];
@@ -848,11 +926,18 @@ export class Workflow {
     const ref = this.repoRef(input.repoId);
     const files = allChangedFiles(ref.abs);
     if (files.length === 0) throw new Error('没有可提交的改动');
-    const scope = this.scopeCheck(input.repoId, undefined, input.role, { enforceAcl: false });
+    const milestone = this.milestoneForCommit(input.repoId, input.milestone);
+    const scope = this.scopeCheck(input.repoId, milestone?.id, input.role, {
+      enforceAcl: false,
+    });
     assertCommitScope(scope, input.role);
+    const stage = stageAll(ref.abs);
+    if (!stage.ok) throw new Error(`git add 失败: ${stage.err}`);
     const a = createApproval(this.root, {
       repo: input.repoId,
+      milestone: milestone?.id,
       tree_hash: workingTreeHash(ref.abs),
+      staged_hash: stagedTreeHash(ref.abs),
       message: input.message,
       files,
     });
@@ -884,6 +969,12 @@ export class Workflow {
     const a = readApproval(this.root, id);
     if (!a) throw new Error(`审批 ${id} 不存在`);
     if (a.used_at) throw new Error(`审批 ${id} 已使用`);
+    const current = workingTreeHash(this.repoRef(a.repo).abs);
+    if (current !== a.tree_hash) {
+      throw new Error(
+        `工作区内容已变化（审批时 ${a.tree_hash}，现在 ${current}）；请重新 commit_request`,
+      );
+    }
     a.approved_at = isoNow();
     a.approved_by = by;
     writeApproval(this.root, a);
@@ -919,7 +1010,12 @@ export class Workflow {
       );
     }
 
-    const scope = this.scopeCheck(input.repoId, undefined, input.role, { enforceAcl: false });
+    const scope = this.scopeCheck(
+      input.repoId,
+      a.milestone ?? this.milestoneForCommit(input.repoId)?.id,
+      input.role,
+      { enforceAcl: false },
+    );
     assertCommitScope(scope, input.role);
 
     const files = allChangedFiles(ref.abs);
@@ -929,6 +1025,14 @@ export class Workflow {
 
     const stage = stageAll(ref.abs);
     if (!stage.ok) throw new Error(`git add 失败: ${stage.err}`);
+    if (a.staged_hash) {
+      const staged = stagedTreeHash(ref.abs);
+      if (staged !== a.staged_hash) {
+        throw new Error(
+          `暂存区内容已变化（审批时 ${a.staged_hash}，现在 ${staged}）；请重新 commit_request 并批准`,
+        );
+      }
+    }
     const res = gitCommit(ref.abs, a.message);
     if (!res.ok) throw new Error(`git commit 失败: ${res.err || res.out}`);
     const head = gitInfo(ref.abs).head;
@@ -1253,17 +1357,6 @@ function runCommand(
       });
     });
   });
-}
-
-function globMatchPath(file: string, pattern: string): boolean {
-  const p = pattern.replace(/^\.\//, '');
-  if (p === file) return true;
-  const esc = p
-    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-    .replace(/\*\*/g, '')
-    .replace(/\*/g, '[^/]*')
-    .replace(//g, '.*');
-  return new RegExp('^' + esc + '$').test(file);
 }
 
 function appendReview(

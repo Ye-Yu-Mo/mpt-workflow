@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { exists, readText, realPath, within } from '../core/fsutil.js';
-import { diffStat, diffUnified, recentLog } from '../core/git.js';
+import { diffStat, diffUnified, recentLog, workingTreeHash } from '../core/git.js';
 import { logEvent, readEvents } from '../core/state.js';
 import type { Workflow } from '../core/workflow.js';
 import { VERSION } from '../version.js';
@@ -147,7 +147,14 @@ export function startWebServer(wf: Workflow, port: number): Promise<WebHandle> {
           return json(res, readEvents(wf.root, limit));
         }
         if (req.method === 'GET' && p === '/api/approvals') {
-          return json(res, wf.approvals());
+          const approvals = wf.approvals().map((a) => {
+            try {
+              return { ...a, stale: workingTreeHash(wf.repoRef(a.repo).abs) !== a.tree_hash };
+            } catch {
+              return { ...a, stale: true };
+            }
+          });
+          return json(res, approvals);
         }
         if (req.method === 'GET' && p === '/api/messages') {
           const role = (url.searchParams.get('role') || 'user') as

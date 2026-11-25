@@ -131,7 +131,9 @@ function sleepSync(ms: number): void {
 export interface Approval {
   id: string;
   repo: string;
+  milestone?: string;
   tree_hash: string;
+  staged_hash?: string;
   message: string;
   files: string[];
   created_at: string;

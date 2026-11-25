@@ -58,8 +58,10 @@ The ACL is enforced by hooks, and the role is self-declared:
 
 - `审批 ... 尚未由用户批准`: the human must approve the one-shot approval:
   `mpt-workflow approve ap-...` or the dashboard.
-- `工作区内容已变化`: the tree changed after approval. Review the new diff and
-  request a new approval.
+- `工作区内容已变化`: the tree changed after approval. Approving a stale tree is
+  also refused; run `commit_request` again after the final edit.
+- `暂存区内容已变化`: the staged content changed after approval. Re-request and
+  approve again.
 - `scope 检查未通过`: changed files are outside the current TODO's
   **影响文件** list (todo role) or violate the ACL. Update the TODO or revert.
 - `pre-commit scope 检查未通过`: the git hook repeats the TODO/ACL check. The

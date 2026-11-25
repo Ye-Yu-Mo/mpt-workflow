@@ -938,8 +938,8 @@ async function openDiff(a) {
       <div class="repo-meta">${esc(a.repo)} · ${esc(a.message)}</div>
       <div class="repo-meta">tree <code>${esc(a.tree_hash)}</code> · ${(a.files || []).length} 个文件</div>
       <div class="modal-actions">
-        ${a.approved_at ? '<span class="tag ok">已批准</span>' : '<button class="btn primary" id="modal-approve">批准这个提交</button>'}
-        <span class="repo-meta">批准绑定当前工作区 hash；批准后 agent 才能 commit。</span>
+        ${a.stale ? '<span class="tag bad">工作区已变化</span>' : a.approved_at ? '<span class="tag ok">已批准</span>' : '<button class="btn primary" id="modal-approve">批准这个提交</button>'}
+        <span class="repo-meta">${a.stale ? '当前 diff 不是审批快照；请重新 commit_request。' : '批准绑定当前工作区 hash；批准后 agent 才能 commit。'}</span>
       </div>
       <h3 style="font-size:12px;margin:14px 0 6px">改动文件</h3>
       <ul style="margin:0;padding-left:18px;font-size:12px">${files}</ul>
@@ -970,16 +970,17 @@ function renderApprovals() {
     const r = el('div', 'row-item');
     r.innerHTML = `
       <div class="v" style="flex:1">
-        <div><code>${esc(a.id)}</code> · ${esc(a.repo)} ${a.approved_at ? '<span class="tag ok">已批准</span>' : '<span class="tag">待批准</span>'}</div>
+        <div><code>${esc(a.id)}</code> · ${esc(a.repo)} ${a.stale ? '<span class="tag bad">工作区已变化</span>' : a.approved_at ? '<span class="tag ok">已批准</span>' : '<span class="tag">待批准</span>'}</div>
         <div style="color:var(--ink-2)">${esc(a.message)}</div>
         <div class="repo-meta">${(a.files || []).length} 个文件 · tree ${esc(a.tree_hash)}</div>
+        ${a.stale ? '<div class="repo-meta" style="color:var(--critical)">工作区已变化，请重新 commit_request</div>' : ''}
         <details class="repo-meta" style="margin-top:4px">
           <summary>查看文件列表</summary>
           <ul style="margin:4px 0 0;padding-left:18px">${files}</ul>
         </details>
         <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn" data-diff="${esc(a.id)}">查看 diff</button>
-          ${a.approved_at ? '' : `<button class="btn primary" data-approve="${esc(a.id)}">批准提交</button>`}
+          ${a.approved_at || a.stale ? '' : `<button class="btn primary" data-approve="${esc(a.id)}">批准提交</button>`}
         </div>
       </div>`;
     const diffBtn = r.querySelector('[data-diff]');
