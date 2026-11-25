@@ -7,7 +7,7 @@ PLAN → TODO → implement → accept → commit workflow into an enforceable s
 
 [![CI](https://github.com/Ye-Yu-Mo/mpt-workflow/actions/workflows/ci.yml/badge.svg)](https://github.com/Ye-Yu-Mo/mpt-workflow/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Node](https://img.shields.io/badge/node-%3E%3D20.6-brightgreen.svg)](package.json)
+[![Node](https://img.shields.io/badge/node-%3E%3D22-brightgreen.svg)](package.json)
 
 ---
 
@@ -69,7 +69,7 @@ Three principles:
 
 ## Requirements
 
-- Node.js **20.6+**
+- Node.js **22+** (Node 20 reached end-of-life in April 2026)
 - git
 - [Claude Code](https://claude.com/claude-code) (for the MCP server and hooks;
   the CLI and dashboard work without it)
@@ -277,7 +277,7 @@ src/core/     parsing, state machine, ACL, git, evidence, approvals, messages
 src/mcp/      MCP server (25 tools)
 src/web/      HTTP API + single-page dashboard
 src/cli.ts    init / status / doctor / web / mcp / hook / inbox / send ...
-tests/        node:test suites (29 tests)
+tests/        node:test suites (30 tests, incl. a real MCP stdio round-trip)
 docs/         architecture and requirement notes
 ```
 
@@ -285,7 +285,7 @@ docs/         architecture and requirement notes
 
 ```bash
 npm run typecheck   # tsc --noEmit
-npm test            # runs the 29 tests via tsx
+npm test            # runs the 30 tests via tsx
 npm run build       # tsc + copies the dashboard assets into dist/
 ```
 

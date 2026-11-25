@@ -239,7 +239,7 @@ agent: commit(approval="ap-xxx")
 
 ```bash
 npm run typecheck
-npm test          # 29 个测试（含看板在随机端口的端到端渲染）
+npm test          # 30 个测试（含 MCP stdio 与看板端到端）
 npm run build
 ```
 

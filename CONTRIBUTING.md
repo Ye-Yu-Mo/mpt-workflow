@@ -15,7 +15,7 @@ opinion are more welcome than changes that add surface area.
 ## Development setup
 
 ```bash
-node --version        # must be >= 20
+node --version        # must be >= 22
 npm install
 npm run typecheck
 npm run build

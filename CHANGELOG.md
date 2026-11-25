@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Protocol-level test that spawns the real MCP server over stdio, lists tools,
+  calls `status` and checks role gating on the wire.
+
+### Changed
+
+- Require Node.js 22+ (Node 20 reached end-of-life in April 2026). CI now runs
+  Node 22 and 24.
+- Upgrade `zod` to v4. The MCP SDK supports both v3 and v4; the full suite,
+  including the stdio protocol test, passes on v4.
+
 ## [0.2.0] - 2026-11-25
 
 ### Added
