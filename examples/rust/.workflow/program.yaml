@@ -1,0 +1,14 @@
+program: example-rust
+active_repo: rust-service
+repos:
+  - id: rust-service
+    path: rust-service
+phases:
+  - id: P1
+    title: 契约与基线冻结
+    status: active
+    repos:
+      - rust-service
+    exit_criteria:
+      - M1 验收
+contracts: []

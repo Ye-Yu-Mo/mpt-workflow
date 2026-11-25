@@ -21,8 +21,6 @@ feature surface.
 - [x] `mpt-workflow demo` and `--version`; npx-stable init configuration.
 - English model-facing contract (MCP tool descriptions and server instructions);
   decide the locale strategy for CLI output and the dashboard.
-- Quickstart, troubleshooting and 2–3 real examples (`minimal`, `multi-repo`,
-  `rust`).
 - Biome lint + formatter.
 - More MCP clients in the docs (Cursor, Codex CLI, VS Code).
 
@@ -33,7 +31,9 @@ feature surface.
   `--evidence-days` for old full evidence logs.
 - [x] `doctor` reports `runtime/` size and stale CLI paths in `.mcp.json` /
   hooks.
-- [ ] Release `0.6.0`.
+- [x] Quickstart, troubleshooting and 2–3 real examples (`minimal`,
+  `multi-repo`, `rust`).
+- [x] Release `0.6.0`.
 
 ## 1.0 — stable contract
 

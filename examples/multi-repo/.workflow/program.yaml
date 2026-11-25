@@ -1,0 +1,23 @@
+program: example-multi-repo
+active_repo: api
+repos:
+  - id: api
+    path: api
+  - id: worker
+    path: worker
+phases:
+  - id: P1
+    title: 接口与消费端
+    status: active
+    repos:
+      - api
+      - worker
+    exit_criteria:
+      - api M1 验收
+      - worker M1 验收
+contracts:
+  - name: health-contract
+    ref: docs/contracts/health.md
+    repos:
+      - api
+      - worker

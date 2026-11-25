@@ -43,6 +43,9 @@ mpt-workflow web --root /path/to/workspace --port 7788
 
 源码 checkout 也可以用 `./scripts/demo.sh` 走同样的流程。
 
+更多可复制的工作区见 [examples/](examples/)（minimal / multi-repo / rust）；
+遇到问题先看 [docs/troubleshooting.md](docs/troubleshooting.md)。
+
 `init` 会做这些事（全部幂等，已存在的文件不覆盖）：
 
 | 产物 | 作用 |
@@ -258,7 +261,7 @@ mpt-workflow gc --apply --evidence-days 90   # 同时删除 90 天前的完整�
 
 ```bash
 npm run typecheck
-npm test          # 44 个测试（含 MCP stdio 与看板端到端）
+npm test          # 45 个测试（含示例、MCP stdio 与看板端到端）
 npm run build
 ```
 
