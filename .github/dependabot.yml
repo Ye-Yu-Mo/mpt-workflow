@@ -6,11 +6,14 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     # Keep types on the supported runtime line; jsdom >=30 requires Node 22.22.2
-    # while the package advertises Node >=22 (and jsdom is test-only).
+    # while the package advertises Node >=22 (and jsdom is test-only). c8 >=12
+    # needs Node 22.12 for dev tooling, so stay on 10 for the broadest Node 22 line.
     ignore:
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
       - dependency-name: "jsdom"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "c8"
         update-types: ["version-update:semver-major"]
     groups:
       dev-dependencies:

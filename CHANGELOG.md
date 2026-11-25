@@ -10,9 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Tooling: Biome 2 now formats and lints `src/`, `tests/`, `scripts/` and the
-  JSON configs (`npm run lint` in CI). TypeScript is on 7.x, GitHub Actions
-  checkout/setup-node on v7. `@types/node` stays on 22 and jsdom on 29 to match
-  the advertised Node >=22 runtime (jsdom 30+ needs Node 22.22.2).
+  JSON configs (`npm run lint` in CI). TypeScript is on 7.x; GitHub Actions
+  checkout/setup-node are on v7, upload-artifact on v7 and action-gh-release on
+  v3. `@types/node` stays on 22 and jsdom on 29 to match the advertised Node
+  >=22 runtime (jsdom 30+ needs Node 22.22.2); c8 stays on 10 (c8 12 needs Node
+  22.12).
 - Documented the support scope: Chinese-first runtime, dashboard and MCP tool
   descriptions; Claude Code is the only supported client. Other MCP clients and
   a full locale layer are demand-driven.
