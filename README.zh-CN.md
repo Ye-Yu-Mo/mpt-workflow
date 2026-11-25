@@ -2,6 +2,8 @@
 
 [English](README.md)
 
+> 状态：pre-1.0。可信链与发布加固正在 review，见 [ROADMAP.md](ROADMAP.md)。
+
 多 agent、多仓开发的**流程状态机**：一个本地 MCP server + 一个只读看板。
 
 它替代的不是“文档”，而是文档背后那套**靠人转发、靠自觉遵守的协作流程**：

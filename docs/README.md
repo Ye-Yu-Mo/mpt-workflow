@@ -11,7 +11,8 @@
 
 The user-facing documentation lives in the repository root:
 [README.md](../README.md), [CONTRIBUTING.md](../CONTRIBUTING.md),
-[SECURITY.md](../SECURITY.md), [CHANGELOG.md](../CHANGELOG.md).
+[SECURITY.md](../SECURITY.md), [CHANGELOG.md](../CHANGELOG.md),
+[ROADMAP.md](../ROADMAP.md).
 
 Historical drafts (`design-notes-v0.1.md`, `requirements-agent-messaging-v0.1.md`)
 predate the rename and still use the original package name `workflow-mcp`.
