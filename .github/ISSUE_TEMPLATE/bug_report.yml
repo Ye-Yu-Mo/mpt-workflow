@@ -1,0 +1,60 @@
+name: Bug report
+description: Something behaves incorrectly.
+title: "bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please do **not** paste secrets, tokens, or proprietary plan contents.
+        For security issues, use the private process in SECURITY.md instead.
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      placeholder: "0.2.0 or commit sha"
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node version
+      placeholder: "node --version"
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where does it happen?
+      options:
+        - MCP tool
+        - CLI
+        - dashboard
+        - hooks (PreToolUse / pre-commit)
+        - parser (PLAN / TODO / questions)
+        - install / build
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Include the command or tool call, and the relevant file excerpt (redacted).
+      placeholder: |
+        1. init a workspace with ...
+        2. call ...
+        3. see ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected vs actual
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Output
+      description: Paste the error, `doctor` output, or the tool response.
+      render: text

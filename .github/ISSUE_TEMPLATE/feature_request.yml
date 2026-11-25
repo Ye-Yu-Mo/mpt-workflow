@@ -1,0 +1,32 @@
+name: Feature request
+description: Propose a change to the workflow or the tool.
+title: "feat: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What goes wrong today in a multi-agent, multi-repo workflow?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: What should happen instead? Which role and which tool?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Especially alternatives that do not add a new tool or a new source of truth.
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Constraints
+      options:
+        - label: This keeps Markdown as the source of truth.
+        - label: This does not add an MCP wrapper around an existing native tool.
+        - label: This works for a single local user (no multi-tenant requirement).

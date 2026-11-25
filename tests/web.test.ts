@@ -1,26 +1,56 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { JSDOM } from 'jsdom';
+import { Workflow } from '../src/core/workflow.js';
+import { init } from '../src/core/init.js';
+import { startWebServer } from '../src/web/server.js';
 
-const PORT = 7791;
-const BASE = `http://127.0.0.1:${PORT}`;
-
-async function serverUp(): Promise<boolean> {
-  try {
-    const r = await fetch(`${BASE}/api/status`);
-    return r.ok;
-  } catch {
-    return false;
-  }
+function git(cwd: string, args: string[]) {
+  return execFileSync('git', args, { cwd, encoding: 'utf8' });
 }
 
-test('dashboard renders from the live API', async (t) => {
-  if (!(await serverUp())) {
-    t.skip(`web server not running on ${PORT}`);
-    return;
-  }
+function fixture() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wf-web-'));
+  const abs = path.join(root, 'repo-a');
+  fs.mkdirSync(path.join(abs, 'docs'), { recursive: true });
+  fs.mkdirSync(path.join(abs, 'src'), { recursive: true });
+  fs.writeFileSync(
+    path.join(abs, 'PLAN.md'),
+    '# PLAN: repo-a\n\n| M | 名称 |\n|---|---|\n| M1 | first |\n| M2 | second |\n',
+  );
+  fs.writeFileSync(
+    path.join(abs, 'TODO-M1.md'),
+    '# TODO-M1: first\n\n> 状态：已验收\n\n- **影响文件**：\n  - `src/lib.rs`\n',
+  );
+  fs.writeFileSync(
+    path.join(abs, 'TODO-M2.md'),
+    '# TODO-M2: second\n\n> 状态：待实现\n\n- **影响文件**：\n  - `src/lib.rs`\n',
+  );
+  fs.writeFileSync(path.join(abs, 'src/lib.rs'), 'fn f() {}\n');
+  git(abs, ['init', '-q']);
+  git(abs, ['config', 'user.email', 't@example.com']);
+  git(abs, ['config', 'user.name', 't']);
+  git(abs, ['add', '-A']);
+  git(abs, ['commit', '-qm', 'init']);
+  init({ root, program: 'web-test', repos: ['repo-a'], adopt: true });
+  const wf = new Workflow(root);
+  wf.msgs.send({
+    from: { role: 'main' },
+    to: { role: 'user' },
+    kind: 'event',
+    subject: 'review M1 when you can',
+  });
+  return { root, abs, wf };
+}
+
+test('dashboard renders from a live API', async () => {
+  const { wf } = fixture();
+  const server = await startWebServer(wf, 0);
+  const base = server.url;
   const html = fs.readFileSync(
     path.resolve(process.cwd(), 'src/web/public/index.html'),
     'utf8',
@@ -28,12 +58,12 @@ test('dashboard renders from the live API', async (t) => {
 
   const errors: Error[] = [];
   const dom = new JSDOM(html, {
-    url: BASE + '/',
+    url: base + '/',
     runScripts: 'dangerously',
     pretendToBeVisual: true,
     beforeParse(window) {
       window.fetch = ((input: string | URL, init?: RequestInit) =>
-        fetch(new URL(String(input), BASE), init)) as typeof window.fetch;
+        fetch(new URL(String(input), base), init)) as typeof window.fetch;
       window.matchMedia = ((q: string) => ({
         matches: false,
         media: q,
@@ -52,29 +82,49 @@ test('dashboard renders from the live API', async (t) => {
     },
   });
 
-  await new Promise((r) => setTimeout(r, 1500));
+  try {
+    await new Promise((r) => setTimeout(r, 1500));
 
-  const doc = dom.window.document;
-  assert.equal(errors.length, 0, 'no runtime errors: ' + errors.map((e) => e.message).join('; '));
+    const doc = dom.window.document;
+    assert.equal(
+      errors.length,
+      0,
+      'no runtime errors: ' + errors.map((e) => e.message).join('; '),
+    );
 
-  const hero = doc.querySelector('#hero-num')?.textContent;
-  assert.ok(hero && hero !== '–', 'hero number rendered');
+    const hero = doc.querySelector('#hero-num')?.textContent;
+    assert.ok(hero && hero !== '–', 'hero number rendered');
 
-  const repos = doc.querySelectorAll('#repos .repo');
-  assert.ok(repos.length > 0, 'repo cards rendered');
+    assert.equal(doc.querySelectorAll('#repos .repo').length, 1, 'repo cards');
+    assert.equal(doc.querySelectorAll('#repos .ms').length, 2, 'milestone chips');
+    assert.equal(doc.querySelectorAll('#tiles .tile').length, 5, 'five stat tiles');
+    assert.ok(doc.querySelectorAll('#next .row-item').length > 0, 'next actions');
 
-  const ms = doc.querySelectorAll('#repos .ms');
-  assert.ok(ms.length >= 4, 'milestone chips rendered');
+    // message panel shows the unread message
+    assert.match(doc.querySelector('#messages')?.textContent || '', /review M1/);
 
-  const tiles = doc.querySelectorAll('#tiles .tile');
-  assert.equal(tiles.length, 5, 'five stat tiles');
+    // clicking a milestone opens the detail panel
+    const ms = doc.querySelectorAll('#repos .ms');
+    (ms[0] as HTMLElement).dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    assert.ok(doc.querySelector('#repos details.ms-detail'), 'milestone detail opens');
 
-  const next = doc.querySelectorAll('#next .row-item');
-  assert.ok(next.length > 0, 'next actions rendered');
-
-  // clicking a milestone opens the detail panel
-  (ms[0] as HTMLElement).dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
-  assert.ok(doc.querySelector('#repos details.ms-detail'), 'milestone detail opens');
-
-  dom.window.close();
+    // answering a question via the API writes back to markdown
+    const qfile = path.join(wf.repoRef('repo-a').abs, 'docs/agent-questions.md');
+    fs.appendFileSync(
+      qfile,
+      '\n## Q-001 [open] to: user\n- from: PLAN\n- date: 2026-11-25\n- blocking: false\n- context: pick one\n- options:\n  - A: a\n  - B: b\n- answer:\n- resolution:\n',
+    );
+    const res = await fetch(`${base}/api/question/Q-001/answer`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ answer: 'A', resolution: 'PLAN §1' }),
+    });
+    assert.equal(res.status, 200);
+    const after = fs.readFileSync(qfile, 'utf8');
+    assert.match(after, /\[answered\]/);
+    assert.match(after, /- answer:\s*A/);
+  } finally {
+    dom.window.close();
+    await server.close();
+  }
 });

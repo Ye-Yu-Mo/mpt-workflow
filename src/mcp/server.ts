@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { Workflow } from '../core/workflow.js';
+import { VERSION } from '../version.js';
 import { describeAcl } from '../core/acl.js';
 import { loadConfig } from '../core/config.js';
 import { setRoleLease } from '../core/hooks.js';
@@ -836,7 +837,7 @@ export async function runMcpServer(opts: ServerOptions): Promise<void> {
   // bootstrap tool may declare it explicitly for single-session use.
 
   const server = new McpServer(
-    { name: 'workflow', version: '0.1.0' },
+    { name: 'workflow', version: VERSION },
     {
       capabilities: { tools: {} },
       instructions: [

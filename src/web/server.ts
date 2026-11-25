@@ -1,6 +1,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import type { AddressInfo } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { Workflow } from '../core/workflow.js';
 import { readEvents } from '../core/state.js';
@@ -63,7 +64,13 @@ function serveStatic(res: http.ServerResponse, rel: string) {
   fs.createReadStream(abs).pipe(res);
 }
 
-export function startWebServer(wf: Workflow, port: number): Promise<void> {
+export interface WebHandle {
+  port: number;
+  url: string;
+  close: () => Promise<void>;
+}
+
+export function startWebServer(wf: Workflow, port: number): Promise<WebHandle> {
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url || '/', `http://127.0.0.1:${port}`);
     const p = url.pathname;
@@ -196,11 +203,21 @@ export function startWebServer(wf: Workflow, port: number): Promise<void> {
     }
   });
 
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
+    server.on('error', reject);
     server.listen(port, '127.0.0.1', () => {
-      console.log(`workflow 看板: http://127.0.0.1:${port}`);
+      const actual = (server.address() as AddressInfo).port;
+      const url = `http://127.0.0.1:${actual}`;
+      console.log(`workflow 看板: ${url}`);
       console.log(`程序: ${wf.cfg.program}  根目录: ${wf.root}`);
-      resolve();
+      resolve({
+        port: actual,
+        url,
+        close: () =>
+          new Promise<void>((done) => {
+            server.close(() => done());
+          }),
+      });
     });
   });
 }

@@ -3,6 +3,10 @@
 > 状态：草稿 v0.1　日期：2026-11-24
 > 目的：把我们在 FUT 新系统多仓开发中形成的流程、模板、问题和护栏固定下来，设计成一个可被其他 Claude Code / agent 复用的 MCP 工具。
 > 读者：负责实现该 MCP 工具的开发者。
+>
+> **Provenance:** this draft was written for the original internal project. Paths such as
+> `docs/template/` and `milestone/SKILL.md` refer to that project, not to this repository.
+> Implementation deviations are listed in [README.zh-CN.md](../README.zh-CN.md#与设计稿-v01-的差异).
 
 ---
 

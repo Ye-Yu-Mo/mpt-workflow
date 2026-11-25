@@ -1,6 +1,6 @@
 # 需求对照：Agent 间消息与通知（v0.1）
 
-> 来源：fut-algo-api PLAN agent 的需求草案（2026-11-25），原文见仓库根 `workflow-agent-messaging-requirements.md`。
+> 来源：fut-algo-api PLAN agent 的需求草案（2026-11-25），原文见仓库根 `docs/requirements-agent-messaging-v0.1.md`。
 > 状态：P0 + P1 + 大部分 P2 已实现；本文件记录逐条落点，便于复核。
 
 ## 1. 工具

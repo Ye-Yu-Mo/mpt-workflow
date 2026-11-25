@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22, 24]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm test
+
+  smoke:
+    name: smoke (cli + dashboard)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: init a throwaway workspace and read status
+        run: |
+          set -euo pipefail
+          TMP="$(mktemp -d)"
+          mkdir -p "$TMP/demo/docs" "$TMP/demo/src"
+          cd "$TMP/demo"
+          git init -q
+          git config user.email ci@example.com
+          git config user.name ci
+          printf '# PLAN: demo\n\n| M | 名称 |\n|---|---|\n| M1 | first |\n' > PLAN.md
+          printf '# TODO-M1: first\n\n> 状态：待实现\n\n- **影响文件**：\n  - `src/lib.rs`\n' > TODO-M1.md
+          echo 'fn f() {}' > src/lib.rs
+          git add -A && git commit -qm init
+          cd "$TMP"
+          node "$GITHUB_WORKSPACE/dist/cli.js" init --root "$TMP" --repo demo
+          node "$GITHUB_WORKSPACE/dist/cli.js" status --root "$TMP" | tee status.txt
+          grep -q "M1" status.txt
+          grep -q "todo_ready" status.txt
