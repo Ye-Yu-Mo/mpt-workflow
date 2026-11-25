@@ -6,9 +6,8 @@ import { VERSION } from '../version.js';
 import { describeAcl } from '../core/acl.js';
 import { loadConfig } from '../core/config.js';
 import { setRoleLease } from '../core/hooks.js';
-import { questionsFile, appendQuestion, updateQuestion, nextQuestionId } from '../core/questions.js';
+import { questionsFile, appendQuestion, nextQuestionId } from '../core/questions.js';
 import { logEvent } from '../core/state.js';
-import { readText, writeAtomic } from '../core/fsutil.js';
 import { actorKey, formatMessage, canSend, type Actor, type MessageKind } from '../core/messages.js';
 import path from 'node:path';
 import type { Role } from '../core/types.js';
@@ -113,7 +112,7 @@ function statusText(wf: Workflow, role: Role | null, repo: string | null): strin
 
 /* --------------------------------------------------------------------- */
 
-function buildTools(opts: ServerOptions): ToolSpec[] {
+function buildTools(_opts: ServerOptions): ToolSpec[] {
   const repoParam = z.string().optional().describe('仓库 id；默认用绑定仓或 active repo');
   const msParam = z.string().describe('里程碑编号，如 M2');
 
