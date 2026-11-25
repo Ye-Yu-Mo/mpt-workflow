@@ -342,11 +342,13 @@ export class MessageStore {
   }
 
   ack(id: string, note?: string): Message | null {
-    return this.transition(
-      id,
-      { status: 'acked', acked_at: isoNow(), ack_note: note },
-      { action: 'ack', note },
-    );
+    const m = this.get(id);
+    if (!m) return null;
+    const at = isoNow();
+    const patch: Partial<Message> = { status: 'acked', acked_at: at, ack_note: note };
+    // Ack implies read: never leave a message "handled" but with no read_at.
+    if (!m.read_at) patch.read_at = at;
+    return this.transition(id, patch, { action: 'ack', note });
   }
 
   ackByRef(actor: Actor, refName: string, refValue: string): number {

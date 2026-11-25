@@ -299,6 +299,9 @@ test('commit requires an approved token bound to the exact tree', () => {
   );
 
   wf.approve(req.approval.id);
+  const note = wf.msgs.list().find((m) => m.refs.approval_id === req.approval.id);
+  assert.equal(note?.status, 'acked');
+  assert.ok(note?.read_at, 'approving acks and reads the approval notification');
   const res = wf.commitApproved({ repoId: 'repo-a', approvalId: req.approval.id, role: 'todo' });
   assert.ok('head' in res && res.head);
   assert.throws(

@@ -910,6 +910,12 @@ export class Workflow {
     a.approved_by = by;
     writeApproval(this.root, a);
     logEvent(this.root, { role: 'user', tool: 'approve', repo: a.repo, ok: true, detail: { approval: id } });
+    // Approving is how the human handles the notification; clear it from the inbox.
+    try {
+      this.msgs.ackByRef({ role: 'user' }, 'approval_id', id);
+    } catch {
+      /* the approval is recorded; notification cleanup is best-effort */
+    }
     return a;
   }
 
