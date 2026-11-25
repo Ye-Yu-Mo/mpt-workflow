@@ -1,4 +1,4 @@
-# workflow-mcp
+# mpt-workflow
 
 [English](README.md)
 
@@ -19,18 +19,21 @@ docs/agent-questions.md →  问答板、阻塞判定、前端回答
 
 ## 快速开始
 
+> npm 包名是 **`mpt-workflow`**（`workflow-mcp` 已被无关包占用，不要安装那个名字）。
+> 目前尚未发布到 npm，下面是从源码安装；首次发布后可用 `npx mpt-workflow <命令>`。
+
 ```bash
 npm install
 npm run build
 
 # 1. 在工作流根目录（伞仓）初始化，采用已有 PLAN/TODO/questions，不覆盖任何文件
-node dist/cli.js init --root /home/lxu/fut-trade-system --adopt
+node dist/cli.js init --root /path/to/workspace --adopt
 
 # 2. 看一眼状态
-node dist/cli.js status --root /home/lxu/fut-trade-system
+node dist/cli.js status --root /path/to/workspace
 
 # 3. 起看板
-node dist/cli.js web --root /home/lxu/fut-trade-system --port 7788
+node dist/cli.js web --root /path/to/workspace --port 7788
 #    → http://127.0.0.1:7788
 ```
 
@@ -49,7 +52,7 @@ node dist/cli.js web --root /home/lxu/fut-trade-system --port 7788
 装护栏（可选，但强烈建议）：
 
 ```bash
-node dist/cli.js init --root /home/lxu/fut-trade-system --install-hooks
+node dist/cli.js init --root /path/to/workspace --install-hooks
 ```
 
 会写 `.claude/settings.json`（每个仓 + 根目录）和 `.git/hooks/pre-commit`。
@@ -62,12 +65,12 @@ node dist/cli.js init --root /home/lxu/fut-trade-system --install-hooks
 
 ```bash
 # 方式 A：环境变量（推荐，多会话互不干扰）
-WF_ROLE=plan WF_REPO=fut-algo-api claude
-WF_ROLE=todo WF_REPO=fut-algo-api claude
+WF_ROLE=plan WF_REPO=my-service claude
+WF_ROLE=todo WF_REPO=my-service claude
 WF_ROLE=main claude
 
 # 方式 B：会话里调用 MCP 工具
-bootstrap(role="plan", repo="fut-algo-api")
+bootstrap(role="plan", repo="my-service")
 ```
 
 装了这个 MCP 后，会话第一句就可以是 `status` 或 `next`，不用再解释“我是谁、做到哪了”。
@@ -88,11 +91,11 @@ todo: ask(to=PLAN)         → plan@repo   question（blocking 时拦截对方�
 收发：
 
 ```bash
-workflow-mcp inbox --role plan --repo fut-algo-api --unread
-workflow-mcp read msg-...        # 标记已读
-workflow-mcp ack msg-... --note "已处理"
-workflow-mcp wait --role plan --repo fut-algo-api --timeout 60000
-workflow-mcp watch --role main   # 前台持续看
+mpt-workflow inbox --role plan --repo my-service --unread
+mpt-workflow read msg-...        # 标记已读
+mpt-workflow ack msg-... --note "已处理"
+mpt-workflow wait --role plan --repo my-service --timeout 60000
+mpt-workflow watch --role main   # 前台持续看
 ```
 
 MCP 工具：`inbox` / `read_message` / `ack_message` / `wait_message` /
@@ -112,7 +115,7 @@ MCP 工具：`inbox` / `read_message` / `ack_message` / `wait_message` /
 ### 2. 主 agent（main）
 
 - `status` / `next` / `doctor` —— 全局视图。
-- `phase_activate(repo="fut-algo-api")` —— 串行锁，一次只激活一个仓。
+- `phase_activate(repo="my-service")` —— 串行锁，一次只激活一个仓。
 - `ask(to="user", ...)` —— 需要用户拍板时提问。
 - 写伞仓 `docs/`、`CLAUDE.md`、`decisions` —— 直接用 Edit/Write，不需要经过工具。
 - **不写源码**（hook 会拦）。
@@ -141,15 +144,15 @@ MCP 工具：`inbox` / `read_message` / `ack_message` / `wait_message` /
   - 消息：未读 / blocking / 审批请求，点“标记已处理”即 ack。
   - 批准提交：review 完 diff 点“批准”，agent 才能 `commit`。
   - 切换 active repo。
-- 终端等价物：`workflow-mcp answer Q-005 --answer "..."`、`workflow-mcp approve <id>`、
-  `workflow-mcp ack msg-...`。
+- 终端等价物：`mpt-workflow answer Q-005 --answer "..."`、`mpt-workflow approve <id>`、
+  `mpt-workflow ack msg-...`。
 
 ## 提交是怎么被拦住的
 
 ```
 agent: commit_request(message="feat: ...")
    → server 校验 scope，返回一次性 approval id
-用户: 看板点“批准” 或 `workflow-mcp approve ap-xxx`
+用户: 看板点“批准” 或 `mpt-workflow approve ap-xxx`
 agent: commit(approval="ap-xxx")
    → 校验「审批时的工作区 hash」== 当前 hash，否则拒绝（防止批准后偷改）
    → 只做本地 git commit，永不 push

@@ -1,8 +1,8 @@
 # Architecture
 
-> Status: current as of v0.2.0.
+> Status: current as of v0.3.0.
 
-`workflow-mcp` is a state layer over documents that already exist in a repo. It
+`mpt-workflow` is a state layer over documents that already exist in a repo. It
 does not own the plan; it reads the plan, derives state, enforces role-scoped
 writes, records evidence, mediates approvals, and carries messages between
 sessions.
@@ -71,6 +71,11 @@ planned ──(write TODO)──▶ todo_ready ──claim──▶ implementing
                                 ▼
                             accepted ──commit──▶ committed
 ```
+
+`committed` is **derived, never written**: an accepted milestone counts as
+committed once its `TODO-Mn.md` record is clean in git (the acceptance itself
+has landed in history). Nothing rewrites the TODO after the commit, so the
+approval stays bound to exactly the tree the user reviewed.
 
 Transitions are implemented in `Workflow` (`src/core/workflow.ts`) and exposed by
 both MCP tools and the CLI, so there is one implementation.

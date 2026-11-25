@@ -1,18 +1,28 @@
 {
-  "name": "workflow-mcp",
+  "name": "mpt-workflow",
   "version": "0.3.0",
-  "private": true,
   "description": "A local MCP server, CLI and dashboard that turn a multi-agent, multi-repo PLAN/TODO/accept/commit workflow into an enforceable state machine.",
   "type": "module",
   "bin": {
-    "workflow-mcp": "dist/cli.js",
-    "wf": "dist/cli.js"
+    "mpt-workflow": "dist/cli.js",
+    "mpt": "dist/cli.js"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "README.zh-CN.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
     "dev": "tsx src/cli.ts",
     "test": "node --import tsx --test tests/*.test.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "engines": {
     "node": ">=22"
