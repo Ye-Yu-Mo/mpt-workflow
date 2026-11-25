@@ -44,6 +44,8 @@ function fixture() {
     kind: 'event',
     subject: 'review M1 when you can',
   });
+  fs.writeFileSync(path.join(abs, 'src/lib.rs'), 'fn f() { 2 }\n');
+  wf.requestCommit({ repoId: 'repo-a', message: 'feat: web-diff', role: 'plan' });
   return { root, abs, wf };
 }
 
@@ -95,6 +97,7 @@ test('dashboard renders from a live API', async () => {
 
     const hero = doc.querySelector('#hero-num')?.textContent;
     assert.ok(hero && hero !== '–', 'hero number rendered');
+    assert.match(doc.querySelector('#version')?.textContent || '', /^v\d+\.\d+\.\d+$/, 'version pill rendered');
 
     assert.equal(doc.querySelectorAll('#repos .repo').length, 1, 'repo cards');
     assert.equal(doc.querySelectorAll('#repos .ms').length, 2, 'milestone chips');
@@ -108,6 +111,21 @@ test('dashboard renders from a live API', async () => {
     const ms = doc.querySelectorAll('#repos .ms');
     (ms[0] as HTMLElement).dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
     assert.ok(doc.querySelector('#repos details.ms-detail'), 'milestone detail opens');
+
+    // approving a commit can show the diff first
+    const diffBtn = doc.querySelector('#approvals [data-diff]') as HTMLElement | null;
+    assert.ok(diffBtn, 'approval diff button rendered');
+    diffBtn.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    const diffDeadline = Date.now() + 5000;
+    while (Date.now() < diffDeadline && !doc.querySelector('#modal-body .diff')) {
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    assert.equal((doc.querySelector('#modal') as HTMLElement).hidden, false, 'diff modal opens');
+    assert.match(doc.querySelector('#modal-body')?.textContent || '', /feat: web-diff/);
+    assert.ok(doc.querySelector('#modal-body .diff'), 'diff pre rendered');
+    (doc.querySelector('#modal-close') as HTMLElement).dispatchEvent(
+      new dom.window.MouseEvent('click', { bubbles: true }),
+    );
 
     // answering a question via the API writes back to markdown
     const qfile = path.join(wf.repoRef('repo-a').abs, 'docs/agent-questions.md');

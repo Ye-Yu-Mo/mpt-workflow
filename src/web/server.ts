@@ -8,6 +8,7 @@ import { readEvents } from '../core/state.js';
 import { diffStat, diffUnified, recentLog } from '../core/git.js';
 import { logEvent } from '../core/state.js';
 import { readText, exists, within } from '../core/fsutil.js';
+import { VERSION } from '../version.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 // Prefer the build output (dist/web/public); fall back to the source tree when
@@ -115,7 +116,7 @@ export function startWebServer(wf: Workflow, port: number): Promise<WebHandle> {
     try {
       if (p.startsWith('/api/')) {
         if (req.method === 'GET' && p === '/api/status') {
-          return json(res, wf.programStatus());
+          return json(res, { ...wf.programStatus(), version: VERSION });
         }
         if (req.method === 'GET' && p === '/api/questions') {
           return json(res, wf.allQuestions());
