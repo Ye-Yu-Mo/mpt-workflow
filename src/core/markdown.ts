@@ -69,3 +69,46 @@ export function inlineCode(text: string): string[] {
 export function stripQuotes(s: string): string {
   return s.replace(/^>\s?/gm, '').trim();
 }
+
+/**
+ * Append `block` to the section introduced by `headingPattern`, inserting before
+ * the next heading of the same or higher level. Falls back to appending at the
+ * end of the document when the section does not exist.
+ *
+ * Appending to the section rather than to EOF keeps later sections (for example
+ * `## 验收记录`) from swallowing new entries after a rework loop.
+ */
+export function appendToSection(text: string, headingPattern: RegExp, block: string): string {
+  const lines = text.split('\n');
+  let start = -1;
+  let level = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^(#{1,6})\s+(.*)$/.exec(lines[i]);
+    if (m && headingPattern.test(m[2])) {
+      start = i;
+      level = m[1].length;
+      break;
+    }
+  }
+
+  const blockLines = block.replace(/\s+$/, '').split('\n');
+  if (start === -1) {
+    return text.replace(/\s*$/, '\n\n') + blockLines.join('\n') + '\n';
+  }
+
+  let end = lines.length;
+  for (let i = start + 1; i < lines.length; i++) {
+    const m = /^(#{1,6})\s+/.exec(lines[i]);
+    if (m && m[1].length <= level) {
+      end = i;
+      break;
+    }
+  }
+
+  // Insert at the end of the section, before its trailing blank lines.
+  let insertAt = end;
+  while (insertAt > start + 1 && lines[insertAt - 1].trim() === '') insertAt--;
+
+  const out = [...lines.slice(0, insertAt), '', ...blockLines, '', ...lines.slice(insertAt)];
+  return out.join('\n').replace(/\n{3,}/g, '\n\n');
+}

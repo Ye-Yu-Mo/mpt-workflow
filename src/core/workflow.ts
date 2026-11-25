@@ -1,10 +1,11 @@
 import path from 'node:path';
 import fs from 'node:fs';
-import { execFile } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import {
   exists,
   ensureDir,
   readText,
+  readTextRequired,
   writeAtomic,
   within,
   truncate,
@@ -44,6 +45,7 @@ import {
   diffStat,
 } from './git.js';
 import { checkAcl } from './acl.js';
+import { appendToSection } from './markdown.js';
 import {
   createApproval,
   readApproval,
@@ -271,15 +273,26 @@ export class Workflow {
     for (const m of plan?.milestoneIds || []) ids.add(m);
     for (const m of todos.keys()) ids.add(m);
 
+    const git = gitInfo(ref.abs);
+
     const milestones: MilestoneState[] = [...ids]
       .sort((a, b) => Number(/(\d+)/.exec(a)?.[1]) - Number(/(\d+)/.exec(b)?.[1]))
       .map((mid) => {
         const todo = todos.get(mid);
         const evidence = todo ? parseEvidence(todo) : [];
+        let status: MilestoneState['status'] = todo ? todo.status : 'planned';
+        // `committed` is derived, never written: an accepted TODO whose record is
+        // clean in git means the acceptance itself has landed in history.
+        if (status === 'accepted' && todo && git.available) {
+          const rel = path.relative(ref.abs, todo.file).split(path.sep).join('/');
+          if (!git.changed.includes(rel) && !git.untracked.includes(rel)) {
+            status = 'committed';
+          }
+        }
         return {
           id: mid,
           title: todo?.title || plan?.milestoneTitles[mid] || mid,
-          status: todo ? todo.status : 'planned',
+          status,
           statusRaw: todo ? todo.statusRaw : '无 TODO',
           repo: id,
           todoFile: todo ? path.relative(this.root, todo.file) : undefined,
@@ -306,7 +319,6 @@ export class Workflow {
       ? parseQuestionsFile(questionsFile(ref.abs), id)
       : [];
 
-    const git = gitInfo(ref.abs);
     const problems: string[] = [];
     if (!plan) problems.push('缺少 PLAN.md');
     if (milestones.length === 0) problems.push('PLAN 中未解析到任何 M，且无 TODO-Mn.md');
@@ -548,7 +560,7 @@ export class Workflow {
     if (!['todo_ready', 'rejected', 'planned'].includes(doc.status)) {
       throw new Error(`${milestone} 当前状态为 ${doc.statusRaw}，不能 claim（需 待实现/已打回）`);
     }
-    writeAtomic(abs, setTodoStatus(readText(abs), 'implementing'));
+    writeAtomic(abs, setTodoStatus(readTextRequired(abs), 'implementing'));
     logEvent(this.root, { role, tool: 'milestone_claim', repo: repoId, milestone, ok: true });
     this.notifyEvent({
       from: role,
@@ -572,7 +584,7 @@ export class Workflow {
     if (evidence.length === 0) {
       throw new Error(`${milestone} 没有任何证据；先调用 evidence_run 运行测试/构建`);
     }
-    writeAtomic(abs, setTodoStatus(readText(abs), 'review'));
+    writeAtomic(abs, setTodoStatus(readTextRequired(abs), 'review'));
     logEvent(this.root, { role, tool: 'milestone_complete', repo: repoId, milestone, ok: true });
     this.notifyEvent({
       from: role,
@@ -627,7 +639,7 @@ export class Workflow {
       note += '\n⚠️ 最新证据之后工作区又发生了变化，建议重新跑 evidence_run。';
     }
 
-    let text = readText(abs);
+    let text = readTextRequired(abs);
     text = setTodoStatus(text, 'accepted');
     text = setTodoSha(text, gi.head || 'working-tree');
     text = appendReview(text, {
@@ -677,7 +689,7 @@ export class Workflow {
       throw new Error(`${milestone} 当前状态为 ${doc.statusRaw}，只有待验收的 M 可以打回`);
     }
     const gi = gitInfo(this.repoRef(repoId).abs);
-    let text = readText(abs);
+    let text = readTextRequired(abs);
     text = setTodoStatus(text, 'rejected');
     text = appendReview(text, {
       at: isoNow(),
@@ -764,7 +776,7 @@ export class Workflow {
       4000,
     );
 
-    const text = appendEvidenceSection(readText(abs), {
+    const text = appendEvidenceSection(readTextRequired(abs), {
       id,
       at,
       command,
@@ -814,19 +826,13 @@ export class Workflow {
     const todo = m ? parseTodo(path.join(ref.abs, `TODO-${m.id}.md`)) : null;
     const allowed = todo?.allowedFiles || [];
     const violations: { file: string; reason: string }[] = [];
+    const outOfScope: string[] = [];
     const warnings: string[] = [];
-    const managed = (f: string) =>
-      /^TODO-M\d+\.md$/.test(f) ||
-      f === 'docs/agent-questions.md' ||
-      f === 'PLAN.md' ||
-      f === '.mcp.json' ||
-      f.startsWith('.claude/') ||
-      f.startsWith('.workflow/');
 
     const repos = this.repoRefs().map((r) => ({ id: r.id, abs: r.abs }));
     if (enforceAcl) {
       for (const f of changed) {
-        if (managed(f)) continue; // workflow tools maintain these by design
+        if (isWorkflowManaged(f)) continue; // workflow tools maintain these by design
         const abs = path.join(ref.abs, f);
         const acl = checkAcl(role, abs, this.root, repoId, ref.abs, repos);
         if (!acl.allowed) violations.push({ file: f, reason: acl.reason });
@@ -835,9 +841,10 @@ export class Workflow {
 
     if (allowed.length > 0) {
       for (const f of changed) {
-        if (managed(f)) continue;
+        if (isWorkflowManaged(f)) continue;
         const ok = allowed.some((a) => globMatchPath(f, a));
         if (!ok) {
+          outOfScope.push(f);
           warnings.push(`${f} 不在 TODO 声明的「影响文件」里`);
         }
       }
@@ -848,8 +855,9 @@ export class Workflow {
     return {
       repo: repoId,
       milestone: m?.id,
-      changed: changed.filter((f) => !managed(f)),
+      changed: changed.filter((f) => !isWorkflowManaged(f)),
       allowedFiles: allowed,
+      outOfScope,
       violations,
       warnings,
       pass: violations.length === 0,
@@ -867,12 +875,7 @@ export class Workflow {
     const files = allChangedFiles(ref.abs);
     if (files.length === 0) throw new Error('没有可提交的改动');
     const scope = this.scopeCheck(input.repoId, undefined, input.role, { enforceAcl: false });
-    if (!scope.pass) {
-      throw new Error(
-        'scope 检查未通过，不能提交:\n' +
-          scope.violations.map((v) => `- ${v.file}: ${v.reason}`).join('\n'),
-      );
-    }
+    assertCommitScope(scope, input.role);
     const a = createApproval(this.root, {
       repo: input.repoId,
       tree_hash: workingTreeHash(ref.abs),
@@ -919,7 +922,7 @@ export class Workflow {
     const a = readApproval(this.root, input.approvalId);
     if (!a) throw new Error(`审批 ${input.approvalId} 不存在`);
     if (a.repo !== input.repoId) throw new Error(`审批属于 ${a.repo}，不是 ${input.repoId}`);
-    if (!a.approved_at) throw new Error(`审批 ${a.id} 尚未由用户批准（workflow-mcp approve ${a.id}）`);
+    if (!a.approved_at) throw new Error(`审批 ${a.id} 尚未由用户批准（mpt-workflow approve ${a.id}）`);
     if (a.used_at) throw new Error(`审批 ${a.id} 已在 ${a.used_at} 使用`);
 
     const hash = workingTreeHash(ref.abs);
@@ -930,9 +933,7 @@ export class Workflow {
     }
 
     const scope = this.scopeCheck(input.repoId, undefined, input.role, { enforceAcl: false });
-    if (!scope.pass) {
-      throw new Error('scope 检查未通过:\n' + scope.violations.map((v) => `- ${v.file}: ${v.reason}`).join('\n'));
-    }
+    assertCommitScope(scope, input.role);
 
     const files = allChangedFiles(ref.abs);
     if (input.dryRun) {
@@ -987,7 +988,7 @@ export class Workflow {
       push({ level: 'FAIL', code: 'active-repo', message: `active_repo=${active} 不在 repos 列表` });
     }
     if (!active) {
-      push({ level: 'WARN', code: 'active-repo', message: '没有激活的仓库，所有实现工作都会停滞', hint: 'workflow-mcp activate <repo>' });
+      push({ level: 'WARN', code: 'active-repo', message: '没有激活的仓库，所有实现工作都会停滞', hint: 'mpt-workflow activate <repo>' });
     }
 
     for (const ref of this.repoRefs()) {
@@ -1038,7 +1039,7 @@ export class Workflow {
           code: 'questions',
           repo: ref.id,
           message: '缺少 docs/agent-questions.md（CLAUDE.md 要求 agent 写这里）',
-          hint: 'workflow-mcp init --adopt 会创建',
+          hint: 'mpt-workflow init --adopt 会创建',
         });
       }
       if (exists(path.join(ref.abs, 'rust-toolchain.toml'))) {
@@ -1087,7 +1088,7 @@ export class Workflow {
         message: a.approved_at
           ? `审批 ${a.id} 已批准但未使用`
           : `审批 ${a.id} 等待用户批准`,
-        hint: `workflow-mcp approve ${a.id}`,
+        hint: `mpt-workflow approve ${a.id}`,
       });
     }
 
@@ -1100,26 +1101,99 @@ export class Workflow {
 
 /* ------------------------------ helpers ------------------------------ */
 
+/**
+ * Files the workflow tools themselves maintain. They are excluded from scope
+ * checks and from the pre-commit ACL backstop: the TODO status line and the
+ * questions board change as a normal part of the workflow.
+ */
+export function isMachineManagedFile(file: string): boolean {
+  return (
+    /^TODO-M\d+\.md$/.test(file) ||
+    file === 'docs/agent-questions.md' ||
+    file === '.mcp.json' ||
+    file.startsWith('.claude/') ||
+    file.startsWith('.workflow/')
+  );
+}
+
+/** Machine-managed files plus the plan itself (derived-scope checks only). */
+export function isWorkflowManaged(file: string): boolean {
+  return file === 'PLAN.md' || isMachineManagedFile(file);
+}
+
+function assertCommitScope(
+  scope: {
+    violations: { file: string; reason: string }[];
+    outOfScope: string[];
+  },
+  role: Role,
+): void {
+  // The TODO file list describes implementation scope. A plan/main commit that
+  // adds planning docs is not scope creep, so only enforce it for the implementer.
+  const outOfScope = role === 'todo' ? scope.outOfScope : [];
+  if (!scope.violations.length && !outOfScope.length) return;
+  const lines = [
+    ...scope.violations.map((v) => `${v.file}: ${v.reason}`),
+    ...outOfScope.map((f) => `${f}: 不在当前 TODO 的「影响文件」清单内`),
+  ];
+  throw new Error(
+    'scope 检查未通过，不能提交:\n' +
+      lines.map((l) => `- ${l}`).join('\n') +
+      '\n把相关文件加入 TODO 的「影响文件」，或撤销这些改动后重新 commit_request。',
+  );
+}
+
 function runCommand(
   command: string,
   cwd: string,
   timeoutMs: number,
 ): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
-    execFile(
-      '/bin/bash',
-      ['-lc', command],
-      { cwd, timeout: timeoutMs, maxBuffer: 64 * 1024 * 1024, encoding: 'utf8' },
-      (err, stdout, stderr) => {
-        const code =
-          err && typeof (err as { code?: unknown }).code === 'number'
-            ? ((err as { code: number }).code as number)
-            : err
-              ? 1
-              : 0;
-        resolve({ code, stdout: String(stdout ?? ''), stderr: String(stderr ?? '') });
-      },
-    );
+    // `detached` gives the shell its own process group, so a timeout can kill
+    // the whole tree instead of leaving orphaned test/build processes behind.
+    const child = spawn('/bin/bash', ['-lc', command], {
+      cwd,
+      detached: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const maxBytes = 64 * 1024 * 1024;
+    let stdout = '';
+    let stderr = '';
+    let bytes = 0;
+    let timedOut = false;
+
+    const collect = (chunk: Buffer, into: 'out' | 'err') => {
+      if (bytes >= maxBytes) return;
+      bytes += chunk.length;
+      if (into === 'out') stdout += chunk.toString('utf8');
+      else stderr += chunk.toString('utf8');
+    };
+    child.stdout?.on('data', (chunk: Buffer) => collect(chunk, 'out'));
+    child.stderr?.on('data', (chunk: Buffer) => collect(chunk, 'err'));
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      try {
+        if (child.pid) process.kill(-child.pid, 'SIGKILL');
+        else child.kill('SIGKILL');
+      } catch {
+        child.kill('SIGKILL');
+      }
+    }, timeoutMs);
+
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      resolve({ code: 1, stdout, stderr: `${stderr}${err.message}` });
+    });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      if (timedOut) stderr += `\n[timeout after ${timeoutMs}ms]`;
+      resolve({
+        code: timedOut ? 124 : typeof code === 'number' ? code : 1,
+        stdout,
+        stderr,
+      });
+    });
   });
 }
 
@@ -1150,8 +1224,10 @@ function appendReview(
   ]
     .filter(Boolean)
     .join('\n');
-  if (text.includes(header)) return text.replace(/\s*$/, '\n') + line + '\n';
-  return text.replace(/\s*$/, '\n\n') + `${header}\n\n${line}\n`;
+  const withHeader = /^##\s+验收记录/m.test(text)
+    ? text
+    : text.replace(/\s*$/, '\n\n') + `${header}\n`;
+  return appendToSection(withHeader, /验收记录/, line);
 }
 
 export { statusLabel };
