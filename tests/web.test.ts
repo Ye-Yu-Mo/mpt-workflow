@@ -104,8 +104,13 @@ test('dashboard renders from a live API', async () => {
     assert.equal(doc.querySelectorAll('#tiles .tile').length, 5, 'five stat tiles');
     assert.ok(doc.querySelectorAll('#next .row-item').length > 0, 'next actions');
 
-    // message panel shows the unread message
+    // message panel shows the unread message and explains read vs ack
     assert.match(doc.querySelector('#messages')?.textContent || '', /review M1/);
+    assert.match(doc.querySelector('#messages')?.textContent || '', /确认已处理/);
+    assert.ok(
+      doc.querySelector('#messages [data-approval]'),
+      'approval_request message links to the approval',
+    );
 
     // clicking a milestone opens the detail panel
     const ms = doc.querySelectorAll('#repos .ms');

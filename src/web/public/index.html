@@ -286,6 +286,11 @@ details.ms-detail[open] summary::before { content: "▾"; }
 .banner .grow { flex: 1; min-width: 200px; }
 .pill input[type="checkbox"] { margin: 0; }
 .msg-filters { display: flex; gap: 6px; padding: 9px 16px; border-bottom: 1px solid var(--grid); flex-wrap: wrap; }
+.msg-help {
+  padding: 9px 16px; border-bottom: 1px solid var(--grid);
+  color: var(--muted); font-size: 11.5px; line-height: 1.55;
+}
+.msg-help b { color: var(--ink-2); }
 .chip {
   border: 1px solid var(--ring); background: var(--card); color: var(--ink-2);
   border-radius: 999px; padding: 3px 10px; font-size: 11.5px; cursor: pointer;
@@ -391,8 +396,12 @@ details.ms-detail[open] summary::before { content: "▾"; }
 
     <aside class="col">
       <section class="card">
-        <div class="card-head"><h2>消息</h2><span class="count" id="message-count"></span></div>
+        <div class="card-head"><h2>消息 · 发给 user</h2><span class="count" id="message-count"></span></div>
         <div class="msg-filters" id="message-filters"></div>
+        <div class="msg-help">
+          发给 <b>user</b> 的消息是给你看的。<b>仅标记已读</b> 只改变未读状态；
+          <b>确认已处理</b>（ack）才会解除 blocking。批准提交请用右侧「待批准提交」。
+        </div>
         <div class="list" id="messages"></div>
       </section>
 
@@ -837,6 +846,7 @@ function renderMessages() {
   for (const m of list) {
     const r = el('div', 'row-item');
     const refs = Object.entries(m.refs || {}).filter(([, v]) => v && (!Array.isArray(v) || v.length));
+    const approvalId = String((m.refs && m.refs.approval_id) || '');
     const done = m.status === 'acked';
     r.innerHTML = `
       <div class="v" style="flex:1">
@@ -848,11 +858,18 @@ function renderMessages() {
         <div class="repo-meta">${esc(m.kind)} · ${esc(m.from.role)}${m.from.repo ? '@' + esc(m.from.repo) : ''} → ${esc(m.to.role)}${m.to.repo ? '@' + esc(m.to.repo) : ''} · ${esc(ago(m.created_at))}</div>
         ${m.body ? '<div class="q-context clamp" style="margin:5px 0;font-size:12.5px">' + esc(m.body) + '</div>' : ''}
         ${refs.length ? '<div class="repo-meta">' + refs.map(([k, v]) => esc(k) + '=' + esc(Array.isArray(v) ? v.join(',') : v)).join(' · ') + '</div>' : ''}
-        <div style="margin-top:6px">
-          ${done ? '<span class="tag ok">已处理</span>' : `<button class="btn" data-ack="${esc(m.id)}">标记已处理</button>`}
-          ${m.status === 'unread' || m.status === 'queued' ? `<button class="btn ghost" data-read="${esc(m.id)}">标记已读</button>` : ''}
+        <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          ${approvalId ? `<button class="btn" data-approval="${esc(approvalId)}">查看待批准提交</button>` : ''}
+          ${done ? '<span class="tag ok">已处理</span>' : `<button class="btn" data-ack="${esc(m.id)}" title="ack 后才会解除 blocking，并记录处理时间">确认已处理</button>`}
+          ${m.status === 'unread' || m.status === 'queued' ? `<button class="btn ghost" data-read="${esc(m.id)}" title="只改变未读状态；不会解除 blocking，也不会批准提交">仅标记已读</button>` : ''}
         </div>
       </div>`;
+    const ap = r.querySelector('[data-approval]');
+    if (ap) ap.onclick = () => {
+      const a = (window.__approvals || []).find(x => x.id === ap.dataset.approval);
+      if (a) openDiff(a);
+      else showError(`审批 ${ap.dataset.approval} 不存在或已使用`);
+    };
     const ack = r.querySelector('[data-ack]');
     if (ack) ack.onclick = async () => {
       ack.disabled = true;
