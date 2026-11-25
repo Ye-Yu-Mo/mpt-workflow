@@ -113,6 +113,7 @@ test('offline delivery: queued -> unread on next bootstrap, then acked', () => {
   assert.equal(wf2.msgs.unreadCount(main), 0);
   assert.equal(wf2.msgs.get(message.id)?.status, 'acked');
   assert.equal(wf2.msgs.get(message.id)?.ack_note, 'seen');
+  assert.ok(wf2.msgs.get(message.id)?.read_at, 'ack implies read');
 });
 
 test('idempotency key produces one message', () => {

@@ -111,6 +111,12 @@ test('dashboard renders from a live API', async () => {
       doc.querySelector('#messages [data-approval]'),
       'approval_request message links to the approval',
     );
+    const approvalRow = Array.from(doc.querySelectorAll('#messages .row-item')).find(n =>
+      (n.textContent || '').includes('请求提交'),
+    );
+    assert.ok(approvalRow, 'approval notification rendered');
+    assert.match(approvalRow?.textContent || '', /审批详情和操作在右侧/);
+    assert.doesNotMatch(approvalRow?.textContent || '', /files=/, 'no duplicate file list');
 
     // clicking a milestone opens the detail panel
     const ms = doc.querySelectorAll('#repos .ms');

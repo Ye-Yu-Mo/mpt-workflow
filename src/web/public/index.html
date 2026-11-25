@@ -400,7 +400,8 @@ details.ms-detail[open] summary::before { content: "▾"; }
         <div class="msg-filters" id="message-filters"></div>
         <div class="msg-help">
           发给 <b>user</b> 的消息是给你看的。<b>仅标记已读</b> 只改变未读状态；
-          <b>确认已处理</b>（ack）才会解除 blocking。批准提交请用右侧「待批准提交」。
+          <b>确认已处理</b>（ack）才会解除 blocking。审批请求的详情和操作在右侧
+          「待批准提交」，批准后会自动 ack 这条通知。
         </div>
         <div class="list" id="messages"></div>
       </section>
@@ -845,7 +846,9 @@ function renderMessages() {
   }
   for (const m of list) {
     const r = el('div', 'row-item');
-    const refs = Object.entries(m.refs || {}).filter(([, v]) => v && (!Array.isArray(v) || v.length));
+    const isApproval = m.kind === 'approval_request';
+    const refs = Object.entries(m.refs || {})
+      .filter(([k, v]) => (!isApproval || k === 'repo' || k === 'approval_id') && v && (!Array.isArray(v) || v.length));
     const approvalId = String((m.refs && m.refs.approval_id) || '');
     const done = m.status === 'acked';
     r.innerHTML = `
@@ -856,11 +859,12 @@ function renderMessages() {
           <b>${esc(m.subject)}</b>
         </div>
         <div class="repo-meta">${esc(m.kind)} · ${esc(m.from.role)}${m.from.repo ? '@' + esc(m.from.repo) : ''} → ${esc(m.to.role)}${m.to.repo ? '@' + esc(m.to.repo) : ''} · ${esc(ago(m.created_at))}</div>
-        ${m.body ? '<div class="q-context clamp" style="margin:5px 0;font-size:12.5px">' + esc(m.body) + '</div>' : ''}
+        ${!isApproval && m.body ? '<div class="q-context clamp" style="margin:5px 0;font-size:12.5px">' + esc(m.body) + '</div>' : ''}
+        ${isApproval ? '<div class="repo-meta" style="margin:5px 0">审批详情和操作在右侧「待批准提交」；批准后会自动 ack 这条通知。</div>' : ''}
         ${refs.length ? '<div class="repo-meta">' + refs.map(([k, v]) => esc(k) + '=' + esc(Array.isArray(v) ? v.join(',') : v)).join(' · ') + '</div>' : ''}
         <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
           ${approvalId ? `<button class="btn" data-approval="${esc(approvalId)}">查看待批准提交</button>` : ''}
-          ${done ? '<span class="tag ok">已处理</span>' : `<button class="btn" data-ack="${esc(m.id)}" title="ack 后才会解除 blocking，并记录处理时间">确认已处理</button>`}
+          ${done ? '<span class="tag ok">已处理</span>' : (!isApproval ? `<button class="btn" data-ack="${esc(m.id)}" title="ack 后才会解除 blocking，并记录处理时间">确认已处理</button>` : '')}
           ${m.status === 'unread' || m.status === 'queued' ? `<button class="btn ghost" data-read="${esc(m.id)}" title="只改变未读状态；不会解除 blocking，也不会批准提交">仅标记已读</button>` : ''}
         </div>
       </div>`;
