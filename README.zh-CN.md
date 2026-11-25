@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-> 状态：pre-1.0。**0.4.0 已发布**，见 [ROADMAP.md](ROADMAP.md)。
+> 状态：pre-1.0。0.5.0 已准备（0.4.0 是当前已发布的版本），见 [ROADMAP.md](ROADMAP.md)。
 
 多 agent、多仓开发的**流程状态机**：一个本地 MCP server + 一个只读看板。
 
