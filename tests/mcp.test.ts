@@ -1,12 +1,12 @@
-import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
-import { buildTools, invokeTool } from '../src/mcp/server.js';
+import { test } from 'node:test';
 import { init } from '../src/core/init.js';
 import { Workflow } from '../src/core/workflow.js';
+import { buildTools, invokeTool } from '../src/mcp/server.js';
 
 const CLI = path.resolve(process.cwd(), 'dist/cli.js');
 
@@ -50,7 +50,10 @@ function fixture() {
   return { root, abs, wf };
 }
 
-type Caller = (name: string, args?: Record<string, unknown>) => Promise<{
+type Caller = (
+  name: string,
+  args?: Record<string, unknown>,
+) => Promise<{
   text: string;
   isError: boolean;
 }>;

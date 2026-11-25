@@ -20,6 +20,8 @@
     "test": "node --import tsx --test tests/*.test.ts",
     "test:coverage": "c8 --include='src/**/*.ts' --check-coverage --lines 70 --functions 70 --branches 60 --statements 70 --reporter=text --reporter=lcov node --import tsx --test tests/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "format": "biome check --write .",
     "prepublishOnly": "npm run build && npm test"
   },
   "publishConfig": {
@@ -56,10 +58,11 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@types/node": "^22.10.0",
+    "@biomejs/biome": "^2.6.9",
+    "@types/node": "^22.20.5",
     "c8": "^10.1.3",
     "jsdom": "^29.1.1",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "typescript": "^7.0.2"
   }
 }

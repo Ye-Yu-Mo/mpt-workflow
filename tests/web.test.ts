@@ -1,12 +1,12 @@
-import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { test } from 'node:test';
 import { JSDOM } from 'jsdom';
-import { Workflow } from '../src/core/workflow.js';
 import { init } from '../src/core/init.js';
+import { Workflow } from '../src/core/workflow.js';
 import { startWebServer } from '../src/web/server.js';
 
 function git(cwd: string, args: string[]) {
@@ -53,10 +53,7 @@ test('dashboard renders from a live API', async () => {
   const { wf } = fixture();
   const server = await startWebServer(wf, 0);
   const base = server.url;
-  const html = fs.readFileSync(
-    path.resolve(process.cwd(), 'src/web/public/index.html'),
-    'utf8',
-  );
+  const html = fs.readFileSync(path.resolve(process.cwd(), 'src/web/public/index.html'), 'utf8');
 
   const errors: Error[] = [];
   const dom = new JSDOM(html, {
@@ -97,7 +94,11 @@ test('dashboard renders from a live API', async () => {
 
     const hero = doc.querySelector('#hero-num')?.textContent;
     assert.ok(hero && hero !== '–', 'hero number rendered');
-    assert.match(doc.querySelector('#version')?.textContent || '', /^v\d+\.\d+\.\d+$/, 'version pill rendered');
+    assert.match(
+      doc.querySelector('#version')?.textContent || '',
+      /^v\d+\.\d+\.\d+$/,
+      'version pill rendered',
+    );
 
     assert.equal(doc.querySelectorAll('#repos .repo').length, 1, 'repo cards');
     assert.equal(doc.querySelectorAll('#repos .ms').length, 2, 'milestone chips');
@@ -111,7 +112,7 @@ test('dashboard renders from a live API', async () => {
       doc.querySelector('#messages [data-approval]'),
       'approval_request message links to the approval',
     );
-    const approvalRow = Array.from(doc.querySelectorAll('#messages .row-item')).find(n =>
+    const approvalRow = Array.from(doc.querySelectorAll('#messages .row-item')).find((n) =>
       (n.textContent || '').includes('请求提交'),
     );
     assert.ok(approvalRow, 'approval notification rendered');
@@ -168,11 +169,7 @@ test('dashboard renders from a live API', async () => {
     const todo = await fetch(`${base}/api/files?repo=repo-a&path=TODO-M1.md`);
     assert.equal(todo.status, 200);
 
-    assert.equal(
-      errors.length,
-      0,
-      'no runtime errors: ' + errors.map((e) => e.message).join('; '),
-    );
+    assert.equal(errors.length, 0, 'no runtime errors: ' + errors.map((e) => e.message).join('; '));
   } finally {
     dom.window.close();
     await server.close();

@@ -1,6 +1,6 @@
 import path from 'node:path';
-import { matchGlob } from './glob.js';
 import { relTo, within } from './fsutil.js';
+import { matchGlob } from './glob.js';
 import type { Role } from './types.js';
 
 export interface AclRule {
@@ -124,13 +124,7 @@ export function checkAcl(
   allRepos: { id: string; abs: string }[] = [],
 ): AclDecision {
   const acl = ACL[role];
-  const { scope, normalized, ownerRepo } = resolveScope(
-    absPath,
-    root,
-    repoId,
-    repoAbs,
-    allRepos,
-  );
+  const { scope, normalized, ownerRepo } = resolveScope(absPath, root, repoId, repoAbs, allRepos);
 
   const base = { role, path: absPath, scope, normalized, ownerRepo };
 
@@ -167,8 +161,7 @@ export function checkAcl(
 
 export function describeAcl(role: Role): string {
   const acl = ACL[role];
-  const fmt = (r: AclRule) =>
-    r.base === 'repo' ? `<repo>/${r.glob}` : `<root>/${r.glob}`;
+  const fmt = (r: AclRule) => (r.base === 'repo' ? `<repo>/${r.glob}` : `<root>/${r.glob}`);
   return [
     `角色 ${role} 可写:`,
     ...acl.allow.map((r) => `  + ${fmt(r)}`),

@@ -1,69 +1,59 @@
-import path from 'node:path';
 import { spawn } from 'node:child_process';
+import path from 'node:path';
+import { checkAcl } from './acl.js';
+import { evidenceDir, findRoot, loadConfig, runtimeDir, saveConfig } from './config.js';
 import {
-  exists,
-  ensureDir,
-  readText,
-  readTextRequired,
-  writeAtomic,
-  within,
-  truncate,
-  isoNow,
-} from './fsutil.js';
-import {
-  loadConfig,
-  saveConfig,
-  findRoot,
-  runtimeDir,
-  evidenceDir,
-} from './config.js';
-import {
+  appendEvidenceSection,
   listTodoFiles,
+  parseEvidence,
   parsePlan,
   parseTodo,
-  parseEvidence,
-  setTodoStatus,
   setTodoSha,
-  appendEvidenceSection,
+  setTodoStatus,
   statusLabel,
 } from './docs.js';
 import {
-  parseQuestionsFile,
-  questionsFile,
-  updateQuestion,
-} from './questions.js';
-import {
-  gitInfo,
-  allChangedFiles,
-  workingTreeHash,
-  workingTreeOid,
-  stageAll,
-  commit as gitCommit,
-  diffStat,
-} from './git.js';
-import { checkAcl } from './acl.js';
-import { appendToSection } from './markdown.js';
+  ensureDir,
+  exists,
+  isoNow,
+  readText,
+  readTextRequired,
+  truncate,
+  within,
+  writeAtomic,
+} from './fsutil.js';
 import { dirSize, formatBytes } from './gc.js';
 import {
+  allChangedFiles,
+  diffStat,
+  commit as gitCommit,
+  gitInfo,
+  stageAll,
+  workingTreeHash,
+  workingTreeOid,
+} from './git.js';
+import { appendToSection } from './markdown.js';
+import { type Actor, actorFromRole, actorKey, MessageStore } from './messages.js';
+import { parseQuestionsFile, questionsFile, updateQuestion } from './questions.js';
+import {
+  type Approval,
   createApproval,
-  readApproval,
-  writeApproval,
   listApprovals,
   logEvent,
+  readApproval,
   withLock,
-  type Approval,
+  writeApproval,
 } from './state.js';
-import { MessageStore, actorKey, actorFromRole, type Actor } from './messages.js';
 import type {
+  DoctorFinding,
+  MilestoneState,
+  NextAction,
   ProgramConfig,
   ProgramStatus,
-  RepoState,
-  MilestoneState,
   Question,
-  NextAction,
+  RepoState,
   Role,
   TodoDoc,
-  DoctorFinding,
 } from './types.js';
 
 export interface RepoRef {
@@ -156,7 +146,8 @@ export class Workflow {
 
   repoRef(id: string): RepoRef {
     const r = this.repoRefs().find((x) => x.id === id);
-    if (!r) throw new Error(`未知仓库 ${id}；已配置: ${this.cfg.repos.map((x) => x.id).join(', ')}`);
+    if (!r)
+      throw new Error(`未知仓库 ${id}；已配置: ${this.cfg.repos.map((x) => x.id).join(', ')}`);
     return r;
   }
 
@@ -200,12 +191,7 @@ export class Workflow {
   }
 
   /** Answer a question: update the file, notify the asker, clear the blocker. */
-  answerQuestion(
-    q: Question,
-    answer: string,
-    resolution: string | undefined,
-    by: Actor,
-  ): void {
+  answerQuestion(q: Question, answer: string, resolution: string | undefined, by: Actor): void {
     updateQuestion(q.file, q.id, { status: 'answered', answer, resolution });
     const asker = actorFromRole(String(q.from), q.repo);
     try {
@@ -310,8 +296,7 @@ export class Workflow {
         };
       });
 
-    const current =
-      milestones.find((m) => !['accepted', 'committed'].includes(m.status)) || null;
+    const current = milestones.find((m) => !['accepted', 'committed'].includes(m.status)) || null;
 
     const questions = exists(questionsFile(ref.abs))
       ? parseQuestionsFile(questionsFile(ref.abs), id)
@@ -320,16 +305,15 @@ export class Workflow {
     const problems: string[] = [];
     if (!plan) problems.push('缺少 PLAN.md');
     if (milestones.length === 0) problems.push('PLAN 中未解析到任何 M，且无 TODO-Mn.md');
-    if (git.dirty) problems.push(`工作区有未提交改动: ${git.changed.length + git.untracked.length} 个文件`);
+    if (git.dirty)
+      problems.push(`工作区有未提交改动: ${git.changed.length + git.untracked.length} 个文件`);
     if (current && current.status === 'accepted') problems.push(`${current.id} 已验收但尚未提交`);
     for (const q of questions.filter((q) => q.blocking && q.status === 'open')) {
       problems.push(`阻塞问题未回答: ${q.id}`);
     }
 
     // phase: explicit PLAN phase, else the phase that lists this repo
-    const phase =
-      plan?.phase ||
-      this.cfg.phases.find((p) => p.repos.includes(id))?.id;
+    const phase = plan?.phase || this.cfg.phases.find((p) => p.repos.includes(id))?.id;
 
     return {
       id,
@@ -620,7 +604,9 @@ export class Workflow {
     this.assertNotBlocked(role, repoId);
     const { abs, doc } = this.requireTodo(repoId, milestone);
     if (doc.status !== 'review' && !opts.force) {
-      throw new Error(`${milestone} 当前状态为 ${doc.statusRaw}，需先 milestone_complete 进入待验收`);
+      throw new Error(
+        `${milestone} 当前状态为 ${doc.statusRaw}，需先 milestone_complete 进入待验收`,
+      );
     }
     const evidence = parseEvidence(doc);
     const passing = evidence.filter((e) => e.exitCode === 0);
@@ -671,12 +657,7 @@ export class Workflow {
     return this.milestone(repoId, milestone);
   }
 
-  reject(
-    repoId: string,
-    milestone: string,
-    role: Role,
-    reason: string,
-  ): MilestoneState {
+  reject(repoId: string, milestone: string, role: Role, reason: string): MilestoneState {
     if (role !== 'plan' && role !== 'main') {
       throw new Error(`只有 PLAN/主 agent 能打回；当前角色 ${role}`);
     }
@@ -769,10 +750,7 @@ export class Workflow {
     ensureDir(dir);
     writeAtomic(path.join(dir, `${id}-${Date.now()}.log`), fullOutput);
 
-    const tail = truncate(
-      [result.stdout, result.stderr].filter(Boolean).join('\n'),
-      4000,
-    );
+    const tail = truncate([result.stdout, result.stderr].filter(Boolean).join('\n'), 4000);
 
     const text = appendEvidenceSection(readTextRequired(abs), {
       id,
@@ -818,9 +796,7 @@ export class Workflow {
     const ref = this.repoRef(repoId);
     const changed = allChangedFiles(ref.abs);
     const st = this.repoState(repoId);
-    const m = milestone
-      ? st.milestones.find((x) => x.id === milestone)
-      : st.currentMilestone;
+    const m = milestone ? st.milestones.find((x) => x.id === milestone) : st.currentMilestone;
     const todo = m ? parseTodo(path.join(ref.abs, `TODO-${m.id}.md`)) : null;
     const allowed = todo?.allowedFiles || [];
     const violations: { file: string; reason: string }[] = [];
@@ -864,11 +840,11 @@ export class Workflow {
 
   /* ----------------------------- commit ------------------------------ */
 
-  requestCommit(input: {
-    repoId: string;
-    message: string;
-    role: Role;
-  }): { approval: Approval; diffStat: string; files: string[] } {
+  requestCommit(input: { repoId: string; message: string; role: Role }): {
+    approval: Approval;
+    diffStat: string;
+    files: string[];
+  } {
     const ref = this.repoRef(input.repoId);
     const files = allChangedFiles(ref.abs);
     if (files.length === 0) throw new Error('没有可提交的改动');
@@ -911,7 +887,13 @@ export class Workflow {
     a.approved_at = isoNow();
     a.approved_by = by;
     writeApproval(this.root, a);
-    logEvent(this.root, { role: 'user', tool: 'approve', repo: a.repo, ok: true, detail: { approval: id } });
+    logEvent(this.root, {
+      role: 'user',
+      tool: 'approve',
+      repo: a.repo,
+      ok: true,
+      detail: { approval: id },
+    });
     // Approving is how the human handles the notification; clear it from the inbox.
     try {
       this.msgs.ackByRef({ role: 'user' }, 'approval_id', id);
@@ -926,7 +908,8 @@ export class Workflow {
     const a = readApproval(this.root, input.approvalId);
     if (!a) throw new Error(`审批 ${input.approvalId} 不存在`);
     if (a.repo !== input.repoId) throw new Error(`审批属于 ${a.repo}，不是 ${input.repoId}`);
-    if (!a.approved_at) throw new Error(`审批 ${a.id} 尚未由用户批准（mpt-workflow approve ${a.id}）`);
+    if (!a.approved_at)
+      throw new Error(`审批 ${a.id} 尚未由用户批准（mpt-workflow approve ${a.id}）`);
     if (a.used_at) throw new Error(`审批 ${a.id} 已在 ${a.used_at} 使用`);
 
     const hash = workingTreeHash(ref.abs);
@@ -989,21 +972,41 @@ export class Workflow {
 
     const active = this.cfg.active_repo;
     if (active && !this.cfg.repos.some((r) => r.id === active)) {
-      push({ level: 'FAIL', code: 'active-repo', message: `active_repo=${active} 不在 repos 列表` });
+      push({
+        level: 'FAIL',
+        code: 'active-repo',
+        message: `active_repo=${active} 不在 repos 列表`,
+      });
     }
     if (!active) {
-      push({ level: 'WARN', code: 'active-repo', message: '没有激活的仓库，所有实现工作都会停滞', hint: 'mpt-workflow activate <repo>' });
+      push({
+        level: 'WARN',
+        code: 'active-repo',
+        message: '没有激活的仓库，所有实现工作都会停滞',
+        hint: 'mpt-workflow activate <repo>',
+      });
     }
 
     for (const ref of this.repoRefs()) {
       if (!exists(ref.abs)) {
-        push({ level: 'FAIL', code: 'repo-missing', repo: ref.id, message: `仓库目录不存在: ${ref.abs}` });
+        push({
+          level: 'FAIL',
+          code: 'repo-missing',
+          repo: ref.id,
+          message: `仓库目录不存在: ${ref.abs}`,
+        });
         continue;
       }
       const conf = this.repoConfig(ref.id);
       const gi = gitInfo(ref.abs);
       if (!gi.available) {
-        push({ level: 'FAIL', code: 'git', repo: ref.id, message: '不是 git 仓库或无法读取 HEAD', hint: gi.error });
+        push({
+          level: 'FAIL',
+          code: 'git',
+          repo: ref.id,
+          message: '不是 git 仓库或无法读取 HEAD',
+          hint: gi.error,
+        });
         continue;
       }
       if (conf.branch && gi.branch && conf.branch !== gi.branch) {
@@ -1049,12 +1052,17 @@ export class Workflow {
       if (exists(path.join(ref.abs, 'rust-toolchain.toml'))) {
         const tc = readText(path.join(ref.abs, 'rust-toolchain.toml'));
         const ch = /channel\s*=\s*"([^"]+)"/.exec(tc)?.[1];
-        if (ch && ch.includes('nightly')) {
+        if (ch?.includes('nightly')) {
           push({ level: 'OK', code: 'toolchain', repo: ref.id, message: `rust-toolchain: ${ch}` });
         }
       }
       if (exists(path.join(ref.abs, 'Cargo.toml')) && !exists(path.join(ref.abs, 'Cargo.lock'))) {
-        push({ level: 'WARN', code: 'cargo-lock-missing', repo: ref.id, message: 'Cargo.toml 存在但没有 Cargo.lock' });
+        push({
+          level: 'WARN',
+          code: 'cargo-lock-missing',
+          repo: ref.id,
+          message: 'Cargo.toml 存在但没有 Cargo.lock',
+        });
       }
       // questions parse health
       const qs = exists(questionsFile(ref.abs))
@@ -1071,7 +1079,12 @@ export class Workflow {
       }
       const st = this.repoState(ref.id);
       if (st.milestones.length === 0) {
-        push({ level: 'WARN', code: 'milestones', repo: ref.id, message: '没有 M（PLAN 表未解析到，也没有 TODO）' });
+        push({
+          level: 'WARN',
+          code: 'milestones',
+          repo: ref.id,
+          message: '没有 M（PLAN 表未解析到，也没有 TODO）',
+        });
       }
       const acceptedDirty = st.milestones.filter((m) => m.status === 'accepted');
       if (acceptedDirty.length && gi.dirty) {
@@ -1089,9 +1102,7 @@ export class Workflow {
         level: a.approved_at ? 'WARN' : 'OK',
         code: 'approval',
         repo: a.repo,
-        message: a.approved_at
-          ? `审批 ${a.id} 已批准但未使用`
-          : `审批 ${a.id} 等待用户批准`,
+        message: a.approved_at ? `审批 ${a.id} 已批准但未使用` : `审批 ${a.id} 等待用户批准`,
         hint: `mpt-workflow approve ${a.id}`,
       });
     }
@@ -1112,7 +1123,10 @@ export class Workflow {
           },
     );
 
-    const stale = staleCliPaths(this.root, this.repoRefs().map((r) => r.abs));
+    const stale = staleCliPaths(
+      this.root,
+      this.repoRefs().map((r) => r.abs),
+    );
     if (stale.length) {
       push({
         level: 'WARN',
@@ -1125,7 +1139,8 @@ export class Workflow {
     if (!out.some((f) => f.level === 'FAIL')) {
       push({ level: 'OK', code: 'overall', message: '没有阻断性问题' });
     }
-    return out;  }
+    return out;
+  }
 }
 
 /* ------------------------------ helpers ------------------------------ */
@@ -1249,7 +1264,11 @@ function runCommand(
 function globMatchPath(file: string, pattern: string): boolean {
   const p = pattern.replace(/^\.\//, '');
   if (p === file) return true;
-  const esc = p.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*\*/g, '\u0000').replace(/\*/g, '[^/]*').replace(/\u0000/g, '.*');
+  const esc = p
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    .replace(/\*\*/g, '')
+    .replace(/\*/g, '[^/]*')
+    .replace(//g, '.*');
   return new RegExp('^' + esc + '$').test(file);
 }
 

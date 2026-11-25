@@ -1,10 +1,10 @@
-import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
-import { Workflow } from '../src/core/workflow.js';
+import { test } from 'node:test';
 import { createDemoWorkspace } from '../src/core/demo.js';
+import { Workflow } from '../src/core/workflow.js';
 
 const CLI = path.resolve(process.cwd(), 'dist/cli.js');
 

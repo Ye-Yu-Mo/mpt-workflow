@@ -1,9 +1,9 @@
-import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { test } from 'node:test';
 
 const CLI = path.resolve(process.cwd(), 'dist/cli.js');
 
@@ -46,7 +46,9 @@ function fixture() {
   return { root, abs };
 }
 
-test('installed pre-commit hook lets a todo session commit its own milestone', { skip: !fs.existsSync(CLI) }, () => {
+test('installed pre-commit hook lets a todo session commit its own milestone', {
+  skip: !fs.existsSync(CLI),
+}, () => {
   const { abs } = fixture();
   // Simulate what the workflow tools write: the TODO status and source change.
   fs.appendFileSync(path.join(abs, 'TODO-M1.md'), '\n> 证据时间：now\n');
@@ -56,7 +58,9 @@ test('installed pre-commit hook lets a todo session commit its own milestone', {
   assert.match(git(abs, ['log', '-1', '--format=%s']), /feat\(M1\): work/);
 });
 
-test('installed pre-commit hook blocks files outside the TODO list', { skip: !fs.existsSync(CLI) }, () => {
+test('installed pre-commit hook blocks files outside the TODO list', {
+  skip: !fs.existsSync(CLI),
+}, () => {
   const { abs } = fixture();
   fs.writeFileSync(path.join(abs, 'src/extra.rs'), 'fn g() {}\n');
   git(abs, ['add', '-A']);

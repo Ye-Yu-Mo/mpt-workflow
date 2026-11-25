@@ -1,22 +1,21 @@
-import http from 'node:http';
 import fs from 'node:fs';
-import path from 'node:path';
+import http from 'node:http';
 import type { AddressInfo } from 'node:net';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Workflow } from '../core/workflow.js';
-import { readEvents } from '../core/state.js';
+import { exists, readText, within } from '../core/fsutil.js';
 import { diffStat, diffUnified, recentLog } from '../core/git.js';
-import { logEvent } from '../core/state.js';
-import { readText, exists, within } from '../core/fsutil.js';
+import { logEvent, readEvents } from '../core/state.js';
+import type { Workflow } from '../core/workflow.js';
 import { VERSION } from '../version.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 // Prefer the build output (dist/web/public); fall back to the source tree when
 // running through tsx during development.
-const PUBLIC_DIR = [
-  path.resolve(here, 'public'),
-  path.resolve(here, '..', '..', 'src', 'web', 'public'),
-].find((p) => exists(p)) || path.resolve(here, 'public');
+const PUBLIC_DIR =
+  [path.resolve(here, 'public'), path.resolve(here, '..', '..', 'src', 'web', 'public')].find((p) =>
+    exists(p),
+  ) || path.resolve(here, 'public');
 
 const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]', '::1']);
 
@@ -109,7 +108,9 @@ export function startWebServer(wf: Workflow, port: number): Promise<WebHandle> {
       return;
     }
     if (!['GET', 'HEAD', 'OPTIONS'].includes(method) && isCrossOrigin(req)) {
-      res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' }).end('cross-origin request rejected');
+      res
+        .writeHead(403, { 'content-type': 'text/plain; charset=utf-8' })
+        .end('cross-origin request rejected');
       return;
     }
 
@@ -154,7 +155,12 @@ export function startWebServer(wf: Workflow, port: number): Promise<WebHandle> {
           const body = await readBody(req);
           const m = wf.msgs.ack(id, body.note ? String(body.note) : undefined);
           if (!m) return json(res, { error: `no such message ${id}` }, 404);
-          logEvent(wf.root, { role: 'user', tool: 'web_message_ack', ok: true, detail: { message: id } });
+          logEvent(wf.root, {
+            role: 'user',
+            tool: 'web_message_ack',
+            ok: true,
+            detail: { message: id },
+          });
           return json(res, m);
         }
         if (req.method === 'POST' && /^\/api\/message\/[^/]+\/read$/.test(p)) {
@@ -191,7 +197,13 @@ export function startWebServer(wf: Workflow, port: number): Promise<WebHandle> {
             body.resolution ? String(body.resolution) : undefined,
             { role: 'user' },
           );
-          logEvent(wf.root, { role: 'user', tool: 'web_answer', question: id, repo: q.repo, ok: true });
+          logEvent(wf.root, {
+            role: 'user',
+            tool: 'web_answer',
+            question: id,
+            repo: q.repo,
+            ok: true,
+          });
           return json(res, { ok: true, id });
         }
         if (req.method === 'POST' && /^\/api\/question\/[^/]+\/close$/.test(p)) {
@@ -199,12 +211,16 @@ export function startWebServer(wf: Workflow, port: number): Promise<WebHandle> {
           const body = await readBody(req);
           const q = wf.findQuestion(id);
           if (!q) return json(res, { error: `no such question ${id}` }, 404);
-          wf.closeQuestion(
-            q,
-            body.resolution ? String(body.resolution) : q.resolution,
-            { role: 'user' },
-          );
-          logEvent(wf.root, { role: 'user', tool: 'web_close', question: id, repo: q.repo, ok: true });
+          wf.closeQuestion(q, body.resolution ? String(body.resolution) : q.resolution, {
+            role: 'user',
+          });
+          logEvent(wf.root, {
+            role: 'user',
+            tool: 'web_close',
+            question: id,
+            repo: q.repo,
+            ok: true,
+          });
           return json(res, { ok: true, id });
         }
         if (req.method === 'POST' && p === '/api/approve') {
@@ -216,7 +232,12 @@ export function startWebServer(wf: Workflow, port: number): Promise<WebHandle> {
           const body = await readBody(req);
           const repo = String(body.repo || '');
           wf.setActiveRepo(repo || null);
-          logEvent(wf.root, { role: 'user', tool: 'web_activate', repo: repo || undefined, ok: true });
+          logEvent(wf.root, {
+            role: 'user',
+            tool: 'web_activate',
+            repo: repo || undefined,
+            ok: true,
+          });
           return json(res, { ok: true, activeRepo: wf.cfg.active_repo });
         }
         if (req.method === 'GET' && p === '/api/doctor') {

@@ -1,19 +1,25 @@
 #!/usr/bin/env node
 import path from 'node:path';
 import process from 'node:process';
-import { init, formatInitResult } from './core/init.js';
-import { createDemoWorkspace } from './core/demo.js';
-import { runGc, formatGcReport } from './core/gc.js';
-import { Workflow } from './core/workflow.js';
-import { VERSION } from './version.js';
-import { findRoot } from './core/config.js';
-import { runPretool, runSessionStart, runPreCommit, setRoleLease, readRoleLease } from './core/hooks.js';
-import { runMcpServer } from './mcp/server.js';
-import { startWebServer } from './web/server.js';
 import { describeAcl } from './core/acl.js';
-import { updateQuestion } from './core/questions.js';
+import { findRoot } from './core/config.js';
+import { createDemoWorkspace } from './core/demo.js';
+import { formatGcReport, runGc } from './core/gc.js';
+import {
+  readRoleLease,
+  runPreCommit,
+  runPretool,
+  runSessionStart,
+  setRoleLease,
+} from './core/hooks.js';
+import { formatInitResult, init } from './core/init.js';
 import { formatMessage, type MessageKind } from './core/messages.js';
+import { updateQuestion } from './core/questions.js';
 import type { Role } from './core/types.js';
+import { Workflow } from './core/workflow.js';
+import { runMcpServer } from './mcp/server.js';
+import { VERSION } from './version.js';
+import { startWebServer } from './web/server.js';
 
 function usage(): string {
   return `mpt-workflow — 多 agent / 多仓工作流状态机
@@ -101,9 +107,12 @@ function printStatus(wf: Workflow, json: boolean) {
   const lease = readRoleLease(wf.root);
   console.log(`程序: ${st.program}`);
   console.log(`根目录: ${st.root}`);
-  console.log(`active repo: ${st.activeRepo ?? '(none)'}${lease ? `   本会话角色: ${lease.role}${lease.repo ? '@' + lease.repo : ''}` : ''}`);
+  console.log(
+    `active repo: ${st.activeRepo ?? '(none)'}${lease ? `   本会话角色: ${lease.role}${lease.repo ? '@' + lease.repo : ''}` : ''}`,
+  );
   console.log('');
-  for (const p of st.phases) console.log(`阶段 ${p.id}「${p.title}」= ${p.status}  [${p.repos.join(', ')}]`);
+  for (const p of st.phases)
+    console.log(`阶段 ${p.id}「${p.title}」= ${p.status}  [${p.repos.join(', ')}]`);
   console.log('');
   for (const r of st.repos) {
     const done = r.milestones.filter((x) => ['accepted', 'committed'].includes(x.status)).length;
@@ -111,7 +120,11 @@ function printStatus(wf: Workflow, json: boolean) {
     console.log(
       `${r.id.padEnd(20)} ${String(done).padStart(2)}/${r.milestones.length} M  ` +
         `[${r.git.branch}@${r.git.shortHead}${r.git.dirty ? ', dirty' : ''}]  ` +
-        (m ? `当前 ${m.id} ${m.status}` : r.milestones.length === 0 ? '无 M（缺 PLAN）' : '全部完成'),
+        (m
+          ? `当前 ${m.id} ${m.status}`
+          : r.milestones.length === 0
+            ? '无 M（缺 PLAN）'
+            : '全部完成'),
     );
     for (const mm of r.milestones) {
       console.log(
@@ -131,7 +144,9 @@ function printStatus(wf: Workflow, json: boolean) {
   if (st.next.length) {
     console.log('\n下一步:');
     for (const n of st.next) {
-      console.log(`  [${n.actor}] ${n.action}${n.repo ? ` (${n.repo}${n.milestone ? '/' + n.milestone : ''})` : ''}`);
+      console.log(
+        `  [${n.actor}] ${n.action}${n.repo ? ` (${n.repo}${n.milestone ? '/' + n.milestone : ''})` : ''}`,
+      );
       console.log(`      ${n.detail}`);
     }
   }
@@ -183,7 +198,7 @@ async function main() {
           root,
           program: typeof flags.program === 'string' ? flags.program : undefined,
           repos,
-          adopt: flags['no-adopt'] ? false : true,
+          adopt: !flags['no-adopt'],
           installHooks: Boolean(flags['install-hooks']),
         });
         console.log(formatInitResult(res));
@@ -200,7 +215,9 @@ async function main() {
         const wf = resolveWorkflow(flags);
         const st = wf.programStatus();
         for (const n of st.next) {
-          console.log(`[${n.actor}] ${n.action}${n.repo ? ` (${n.repo}${n.milestone ? '/' + n.milestone : ''})` : ''}`);
+          console.log(
+            `[${n.actor}] ${n.action}${n.repo ? ` (${n.repo}${n.milestone ? '/' + n.milestone : ''})` : ''}`,
+          );
           console.log(`    ${n.detail}`);
         }
         return;
@@ -212,7 +229,9 @@ async function main() {
         const order = { FAIL: 0, WARN: 1, OK: 2 };
         findings.sort((a, b) => order[a.level] - order[b.level]);
         for (const f of findings) {
-          console.log(`${f.level.padEnd(4)} ${f.code}${f.repo ? ` [${f.repo}]` : ''}: ${f.message}`);
+          console.log(
+            `${f.level.padEnd(4)} ${f.code}${f.repo ? ` [${f.repo}]` : ''}: ${f.message}`,
+          );
           if (f.hint) console.log(`      → ${f.hint}`);
         }
         process.exitCode = findings.some((f) => f.level === 'FAIL') ? 1 : 0;
@@ -246,7 +265,9 @@ async function main() {
           return;
         }
         for (const q of qs) {
-          console.log(`${q.id} [${q.status}]${q.blocking ? ' [blocking]' : ''} ${q.from} → ${q.to}  (${q.repo ?? 'root'})`);
+          console.log(
+            `${q.id} [${q.status}]${q.blocking ? ' [blocking]' : ''} ${q.from} → ${q.to}  (${q.repo ?? 'root'})`,
+          );
           console.log(`  ${q.context.split('\n')[0].slice(0, 160)}`);
         }
         if (!qs.length) console.log('没有未闭合的问题。');
@@ -283,12 +304,16 @@ async function main() {
           limit: typeof flags.limit === 'string' ? Number(flags.limit) : undefined,
         });
         if (flags.json) {
-          console.log(JSON.stringify({ unread: wf.msgs.unreadCount(target), messages: list }, null, 2));
+          console.log(
+            JSON.stringify({ unread: wf.msgs.unreadCount(target), messages: list }, null, 2),
+          );
           return;
         }
         const unread = wf.msgs.unreadCount(target);
         const blocking = wf.msgs.blockingFor(target).length;
-        console.log(`${role}${repo ? '@' + repo : ''}: ${list.length} 条 · 未读 ${unread} · blocking ${blocking}`);
+        console.log(
+          `${role}${repo ? '@' + repo : ''}: ${list.length} 条 · 未读 ${unread} · blocking ${blocking}`,
+        );
         for (const m of list) console.log('\n' + formatMessage(m));
         return;
       }
@@ -317,10 +342,15 @@ async function main() {
         const wf = resolveWorkflow(flags);
         const lease = readRoleLease(wf.root);
         const fromRole = ((flags.from as string) || lease?.role || 'user') as Role;
-        const fromRepo = (flags['from-repo'] as string) || (fromRole === 'plan' || fromRole === 'todo' ? lease?.repo : undefined);
-        if (!flags.to) throw new Error('用法: mpt-workflow send --to <main|plan|todo|user> --subject TEXT');
+        const fromRepo =
+          (flags['from-repo'] as string) ||
+          (fromRole === 'plan' || fromRole === 'todo' ? lease?.repo : undefined);
+        if (!flags.to)
+          throw new Error('用法: mpt-workflow send --to <main|plan|todo|user> --subject TEXT');
         const toRole = String(flags.to);
-        const toRepo = (flags['to-repo'] as string) || (toRole === 'plan' || toRole === 'todo' ? lease?.repo : undefined);
+        const toRepo =
+          (flags['to-repo'] as string) ||
+          (toRole === 'plan' || toRole === 'todo' ? lease?.repo : undefined);
         let refs: Record<string, string> = {};
         if (typeof flags.refs === 'string') {
           try {
@@ -337,9 +367,12 @@ async function main() {
           body: typeof flags.body === 'string' ? flags.body : '',
           refs,
           blocking: Boolean(flags.blocking),
-          idempotency_key: typeof flags['idempotency-key'] === 'string' ? flags['idempotency-key'] : undefined,
+          idempotency_key:
+            typeof flags['idempotency-key'] === 'string' ? flags['idempotency-key'] : undefined,
         });
-        console.log(`${duplicate ? '已存在' : '已发送'} ${message.id} → ${toRole}${toRepo ? '@' + toRepo : ''} [${message.status}]`);
+        console.log(
+          `${duplicate ? '已存在' : '已发送'} ${message.id} → ${toRole}${toRepo ? '@' + toRepo : ''} [${message.status}]`,
+        );
         return;
       }
 
@@ -409,9 +442,15 @@ async function main() {
       case 'presence': {
         const wf = resolveWorkflow(flags);
         const lease = readRoleLease(wf.root);
-        if (lease) wf.msgs.ping({ role: lease.role, repo: lease.repo }, typeof flags.session === 'string' ? flags.session : undefined);
+        if (lease)
+          wf.msgs.ping(
+            { role: lease.role, repo: lease.repo },
+            typeof flags.session === 'string' ? flags.session : undefined,
+          );
         for (const p of wf.msgs.presence()) {
-          console.log(`${p.online ? '●' : '○'} ${p.actor.role}${p.actor.repo ? '@' + p.actor.repo : ''}  ${p.last_seen}${p.session ? '  [' + p.session + ']' : ''}`);
+          console.log(
+            `${p.online ? '●' : '○'} ${p.actor.role}${p.actor.repo ? '@' + p.actor.repo : ''}  ${p.last_seen}${p.session ? '  [' + p.session + ']' : ''}`,
+          );
         }
         return;
       }

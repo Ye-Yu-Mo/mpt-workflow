@@ -1,6 +1,7 @@
-import path from 'node:path';
-import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+import { VERSION } from '../version.js';
 import {
   configPath,
   detectRepos,
@@ -9,10 +10,9 @@ import {
   saveConfig,
   workflowDir,
 } from './config.js';
-import { exists, ensureDir, writeAtomic, writeIfMissing, today } from './fsutil.js';
+import { listTodoFiles, parsePlan, parseTodo } from './docs.js';
+import { ensureDir, exists, today, writeAtomic, writeIfMissing } from './fsutil.js';
 import { defaultQuestionsHeader, questionsFile } from './questions.js';
-import { parsePlan, listTodoFiles, parseTodo } from './docs.js';
-import { VERSION } from '../version.js';
 import type { ProgramConfig, RepoConfig } from './types.js';
 
 export interface InitOptions {
@@ -119,7 +119,9 @@ export function init(options: InitOptions): InitResult {
         existing.push(path.relative(root, qf));
       }
       const plan = parsePlan(abs);
-      const todos = listTodoFiles(abs).map((f) => parseTodo(path.join(abs, f))).filter(Boolean);
+      const todos = listTodoFiles(abs)
+        .map((f) => parseTodo(path.join(abs, f)))
+        .filter(Boolean);
       if (todos.some((t) => t && ['implementing', 'review', 'rejected'].includes(t.status))) {
         cfg.active_repo = r.id;
       }
@@ -324,7 +326,8 @@ export function installHooks(
       const file = path.join(dir, 'pre-commit');
       if (!writeIfMissing(file, preCommitScript())) existing.push(path.relative(root, file));
       else created.push(path.relative(root, file));
-      fs.chmodSync(file, 0o755);    } catch (e) {
+      fs.chmodSync(file, 0o755);
+    } catch (e) {
       warnings.push(`${r.id}: 安装 git hook 失败: ${(e as Error).message}`);
     }
   }
@@ -366,7 +369,9 @@ export function formatInitResult(r: InitResult): string {
   lines.push('');
   lines.push('下一步:');
   lines.push(`  1. 在 Claude Code 里确认 MCP server "workflow" 已加载（.mcp.json 已写入）；`);
-  lines.push(`  2. 会话开始先调用 bootstrap 声明角色，例如 bootstrap(role="plan", repo="<repo>")；`);
+  lines.push(
+    `  2. 会话开始先调用 bootstrap 声明角色，例如 bootstrap(role="plan", repo="<repo>")；`,
+  );
   lines.push(`  3. 或用环境变量固定：WF_ROLE=plan WF_REPO=<repo> claude`);
   lines.push(`  4. 看板: mpt-workflow web --root ${r.root}`);
   return lines.join('\n');
