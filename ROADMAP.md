@@ -43,7 +43,7 @@ feature surface.
 - [x] Release: idempotent publish, prerelease tags, stronger gates, npm docs
   links.
 - [x] Release `0.7.0`.
-- [ ] Release `0.7.1` (operational leftovers).
+- [x] Release `0.7.1` (operational leftovers).
 
 ## Decided
 
