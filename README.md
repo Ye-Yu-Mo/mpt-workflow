@@ -3,14 +3,14 @@
 **A local MCP server, CLI and dashboard that turn a multi-agent, multi-repo
 PLAN → TODO → implement → accept → commit workflow into an enforceable state machine.**
 
-[中文](README.zh-CN.md)
+[中文](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/README.zh-CN.md)
 
 [![CI](https://github.com/Ye-Yu-Mo/mpt-workflow/actions/workflows/ci.yml/badge.svg)](https://github.com/Ye-Yu-Mo/mpt-workflow/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/mpt-workflow.svg)](https://www.npmjs.com/package/mpt-workflow)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D22-brightgreen.svg)](package.json)
 
-> Status: pre-1.0. See [ROADMAP.md](ROADMAP.md) for the current release and
+> Status: pre-1.0. See [ROADMAP.md](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/ROADMAP.md) for the current release and
 > next steps.
 
 ---
@@ -24,7 +24,7 @@ npx mpt-workflow web --root <printed path> --port 7788
 ```
 
 The demo creates everything under `$TMPDIR`; nothing outside it is touched.
-Larger, checked-in workspaces live in [examples/](examples/).
+Larger, checked-in workspaces live in [examples/](https://github.com/Ye-Yu-Mo/mpt-workflow/tree/main/examples/).
 
 ## Why
 
@@ -87,7 +87,7 @@ Three principles:
 - Node.js **22+** (Node 20 reached end-of-life in April 2026)
 - git
 - macOS, Linux, or WSL2. Native Windows is not supported yet — see
-  [docs/platform-support.md](docs/platform-support.md).
+  [docs/platform-support.md](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/docs/platform-support.md).
 - [Claude Code](https://claude.com/claude-code) — the supported MCP client and
   hook host. Other MCP stdio clients can connect, but hook-based enforcement is
   Claude Code-specific.
@@ -103,7 +103,7 @@ demand-driven, post-1.0 option.
 `SessionStart` hooks that enforce the role ACL and commit gate. Other MCP stdio
 clients are not documented yet: without those hooks, only the MCP tools and the
 git pre-commit hook enforce anything. See
-[docs/support-scope.md](docs/support-scope.md) for the reasoning and what would
+[docs/support-scope.md](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/docs/support-scope.md) for the reasoning and what would
 change it.
 
 ## Install
@@ -157,9 +157,9 @@ Every command also works as `npx mpt-workflow <command>`.
 
 | Example | Shows |
 |---|---|
-| [examples/minimal](examples/minimal/) | One repo, two milestones, a question board |
-| [examples/multi-repo](examples/multi-repo/) | Serial `active_repo` lock and umbrella contract docs |
-| [examples/rust](examples/rust/) | `cargo test` evidence and the Cargo ACL entries |
+| [examples/minimal](https://github.com/Ye-Yu-Mo/mpt-workflow/tree/main/examples/minimal/) | One repo, two milestones, a question board |
+| [examples/multi-repo](https://github.com/Ye-Yu-Mo/mpt-workflow/tree/main/examples/multi-repo/) | Serial `active_repo` lock and umbrella contract docs |
+| [examples/rust](https://github.com/Ye-Yu-Mo/mpt-workflow/tree/main/examples/rust/) | `cargo test` evidence and the Cargo ACL entries |
 
 They are parsed by `tests/examples.test.ts`, so the checked-in Markdown cannot
 silently rot.
@@ -345,7 +345,7 @@ as "no milestones", not an error.
 
 ## Safety model
 
-Read [SECURITY.md](SECURITY.md) before running this on a shared machine.
+Read [SECURITY.md](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/SECURITY.md) before running this on a shared machine.
 
 - `evidence_run` executes arbitrary shell commands **as your user**, by design.
   It has the same trust level as your terminal.
@@ -370,16 +370,17 @@ docs/         architecture and requirement notes
 
 ```bash
 npm run typecheck   # tsc --noEmit
+npm run typecheck:tests  # typecheck the test suite too
 npm run lint        # Biome: formatting + lint
 npm run format      # Biome: write safe fixes
 npm test            # runs the 67 tests via tsx
 npm run build       # tsc + copies the dashboard assets into dist/
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow, and
-[docs/architecture.md](docs/architecture.md) for the design rationale.
-Stuck? See [docs/troubleshooting.md](docs/troubleshooting.md).
+See [CONTRIBUTING.md](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/CONTRIBUTING.md) for the full workflow, and
+[docs/architecture.md](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/docs/architecture.md) for the design rationale.
+Stuck? See [docs/troubleshooting.md](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/docs/troubleshooting.md).
 
 ## License
 
-[MIT](LICENSE)
+[MIT](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/LICENSE)

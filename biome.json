@@ -12,6 +12,7 @@
       "scripts/**/*.mjs",
       "package.json",
       "tsconfig.json",
+      "tsconfig.test.json",
       "biome.json"
     ]
   },

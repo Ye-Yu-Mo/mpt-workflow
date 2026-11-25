@@ -28,19 +28,19 @@ feature surface.
   `--evidence-days` for old full evidence logs.
 - [x] `doctor` reports `runtime/` size and stale CLI paths in `.mcp.json` /
   hooks.
-- [x] Quickstart, troubleshooting and 2–3 real examples (`minimal`,
-  `multi-repo`, `rust`).
 - [x] Release `0.6.0`.
 
 ## 0.7 — QA hardening
 
+- [x] Quickstart, troubleshooting and runnable examples (`minimal`,
+  `multi-repo`, `rust`).
 - [x] Permission boundary: MCP role/repo binding, fail-closed hooks,
   enforcement-plane ACL, approval/message ID validation, exact-origin CSRF,
   symlink containment, init repair.
 - [x] Trust chain: latest evidence, commit/scope milestone, diff/approval
   binding, rename parsing, concurrency locks.
 - [x] Dashboard: focus retention and visible write errors.
-- [ ] Release: idempotent publish, prerelease tags, stronger gates, npm docs
+- [x] Release: idempotent publish, prerelease tags, stronger gates, npm docs
   links.
 
 ## Decided

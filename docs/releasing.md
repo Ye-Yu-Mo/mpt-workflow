@@ -63,9 +63,21 @@ npm view mpt-workflow dist-tags
 # { latest: 'X.Y.Z' }
 ```
 
-If you publish manually instead, do not push the same version through the
-workflow: it will fail because the version already exists. Either let the
-workflow publish, or create the tag and GitHub release manually.
+If you publish manually instead, the tag workflow will see the version already
+exists and skip `npm publish`; it will still create the GitHub release.
+
+## Re-runs and prereleases
+
+The publish step checks `npm view mpt-workflow@<version>` first. If the version
+already exists it skips `npm publish` and continues to the GitHub release, so a
+tag run that failed after publishing can be re-run safely.
+
+A version containing `-` (for example `v0.8.0-rc.1`) is published under the
+`next` dist-tag and marked as a prerelease on GitHub. Stable tags use `latest`.
+
+The workflow runs typecheck, test typecheck, lint, build, coverage and
+`npm pack --dry-run` before publishing; `--ignore-scripts` keeps `NPM_TOKEN`
+away from package lifecycle scripts.
 
 ## Troubleshooting
 
@@ -73,7 +85,7 @@ workflow publish, or create the tag and GitHub release manually.
   `npm test`.
 - `E403` during publish: the token lacks 2FA bypass; regenerate it as an
   Automation token or a granular token with bypass 2FA.
-- A failed tag run can be re-run after fixing the secret. If the workflow
-  itself must change, move the tag to a commit containing the fix only when npm
-  and GitHub have no artifact for that version; otherwise bump the patch
-  version.
+- A failed tag run can be re-run after fixing the secret; publish is idempotent.
+- If the workflow itself must change, move the tag to a commit containing the
+  fix only when npm and GitHub have no artifact for that version; otherwise bump
+  the patch version.

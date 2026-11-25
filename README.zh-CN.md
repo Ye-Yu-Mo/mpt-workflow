@@ -1,8 +1,8 @@
 # mpt-workflow
 
-[English](README.md)
+[English](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/README.md)
 
-> 状态：pre-1.0。当前版本与下一步见 [ROADMAP.md](ROADMAP.md)。
+> 状态：pre-1.0。当前版本与下一步见 [ROADMAP.md](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/ROADMAP.md)。
 
 多 agent、多仓开发的**流程状态机**：一个本地 MCP server + 一个只读看板。
 
@@ -43,8 +43,8 @@ mpt-workflow web --root /path/to/workspace --port 7788
 
 源码 checkout 也可以用 `./scripts/demo.sh` 走同样的流程。
 
-更多可复制的工作区见 [examples/](examples/)（minimal / multi-repo / rust）；
-遇到问题先看 [docs/troubleshooting.md](docs/troubleshooting.md)。
+更多可复制的工作区见 [examples/](https://github.com/Ye-Yu-Mo/mpt-workflow/tree/main/examples/)（minimal / multi-repo / rust）；
+遇到问题先看 [docs/troubleshooting.md](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/docs/troubleshooting.md)。
 
 `init` 会做这些事（全部幂等，已存在的文件不覆盖）：
 
@@ -239,7 +239,7 @@ mpt-workflow gc --apply --evidence-days 90   # 同时删除 90 天前的完整�
 **当前只支持 Claude Code**：它提供 `PreToolUse` / `SessionStart` hook，是角色 ACL
 和提交门禁真正的执行边界。其他 MCP stdio 客户端可以连上，但不在支持范围内；没有
 这些 hook 时，只有 MCP 工具和 git pre-commit 还有约束力。详见
-[docs/support-scope.md](docs/support-scope.md)。
+[docs/support-scope.md](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/docs/support-scope.md)。
 
 ## 与现有文档系统的关系
 
@@ -249,7 +249,7 @@ mpt-workflow gc --apply --evidence-days 90   # 同时删除 90 天前的完整�
 
 ## 与设计稿 v0.1 的差异
 
-[docs/design-notes-v0.1.md](docs/design-notes-v0.1.md) 是原始需求稿。实现时有意改了几处，原因见各自条目：
+[docs/design-notes-v0.1.md](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/docs/design-notes-v0.1.md) 是原始需求稿。实现时有意改了几处，原因见各自条目：
 
 | 设计稿 | 这里 | 原因 |
 |---|---|---|
@@ -293,12 +293,12 @@ tests/          node:test
 
 ## 参与贡献
 
-- 开发环境、测试、加一个 MCP 工具的步骤：[CONTRIBUTING.md](CONTRIBUTING.md)
-- 安全模型与漏洞报告：[SECURITY.md](SECURITY.md)
-- 行为准则：[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
-- 变更记录：[CHANGELOG.md](CHANGELOG.md)
-- 架构与设计取舍：[docs/architecture.md](docs/architecture.md)
+- 开发环境、测试、加一个 MCP 工具的步骤：[CONTRIBUTING.md](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/CONTRIBUTING.md)
+- 安全模型与漏洞报告：[SECURITY.md](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/SECURITY.md)
+- 行为准则：[CODE_OF_CONDUCT.md](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/CODE_OF_CONDUCT.md)
+- 变更记录：[CHANGELOG.md](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/CHANGELOG.md)
+- 架构与设计取舍：[docs/architecture.md](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/docs/architecture.md)
 
 ## 许可证
 
-[MIT](LICENSE)
+[MIT](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/LICENSE)

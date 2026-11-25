@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Release pipeline.** `npm publish` is idempotent (a re-run skips an existing
+  version and still creates the GitHub release); prerelease tags use the `next`
+  dist-tag; the release gate now runs test typecheck, lint, coverage, version
+  sync and `npm pack --dry-run`; checkout no longer persists credentials and
+  publish uses `--ignore-scripts` so the npm token is not exposed to lifecycle
+  scripts.
+- **Packaging/docs.** The lockfile uses the canonical npm registry, the npm
+  README is English and its cross-document links are absolute, and the
+  CONTRIBUTING/platform/support-scope docs match the actual Node/CI/platform
+  matrix. Tests are typechecked in CI.
 - **Dashboard refresh.** Auto-refresh no longer steals focus; it aborts the
   render if typing starts while requests are in flight, queues reloads instead
   of dropping them, isolates doctor/events failures, and keeps the open
