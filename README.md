@@ -9,6 +9,8 @@ PLAN → TODO → implement → accept → commit workflow into an enforceable s
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D22-brightgreen.svg)](package.json)
 
+> Status: pre-1.0. The hardening work is in review; see [ROADMAP.md](ROADMAP.md).
+
 ---
 
 ## Why
