@@ -10,7 +10,7 @@ feature surface.
 - [x] Package as `mpt-workflow` with `mpt-workflow` / `mpt` binaries.
 - [x] Coverage gate, CodeQL, macOS CI and a pack/install smoke job.
 - [x] Tag-driven release workflow with npm provenance.
-- [ ] Merge the hardening PRs (#5, #6).
+- [x] Merge the hardening PRs (#5, #6).
 - [ ] Publish `0.4.0` and create the first GitHub release.
 - [ ] Verify `npx mpt-workflow init` on a clean machine.
 
