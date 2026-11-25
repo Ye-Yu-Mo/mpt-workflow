@@ -14,7 +14,7 @@
   --card: #ffffff;
   --ink: #0b0b0b;
   --ink-2: #52514e;
-  --muted: #898781;
+  --muted: #6f6e69;
   --grid: #e1e0d9;
   --line: #c3c2b7;
   --ring: rgba(11,11,11,0.10);
@@ -23,7 +23,7 @@
   --violet: #6250d6;
   --good: #0ca30c;
   --critical: #d03b3b;
-  --serious: #ec835a;
+  --serious: #b5522e;
   --warning: #fab219;
   --good-text: #006300;
   --track: #f0efec;
@@ -36,7 +36,7 @@
     --card: #1a1a19;
     --ink: #f0efec;
     --ink-2: #c3c2b7;
-    --muted: #898781;
+    --muted: #a3a19a;
     --grid: #2c2c2a;
     --line: #383835;
     --ring: rgba(255,255,255,0.10);
@@ -45,7 +45,7 @@
     --violet: #9085e9;
     --good: #0ca30c;
     --critical: #e66767;
-    --serious: #ec835a;
+    --serious: #f0a07a;
     --warning: #fab219;
     --good-text: #0ca30c;
     --track: #262624;
@@ -58,7 +58,7 @@
   --card: #1a1a19;
   --ink: #f0efec;
   --ink-2: #c3c2b7;
-  --muted: #898781;
+  --muted: #a3a19a;
   --grid: #2c2c2a;
   --line: #383835;
   --ring: rgba(255,255,255,0.10);
@@ -67,7 +67,7 @@
   --violet: #9085e9;
   --good: #0ca30c;
   --critical: #e66767;
-  --serious: #ec835a;
+  --serious: #f0a07a;
   --warning: #fab219;
   --good-text: #0ca30c;
   --track: #262624;
@@ -284,6 +284,19 @@ details.ms-detail[open] summary::before { content: "▾"; }
 }
 .banner[hidden] { display: none; }
 .banner .grow { flex: 1; min-width: 200px; }
+.toast {
+  position: fixed; right: 20px; bottom: 20px; z-index: 60;
+  max-width: min(440px, calc(100vw - 40px));
+  background: color-mix(in srgb, var(--critical) 10%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--critical) 40%, transparent);
+  color: var(--ink); border-radius: 10px; padding: 10px 14px;
+  font-size: 13px; box-shadow: 0 10px 30px rgba(0,0,0,.15);
+}
+.toast.ok {
+  background: color-mix(in srgb, var(--good) 10%, var(--card));
+  border-color: color-mix(in srgb, var(--good) 40%, transparent);
+}
+.toast[hidden] { display: none; }
 .pill input[type="checkbox"] { margin: 0; }
 .msg-filters { display: flex; gap: 6px; padding: 9px 16px; border-bottom: 1px solid var(--grid); flex-wrap: wrap; }
 .msg-help {
@@ -432,9 +445,11 @@ details.ms-detail[open] summary::before { content: "▾"; }
     <span>本地看板（仅 127.0.0.1）· 写操作：回答/关闭问题、批准提交、ack 消息、切换 active repo</span>
     <span>数据源：Markdown + .workflow/runtime</span>
     <span id="auto-state" aria-live="polite"></span>
-    <span id="generated" aria-live="polite"></span>
+    <span id="generated"></span>
   </div>
 </div>
+
+<div id="toast" class="toast" hidden role="alert"></div>
 
 <div id="modal" class="modal" hidden>
   <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
@@ -450,6 +465,7 @@ details.ms-detail[open] summary::before { content: "▾"; }
 const $ = (s, el = document) => el.querySelector(s);
 const el = (tag, cls, html) => { const n = document.createElement(tag); if (cls) n.className = cls; if (html != null) n.innerHTML = html; return n; };
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+const shellQuote = (s) => "'" + String(s).replace(/'/g, "'\\''") + "'";
 
 const STATE = {
   planned:      { label: '草稿',   sym: '○' },
@@ -466,23 +482,45 @@ let data = null;
 let showClosed = false;
 let messagesData = { unread: 0, blocking: [], messages: [] };
 let messageFilter = 'unread';
-let autoRefresh = localStorage.getItem('wf-auto') !== 'off';
+let autoRefresh = storeGet('wf-auto') !== 'off';
 let openDetail = null;
 let modalOpen = false;
 let lastFocus = null;
 let loading = false;
+let reloadQueued = false;
+let toastTimer = null;
 const drafts = new Map();
 const openForms = new Set();
 
+function storeGet(key) {
+  try { return localStorage.getItem(key); } catch { return null; }
+}
+function storeSet(key, value) {
+  try { localStorage.setItem(key, value); } catch { /* storage may be blocked */ }
+}
+
 async function get(path) {
-  const r = await fetch(path);
-  if (!r.ok) throw new Error(await r.text());
-  return r.json();
+  return fetchJson(path);
 }
 async function post(path, body) {
-  const r = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-  if (!r.ok) throw new Error(await r.text());
-  return r.json();
+  return fetchJson(path, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+async function fetchJson(path, init = {}) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error('请求超时')), 15000);
+  });
+  try {
+    const r = await Promise.race([fetch(path, init), timeout]);
+    if (!r.ok) throw new Error(await r.text());
+    return await r.json();
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function ago(ts) {
@@ -497,9 +535,28 @@ function ago(ts) {
 }
 
 function isEditing() {
+  if (openDetail || modalOpen) return true;
   const a = document.activeElement;
   if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return true;
+  if (a && a.closest && a.closest('.q')) return true;
   return !!document.querySelector('.q-form.open');
+}
+
+/** Best-effort focus key so a re-render can put the keyboard back. */
+function captureFocus() {
+  const a = document.activeElement;
+  if (!a || a === document.body) return null;
+  for (const attr of ['data-filter', 'data-ms', 'data-approval', 'data-ack', 'data-read', 'data-diff', 'data-approve']) {
+    const v = a.getAttribute(attr);
+    if (v) {
+      return () => {
+        const next = [...document.querySelectorAll(`[${attr}]`)].find((n) => n.getAttribute(attr) === v);
+        next?.focus();
+      };
+    }
+  }
+  if (a.id) return () => document.getElementById(a.id)?.focus();
+  return null;
 }
 
 function updateAutoState() {
@@ -518,6 +575,16 @@ function showError(msg) {
 
 function hideError() {
   $('#error').hidden = true;
+}
+
+function showToast(msg, kind = 'error') {
+  const box = $('#toast');
+  if (!box) return;
+  box.textContent = msg;
+  box.className = kind === 'ok' ? 'toast ok' : 'toast';
+  box.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { box.hidden = true; }, 6000);
 }
 
 async function copyText(text, btn) {
@@ -608,11 +675,27 @@ function renderRepos(st) {
     const head = el('div', 'repo-head');
     head.innerHTML = `
       <h3>${esc(r.id)}</h3>
-      ${st.activeRepo === r.id ? '<span class="pill active"><span class="dot"></span>active</span>' : ''}
+      ${st.activeRepo === r.id
+        ? '<span class="pill active"><span class="dot"></span>active</span>'
+        : `<button class="btn ghost" data-activate="${esc(r.id)}">设为 active</button>`}
       <span class="repo-meta">${esc(r.git.branch || '?')}@${esc(r.git.shortHead || '?')}
         ${r.git.dirty ? '<span class="dirty"> · dirty ' + (r.git.changed.length + r.git.untracked.length) + '</span>' : ''}
       </span>
       <span class="repo-meta" style="margin-left:auto">${done}/${total} M</span>`;
+    const activate = head.querySelector('[data-activate]');
+    if (activate) {
+      activate.onclick = async () => {
+        activate.disabled = true;
+        try {
+          await post('/api/activate', { repo: r.id });
+          showToast(`active repo = ${r.id}`, 'ok');
+          await load();
+        } catch (e) {
+          showToast('激活失败：' + e.message);
+          activate.disabled = false;
+        }
+      };
+    }
     wrap.appendChild(head);
 
     const meter = el('div', 'meter');
@@ -625,6 +708,7 @@ function renderRepos(st) {
       const b = el('button', 'ms ' + m.status);
       b.innerHTML = `<span class="sy">${s.sym}</span><span class="id">${esc(m.id)}</span><span>${s.label}</span>`;
       b.title = m.title + (m.sha ? ' · ' + m.sha : '');
+      b.dataset.ms = `${r.id}:${m.id}`;
       b.setAttribute('aria-label', `${m.id} ${m.title} · ${s.label}`);
       b.onclick = () => toggleDetail(wrap, r, m, b);
       track.appendChild(b);
@@ -739,15 +823,15 @@ function renderQuestions(st) {
       ${q.recommendation ? '<div class="q-rec">建议：' + esc(q.recommendation) + '</div>' : ''}
       ${q.answer ? '<div class="q-rec" style="border-color:var(--good)">回答：' + esc(q.answer) + '</div>' : ''}
       <div class="q-actions">
-        ${q.status !== 'closed' ? '<button class="btn primary" data-act="answer">回答</button>' : ''}
+        ${q.status !== 'closed' ? `<button class="btn primary" data-act="answer" aria-expanded="${openForms.has(q.id)}" aria-controls="q-form-${esc(q.id)}">回答</button>` : ''}
         ${q.recommendation && q.status !== 'closed' ? '<button class="btn" data-act="rec">采纳建议</button>' : ''}
         ${q.status !== 'closed' ? '<button class="btn" data-act="close">关闭</button>' : ''}
         <button class="btn ghost" data-act="expand">展开/收起</button>
         <button class="btn ghost" data-act="relay">复制转发文本</button>
       </div>
-      <div class="q-form${openForms.has(q.id) ? ' open' : ''}">
-        <textarea placeholder="写下决定（会写入 docs/agent-questions.md 的 answer 字段）">${esc(draft.answer)}</textarea>
-        <input placeholder="resolution（回写 PLAN/TODO/decisions 的位置，可选）" value="${esc(draft.resolution)}" />
+      <div class="q-form${openForms.has(q.id) ? ' open' : ''}" id="q-form-${esc(q.id)}">
+        <textarea aria-label="回答内容" placeholder="写下决定（会写入 docs/agent-questions.md 的 answer 字段）">${esc(draft.answer)}</textarea>
+        <input aria-label="resolution 位置" placeholder="resolution（回写 PLAN/TODO/decisions 的位置，可选）" value="${esc(draft.resolution)}" />
         <div class="row"><button class="btn primary" data-act="submit">提交回答</button><span class="repo-meta" data-msg></span></div>
       </div>`;
     const form = n.querySelector('.q-form');
@@ -771,6 +855,7 @@ function renderQuestions(st) {
         if (act === 'answer') {
           const opening = !form.classList.contains('open');
           form.classList.toggle('open', opening);
+          b.setAttribute('aria-expanded', String(opening));
           if (opening) { openForms.add(q.id); ta.focus(); }
           else openForms.delete(q.id);
           return;
@@ -778,6 +863,7 @@ function renderQuestions(st) {
         if (act === 'rec') {
           openForms.add(q.id);
           form.classList.add('open');
+          n.querySelector('[data-act="answer"]')?.setAttribute('aria-expanded', 'true');
           ta.value = q.recommendation || '';
           sync();
           ta.focus();
@@ -786,16 +872,21 @@ function renderQuestions(st) {
         try {
           if (act === 'close') {
             await post(`/api/question/${encodeURIComponent(q.id)}/close`, {});
+            showToast(`已关闭 ${q.id}`, 'ok');
           } else {
             const answer = ta.value.trim();
             const resolution = input.value.trim();
             if (!answer) { msg.textContent = '先写回答'; ta.focus(); return; }
             await post(`/api/question/${encodeURIComponent(q.id)}/answer`, { answer, resolution });
+            showToast(`已回答 ${q.id}`, 'ok');
           }
           drafts.delete(q.id);
           openForms.delete(q.id);
           await load();
-        } catch (e) { msg.textContent = '失败：' + e.message; }
+        } catch (e) {
+          showToast('失败：' + e.message);
+          if (form.classList.contains('open')) msg.textContent = '失败：' + e.message;
+        }
       };
     });
     box.appendChild(n);
@@ -819,10 +910,16 @@ function renderMessageFilters() {
   const box = $('#message-filters');
   const defs = [['unread', '未读'], ['blocking', 'blocking'], ['all', '全部']];
   box.innerHTML = defs
-    .map(([k, label]) => `<button class="chip${messageFilter === k ? ' active' : ''}" data-filter="${k}">${label}</button>`)
+    .map(([k, label]) => `<button class="chip${messageFilter === k ? ' active' : ''}" data-filter="${k}" aria-pressed="${messageFilter === k}">${label}</button>`)
     .join('');
   box.querySelectorAll('[data-filter]').forEach(b => {
-    b.onclick = () => { messageFilter = b.dataset.filter; renderMessages(); };
+    b.onclick = () => {
+      messageFilter = b.dataset.filter;
+      renderMessages();
+      [...document.querySelectorAll('[data-filter]')]
+        .find((x) => x.dataset.filter === messageFilter)
+        ?.focus();
+    };
   });
 }
 
@@ -830,7 +927,11 @@ function renderMessages() {
   renderMessageFilters();
   const box = $('#messages');
   box.innerHTML = '';
-  const all = messagesData.messages || [];
+  const all = [];
+  const seen = new Set();
+  for (const m of [...(messagesData.messages || []), ...(messagesData.blocking || [])]) {
+    if (m && !seen.has(m.id)) { seen.add(m.id); all.push(m); }
+  }
   const list = all.filter(m => {
     if (messageFilter === 'all') return true;
     if (messageFilter === 'blocking') return m.blocking && !['acked', 'expired'].includes(m.status);
@@ -872,18 +973,18 @@ function renderMessages() {
     if (ap) ap.onclick = () => {
       const a = (window.__approvals || []).find(x => x.id === ap.dataset.approval);
       if (a) openDiff(a);
-      else showError(`审批 ${ap.dataset.approval} 不存在或已使用`);
+      else showToast(`审批 ${ap.dataset.approval} 不存在或已使用`);
     };
     const ack = r.querySelector('[data-ack]');
     if (ack) ack.onclick = async () => {
       ack.disabled = true;
       try { await post(`/api/message/${encodeURIComponent(m.id)}/ack`, {}); await load(); }
-      catch (e) { showError(e.message); ack.disabled = false; }
+      catch (e) { showToast(e.message); ack.disabled = false; }
     };
     const rd = r.querySelector('[data-read]');
     if (rd) rd.onclick = async () => {
       try { await post(`/api/message/${encodeURIComponent(m.id)}/read`, {}); await load(); }
-      catch (e) { showError(e.message); }
+      catch (e) { showToast(e.message); }
     };
     box.appendChild(r);
   }
@@ -899,8 +1000,8 @@ function renderNext(st) {
   }
   for (const n of st.next) {
     const cmd = n.actor === 'user'
-      ? `mpt-workflow web --root ${JSON.stringify(st.root)}`
-      : `WF_ROLE=${n.actor}${n.repo ? ` WF_REPO=${n.repo}` : ''} claude`;
+      ? `mpt-workflow web --root ${shellQuote(st.root)}`
+      : `WF_ROLE=${n.actor}${n.repo ? ` WF_REPO=${shellQuote(n.repo)}` : ''} claude`;
     const r = el('div', 'row-item');
     r.innerHTML = `
       <span class="next-actor">${esc(n.actor)}</span>
@@ -953,7 +1054,7 @@ async function openDiff(a) {
       btn.disabled = true;
       btn.textContent = '批准中…';
       try { await post('/api/approve', { id: a.id }); closeModal(); await load(); }
-      catch (e) { btn.disabled = false; btn.textContent = '批准提交'; showError(e.message); }
+      catch (e) { btn.disabled = false; btn.textContent = '批准提交'; showToast(e.message); }
     };
   } catch (e) {
     $('#modal-body').innerHTML = '<div class="empty">加载 diff 失败：' + esc(e.message) + '</div>';
@@ -990,7 +1091,7 @@ function renderApprovals() {
       b.disabled = true;
       b.textContent = '批准中…';
       try { await post('/api/approve', { id: a.id }); await load(); }
-      catch (e) { showError(e.message); b.disabled = false; b.textContent = '批准提交'; }
+      catch (e) { showToast(e.message); b.disabled = false; b.textContent = '批准提交'; }
     };
     box.appendChild(r);
   }
@@ -1025,13 +1126,23 @@ function renderTimeline(events) {
 }
 
 async function load(opts = {}) {
-  if (loading) return;
+  if (loading) {
+    reloadQueued = true;
+    return;
+  }
   loading = true;
   const y = window.scrollY;
+  const restoreFocus = captureFocus();
   try {
-    const [st, approvals, events, doctor, messages] = await Promise.all([
-      get('/api/status'), get('/api/approvals'), get('/api/events?limit=120'), get('/api/doctor'),
+    const [st, approvals, messages] = await Promise.all([
+      get('/api/status'), get('/api/approvals'),
       get('/api/messages?role=user&all=1&limit=100'),
+    ]);
+    // Someone started typing while the requests were in flight: do not replace
+    // the focused DOM. The next tick will retry.
+    if (opts.auto && isEditing()) return;
+    const [eventsRes, doctorRes] = await Promise.allSettled([
+      get('/api/events?limit=120'), get('/api/doctor'),
     ]);
     data = st;
     window.__approvals = approvals;
@@ -1042,16 +1153,25 @@ async function load(opts = {}) {
     renderMessages();
     renderNext(st);
     renderApprovals();
-    renderDoctor(doctor);
-    renderTimeline(events);
-    hideError();
+    renderDoctor(doctorRes.status === 'fulfilled' ? doctorRes.value : []);
+    renderTimeline(eventsRes.status === 'fulfilled' ? eventsRes.value : []);
+    if (eventsRes.status === 'rejected' || doctorRes.status === 'rejected') {
+      showToast('部分面板加载失败（doctor/events）');
+    } else {
+      hideError();
+    }
     $('#generated').textContent = '更新于 ' + new Date(st.generatedAt).toLocaleTimeString();
     if (!opts.silent && y > 0) { try { window.scrollTo(0, y); } catch { /* jsdom/no-op */ } }
   } catch (e) {
     showError('加载失败：' + e.message);
   } finally {
     loading = false;
+    restoreFocus?.();
     updateAutoState();
+    if (reloadQueued) {
+      reloadQueued = false;
+      void load(opts);
+    }
   }
 }
 
@@ -1059,7 +1179,7 @@ const autoBox = $('#autorefresh');
 autoBox.checked = autoRefresh;
 autoBox.onchange = () => {
   autoRefresh = autoBox.checked;
-  localStorage.setItem('wf-auto', autoRefresh ? 'on' : 'off');
+  storeSet('wf-auto', autoRefresh ? 'on' : 'off');
   updateAutoState();
 };
 
@@ -1070,16 +1190,18 @@ $('#theme').onclick = () => {
   const cur = document.documentElement.getAttribute('data-theme');
   const next = cur === 'dark' ? 'light' : cur === 'light' ? 'dark' : (matchMedia('(prefers-color-scheme: dark)').matches ? 'light' : 'dark');
   document.documentElement.setAttribute('data-theme', next);
-  localStorage.setItem('wf-theme', next);
+  storeSet('wf-theme', next);
 };
 $('#modal-close').onclick = closeModal;
 $('#modal').addEventListener('click', (e) => { if (e.target === $('#modal')) closeModal(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
 document.addEventListener('visibilitychange', () => {
   updateAutoState();
-  if (document.visibilityState === 'visible' && autoRefresh && !isEditing() && !modalOpen) load({ silent: true });
+  if (document.visibilityState === 'visible' && autoRefresh && !isEditing() && !modalOpen) {
+    load({ silent: true, auto: true });
+  }
 });
-const saved = localStorage.getItem('wf-theme');
+const saved = storeGet('wf-theme');
 if (saved) document.documentElement.setAttribute('data-theme', saved);
 
 load();
@@ -1088,7 +1210,7 @@ setInterval(() => {
     updateAutoState();
     return;
   }
-  load({ silent: true });
+  load({ silent: true, auto: true });
 }, 15000);
 </script>
 </body>

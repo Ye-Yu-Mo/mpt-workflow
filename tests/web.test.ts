@@ -92,6 +92,12 @@ test('dashboard renders from a live API', async () => {
       await new Promise((r) => setTimeout(r, 50));
     }
 
+    assert.equal(
+      errors.length,
+      0,
+      'no runtime errors: ' + errors.map((e) => e.stack || e.message).join('; '),
+    );
+
     const hero = doc.querySelector('#hero-num')?.textContent;
     assert.ok(hero && hero !== '–', 'hero number rendered');
     assert.match(

@@ -279,14 +279,17 @@ mpt-workflow watch --role main
   adopt the recommendation, or copy a relay message
 - message panel with read/ack and **未读 / blocking / 全部** filters
 - pending commit approvals with a **diff review** (file list, stat, unified
-  diff) before you approve
+  diff) before you approve; a changed worktree is flagged and approval is
+  disabled
 - copyable agent session command (`WF_ROLE=… WF_REPO=… claude`) for each next
-  action
+  action, and a **设为 active** control on each repo card
 - environment checks and an event timeline
+- inline write errors (a fixed toast), so a failed ack/answer/approve is visible
 
 The dashboard auto-refreshes every 15 seconds, but **pauses while you are
 typing or reviewing a milestone**, preserves drafts and the open milestone
-detail, and shows a retry banner if the API fails.
+detail, restores focus after a refresh, and shows a retry banner if the API
+fails.
 
 The only write actions are: answer/close a question, approve a commit, ack a
 message, switch the active repo.

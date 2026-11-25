@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Dashboard refresh.** Auto-refresh no longer steals focus; it aborts the
+  render if typing starts while requests are in flight, queues reloads instead
+  of dropping them, isolates doctor/events failures, and keeps the open
+  milestone/filters usable.
+- **Dashboard feedback.** Write failures appear in a fixed toast (not a hidden
+  form or an off-screen banner); stale approvals are flagged and cannot be
+  approved; blocking messages are always merged into the list even past the
+  100-message cap; repos can be activated from their card.
+- **Dashboard access.** `localStorage` failures no longer blank the page;
+  question/message controls have labels and expanded states; low-contrast
+  muted/serious tokens were darkened; copied session commands are shell-quoted.
 - **Acceptance gate.** `milestone_accept` now requires the latest evidence entry
   to pass; an older success can no longer hide a newer failing command.
 - **Commit scope and approvals.** The commit uses the accepted milestone's TODO
