@@ -19,10 +19,7 @@ feature surface.
 - [x] Dashboard UX: diff review before approve, draft-safe refresh, message
       filters, copyable session commands, onboarding empty states.
 - [x] `mpt-workflow demo` and `--version`; npx-stable init configuration.
-- English model-facing contract (MCP tool descriptions and server instructions);
-  decide the locale strategy for CLI output and the dashboard.
 - [x] Biome lint + formatter (`npm run lint` in CI).
-- More MCP clients in the docs (Cursor, Codex CLI, VS Code).
 
 ## 0.6 — operations
 
@@ -35,12 +32,20 @@ feature surface.
   `multi-repo`, `rust`).
 - [x] Release `0.6.0`.
 
+## Decided
+
+- [x] **Language**: Chinese-first for the 0.x line. English README for discovery;
+      no partial translation. A locale layer is demand-driven, post-1.0.
+- [x] **Client support**: Claude Code only for 0.x. Other MCP stdio clients are
+      demand-driven; see [docs/support-scope.md](docs/support-scope.md).
+- [x] **Platform**: macOS / Linux / WSL2 for now; native Windows is deferred.
+
 ## 1.0 — stable contract
 
 - Freeze tool names/schemas and the `program.yaml` schema, with migrations.
 - Prove the release train across at least three releases.
 - Explicit deprecation policy and upgrade guide.
-- Decide native Windows support from demand and CI feasibility.
+- Revisit native Windows only if demand and CI feasibility justify it.
 
 ## Not planned
 
