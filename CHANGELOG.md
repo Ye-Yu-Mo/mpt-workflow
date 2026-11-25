@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Umbrella (`root`) commit approvals.** The workspace root can be committed
+  through the normal one-shot approval flow using the sentinel repo id `root`
+  (`commit_request(repo="root")` → user approve → `commit(repo="root")`, or omit
+  `repo` when the MCP process runs at the root). Only `main`/`user` may do it;
+  `plan`/`todo` are refused. Root commits are restricted to `CLAUDE.md`,
+  `docs/**`, `milestone/**`, `.workflow/program.yaml` and `.workflow/.gitignore`;
+  component contents, nested repositories/gitlinks, runtime state, `.mcp.json`,
+  `.claude/**` and `.git/**` are rejected before staging. Approvals bind both
+  the working-tree and staged hashes, and a changed tree makes them stale. The
+  dashboard labels root approvals and shows root diffs; Bash `git commit` stays
+  blocked for agents and nothing is ever pushed.
+
 ## [0.7.1] - 2026-11-25
 
 ### Fixed

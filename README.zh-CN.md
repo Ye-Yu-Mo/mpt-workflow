@@ -124,6 +124,7 @@ MCP 工具：`inbox` / `read_message` / `ack_message` / `wait_message` /
 - `phase_activate(repo="my-service")` —— 串行锁，一次只激活一个仓。
 - `ask(to="user", ...)` —— 需要用户拍板时提问。
 - 写伞仓 `docs/`、`CLAUDE.md`、`decisions` —— 直接用 Edit/Write，不需要经过工具。
+- 提交伞仓文档：`commit_request(repo="root")` → 用户批准 → `commit(repo="root")`。
 - **不写源码**（hook 会拦）。
 
 ### 3. PLAN agent（plan）
@@ -169,6 +170,35 @@ agent: commit(approval="ap-xxx")
 - 审批是**防误操作**，不是防恶意：同机同用户，agent 理论上能绕过。
   真正的护栏是 hook + 你 review diff 的习惯。
 
+### 伞仓（`root`）提交
+
+工作流根目录通常自己也是一个 git 仓库，存放伞仓文档。它用哨兵仓库 id **`root`**
+寻址：`root` 不会出现在 `program.yaml.repos` 里，也没有 PLAN/TODO/里程碑状态。
+
+```bash
+# 在伞仓根目录、main 角色下：
+commit_request(repo="root", message="docs: update umbrella contracts")
+# 用户在看板批准，或：mpt-workflow approve ap-...
+commit(repo="root", approval="ap-...")
+```
+
+MCP 进程就在伞仓根目录运行时，`repo` 可以省略。只有 `main` / `user` 能提交伞仓，
+`plan` / `todo` 会被拒绝；提交 `root` 也不会改变会话绑定的仓库。
+
+伞仓提交只允许以下路径：
+
+| 允许 | 用途 |
+|---|---|
+| `CLAUDE.md` | 伞仓 agent 指令 |
+| `docs/**` | 伞仓文档 |
+| `milestone/**` | 跨仓里程碑与契约 |
+| `.workflow/program.yaml` | 程序配置（受版本管理） |
+| `.workflow/.gitignore` | 让 `runtime/` 不进 git |
+
+其他路径会在暂存前被拒绝：子仓内容、嵌套仓库/gitlink、`.workflow/runtime/**`、
+`.mcp.json`、`.claude/**`、`.git/**` 以及临时文件。审批同样绑定工作区 hash 和
+暂存区 hash，批准后再改动会失效。伞仓提交只在本地完成，`git push` 始终由用户执行。
+
 ## 状态存在哪
 
 **Markdown 是唯一事实源**（可 git diff、可 review）：
@@ -196,7 +226,7 @@ agent: commit(approval="ap-xxx")
 | `evidence_run` | todo/plan/main | 执行命令并记录证据 |
 | `milestone_accept` / `milestone_reject` | plan/main | 验收 / 打回 |
 | `scope_check` | 全部 | 改动 vs ACL + TODO 文件清单 |
-| `commit_request` / `commit` | 全部 | 提交审批与执行 |
+| `commit_request` / `commit` | 全部（root：main/user） | 提交审批与执行 |
 | `phase_activate` | main/user | 激活仓（串行锁） |
 | `send_message` / `inbox` / `read_message` / `ack_message` | 全部（按 ACL） | 定向消息 |
 | `wait_message` | 全部 | 长轮询等新消息（30–120s） |

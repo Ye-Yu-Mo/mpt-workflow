@@ -1,9 +1,10 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import { describeAcl } from '../core/acl.js';
-import { loadConfig } from '../core/config.js';
+import { loadConfig, ROOT_REPO_ID } from '../core/config.js';
 import { setRoleLease } from '../core/hooks.js';
 import {
   type Actor,
@@ -122,7 +123,10 @@ function statusText(wf: Workflow, role: Role | null, repo: string | null): strin
 /* --------------------------------------------------------------------- */
 
 function buildTools(_opts: ServerOptions): ToolSpec[] {
-  const repoParam = z.string().optional().describe('仓库 id；默认用绑定仓或 active repo');
+  const repoParam = z
+    .string()
+    .optional()
+    .describe('仓库 id；默认用绑定仓或 active repo；`root` 表示伞仓文档');
   const msParam = z.string().describe('里程碑编号，如 M2');
 
   const tools: ToolSpec[] = [
@@ -786,7 +790,7 @@ function buildTools(_opts: ServerOptions): ToolSpec[] {
         milestone: msParam.optional().describe('要提交的里程碑；默认取已验收待提交的 M'),
       },
       handler: (args, ctx) => {
-        const repo = requireRepo(args, ctx);
+        const repo = commitRepo(args, ctx);
         const r = ctx.wf.requestCommit({
           repoId: repo,
           message: String(args.message),
@@ -814,7 +818,7 @@ function buildTools(_opts: ServerOptions): ToolSpec[] {
         dry_run: z.boolean().optional(),
       },
       handler: (args, ctx) => {
-        const repo = requireRepo(args, ctx);
+        const repo = commitRepo(args, ctx);
         const r = ctx.wf.commitApproved({
           repoId: repo,
           approvalId: String(args.approval),
@@ -867,6 +871,32 @@ function requireRepo(args: Record<string, unknown>, ctx: Ctx): string {
   if (!repo) throw new Error('需要指定 repo（或先 bootstrap 绑定仓库）');
   ctx.wf.repoRef(repo);
   return repo;
+}
+
+/** Same directory after symlink resolution (macOS /var vs /private/var). */
+function sameDir(a: string, b: string): boolean {
+  const real = (p: string): string => {
+    try {
+      return fs.realpathSync(p);
+    } catch {
+      return path.resolve(p);
+    }
+  };
+  return real(a) === real(b);
+}
+
+/** Commit target: explicit repo, root+cwd when omitted, or the usual default. */
+function commitRepo(args: Record<string, unknown>, ctx: Ctx): string {
+  const explicit = typeof args.repo === 'string' ? args.repo : undefined;
+  if (
+    !explicit &&
+    ctx.role !== 'plan' &&
+    ctx.role !== 'todo' &&
+    sameDir(process.cwd(), ctx.wf.root)
+  ) {
+    return ROOT_REPO_ID;
+  }
+  return requireRepo(args, ctx);
 }
 
 function meActor(ctx: Ctx): Actor {

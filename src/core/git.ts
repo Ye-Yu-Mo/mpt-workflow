@@ -123,6 +123,18 @@ export function workingTreeOid(repoAbs: string): string {
   return tree.out.trim();
 }
 
+/** Paths whose old or new index mode is a gitlink (nested repository). */
+export function gitlinkPaths(repoAbs: string): string[] {
+  const r = git(repoAbs, ['diff', '--raw', 'HEAD']);
+  if (!r.ok) return [];
+  const out: string[] = [];
+  for (const line of r.out.split('\n')) {
+    const m = /^:(\d{6}) (\d{6}) [0-9a-f]+ [0-9a-f]+ [A-Z]\d*\t(.+)$/.exec(line);
+    if (m && (m[1] === '160000' || m[2] === '160000')) out.push(m[3]);
+  }
+  return out;
+}
+
 export function stageAll(repoAbs: string): GitResult {
   return git(repoAbs, ['add', '-A']);
 }

@@ -112,7 +112,9 @@ agent commits through the MCP tool after the human approval.
 The role is **self-declared**: the MCP process is per-session (stdio), so
 `bootstrap(role, repo)` scopes that process. It prevents accidental
 cross-role work; it is not authentication. Concurrent sessions should pass
-`WF_ROLE`/`WF_REPO` so the hook process sees the same role.
+`WF_ROLE`/`WF_REPO` so the hook process sees the same role. The umbrella root
+(`root`) is a sentinel, not a configured repo: it has no planning milestone and
+only `main`/`user` may commit it.
 
 ## 5. Enforcement
 
@@ -156,6 +158,15 @@ working-tree hash and a staged-tree hash in the approval. `approve` refuses a
 stale worktree; `commit` re-checks the staged hash before the local commit, so
 the approval always refers to what the user reviewed. The approval is
 single-use and local-only; there is no push path.
+
+The umbrella root is committed through the same flow with the sentinel id
+`root`. It is not a configured repo (no PLAN/TODO/milestone, not eligible as
+`active_repo`), and only `main`/`user` may request or execute it. Its scope is a
+strict allowlist — `CLAUDE.md`, `docs/**`, `milestone/**`,
+`.workflow/program.yaml`, `.workflow/.gitignore` — checked before staging and
+again before committing; nested repositories (gitlinks in `git diff --raw`),
+component contents, runtime state, `.mcp.json` and `.claude/**` are refused. The
+approval still binds the working-tree and staged hashes.
 
 ## 7. Messages
 

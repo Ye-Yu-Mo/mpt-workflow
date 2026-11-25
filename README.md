@@ -188,6 +188,10 @@ touched. From a source checkout, `./scripts/demo.sh` does the same.
 | `todo` | `todo@repo` | anything in the bound repo | `PLAN.md`, `TODO-*.md`, umbrella |
 | `user` | `user` | everything (final authority) | — |
 
+The umbrella root is a **sentinel** (`root`), not a configured repo: no role can
+plan or implement there, and only `main`/`user` may commit its docs (see
+[Umbrella (`root`) commits](#umbrella-root-commits)).
+
 Declare the role per session. **Use environment variables when sessions run
 concurrently** — the on-disk lease is machine-wide:
 
@@ -233,6 +237,39 @@ lands. `commit_request` stages the tree to bind the approval to exactly that
 content; the MCP `commit` re-checks the staged hash. Agent Bash calls to
 `git commit` / `git push` (and `mpt-workflow approve|commit`) are refused by the
 hook; commits go through the MCP tool, and the human pushes.
+
+### Umbrella (`root`) commits
+
+The workspace root is usually its own git repository holding the umbrella
+documents. It is addressed with the sentinel repo id **`root`**, which is never
+listed in `program.yaml.repos` and has no PLAN/TODO/milestone state:
+
+```bash
+# from the root, with role main:
+commit_request(repo="root", message="docs: update umbrella contracts")
+# user approves in the dashboard or: mpt-workflow approve ap-...
+commit(repo="root", approval="ap-...")
+```
+
+`repo` may be omitted when the MCP process runs at the umbrella root. Only
+`main` and `user` may commit it — `plan`/`todo` are refused, and `root` does not
+change the repo binding of a session.
+
+A root commit may contain **only** these paths:
+
+| Allowed | Purpose |
+|---|---|
+| `CLAUDE.md` | umbrella agent instructions |
+| `docs/**` | umbrella documentation |
+| `milestone/**` | cross-repo milestones and contracts |
+| `.workflow/program.yaml` | program config (tracked) |
+| `.workflow/.gitignore` | keeps `runtime/` untracked |
+
+Anything else is refused before staging: component-repo contents, nested
+repositories/gitlinks, `.workflow/runtime/**`, `.mcp.json`, `.claude/**`, `.git/**`
+and ad-hoc files. The approval is bound to the working tree and staged hashes
+like any other commit; a later edit makes it stale. Root commits are local only;
+`git push` stays a human action.
 
 ## Messaging and notifications
 
@@ -321,7 +358,7 @@ state threshold.
 | `evidence_run` | todo, plan, main | execute a command, record exit code + tree oid + output |
 | `milestone_accept` / `milestone_reject` | plan, main | accept with evidence / reject with reason |
 | `scope_check` | all | diff vs declared files and role ACL |
-| `commit_request` / `commit` | all | request approval, commit with it |
+| `commit_request` / `commit` | all (root: main/user) | request approval, commit with it |
 | `phase_activate` | main, user | serial repo lock |
 | `send_message` / `inbox` / `read_message` / `ack_message` | all (ACL) | targeted messages |
 | `wait_message` | all | long-poll for the next message |

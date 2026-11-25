@@ -75,6 +75,21 @@ The ACL is enforced by hooks, and the role is self-declared:
   `main` for cross-repo work.
 - `WF_ROLE` is case-sensitive (`main`, `plan`, `todo`, `user`); an invalid role
   or a missing `WF_REPO` makes the hook fail closed (exit 2).
+- **Umbrella (`root`) commit refused**:
+  - `只有 main/user 能提交伞仓`: `plan@repo`/`todo@repo` cannot commit root; ask
+    the main or user session.
+  - `伞仓提交包含不允许的路径`: only `CLAUDE.md`, `docs/**`, `milestone/**`,
+    `.workflow/program.yaml` and `.workflow/.gitignore` are allowed. Move code
+    into its component repo, and keep `.mcp.json`, `.claude/**` and runtime state
+    out of the umbrella index.
+  - `伞仓包含 gitlink/嵌套仓库`: a nested git repository (a component checked out
+    inside the root) is staged. Add its directory to the root `.gitignore` (or
+    `.git/info/exclude`) and commit it in its own repo.
+  - `伞仓不是 git 仓库`: run `git init` in the workspace root first; root commits
+    are optional, but they need a repository.
+  - `伞仓没有可提交的改动`: nothing changed under the allowlist.
+  - The user can still commit the umbrella by hand (`git commit`); the MCP flow
+    exists so the diff is reviewed first.
 
 ## `evidence_run` fails or times out
 

@@ -7,6 +7,12 @@ import type { ProgramConfig, RepoConfig } from './types.js';
 export const WORKFLOW_DIR = '.workflow';
 export const CONFIG_FILE = 'program.yaml';
 export const RUNTIME_DIR = 'runtime';
+/**
+ * Sentinel target for umbrella/root commits. It is never added to
+ * `program.yaml.repos`, never appears in `repoRefs()`, and does not participate
+ * in active_repo or milestone state.
+ */
+export const ROOT_REPO_ID = 'root';
 
 export function workflowDir(root: string): string {
   return path.join(root, WORKFLOW_DIR);
