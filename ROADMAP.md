@@ -39,7 +39,7 @@ feature surface.
   symlink containment, init repair.
 - [x] Trust chain: latest evidence, commit/scope milestone, diff/approval
   binding, rename parsing, concurrency locks.
-- [ ] Dashboard: focus retention and visible write errors.
+- [x] Dashboard: focus retention and visible write errors.
 - [ ] Release: idempotent publish, prerelease tags, stronger gates, npm docs
   links.
 
