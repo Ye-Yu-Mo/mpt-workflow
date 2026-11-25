@@ -12,6 +12,7 @@ import {
 import { exists, ensureDir, writeAtomic, writeIfMissing, today } from './fsutil.js';
 import { defaultQuestionsHeader, questionsFile } from './questions.js';
 import { parsePlan, listTodoFiles, parseTodo } from './docs.js';
+import { VERSION } from '../version.js';
 import type { ProgramConfig, RepoConfig } from './types.js';
 
 export interface InitOptions {
@@ -45,6 +46,10 @@ export function init(options: InitOptions): InitResult {
   if (!exists(resolveCliPath())) {
     warnings.push(
       'dist/cli.js 不存在（可能通过 npm run dev 运行）；.mcp.json 和 hooks 会指向缺失文件，先运行 npm run build',
+    );
+  } else if (isEphemeralCli(resolveCliPath())) {
+    warnings.push(
+      `通过 npx 运行：.mcp.json 和 hooks 使用 npx 固定 mpt-workflow@${VERSION}；如需更快的 hook，建议 npm i -g mpt-workflow`,
     );
   }
 
@@ -171,10 +176,8 @@ export function init(options: InitOptions): InitResult {
     }
     conf.mcpServers = conf.mcpServers || {};
     if (!conf.mcpServers.workflow) {
-      conf.mcpServers.workflow = {
-        command: process.execPath,
-        args: [resolveCliPath(), 'mcp', '--root', root],
-      };
+      const launch = mcpLaunch(root);
+      conf.mcpServers.workflow = { command: launch.command, args: launch.args };
       writeAtomic(p, JSON.stringify(conf, null, 2) + '\n');
     }
   }
@@ -193,6 +196,23 @@ function resolveCliPath(): string {
   const here = path.dirname(new URL(import.meta.url).pathname);
   // dist/core/init.js -> dist/cli.js
   return path.resolve(here, '..', 'cli.js');
+}
+
+/** npx runs the package from an evictable cache; never bake that path into config. */
+function isEphemeralCli(cli: string): boolean {
+  return /[/\\]_npx[/\\]/.test(cli);
+}
+
+/** MCP launch command that survives npx cache eviction. */
+function mcpLaunch(root: string): { command: string; args: string[] } {
+  const cli = resolveCliPath();
+  if (isEphemeralCli(cli)) {
+    return {
+      command: 'npx',
+      args: ['-y', `mpt-workflow@${VERSION}`, 'mcp', '--root', root],
+    };
+  }
+  return { command: process.execPath, args: [cli, 'mcp', '--root', root] };
 }
 
 /** Append patterns to a repo's .git/info/exclude (local, never committed). */
@@ -240,6 +260,9 @@ export const SESSION_HOOK = () => ({
 
 function hookCommand(sub: string): string {
   const cli = resolveCliPath();
+  if (isEphemeralCli(cli)) {
+    return `npx -y mpt-workflow@${VERSION} hook ${sub}`;
+  }
   // Quote both paths so spaces in the project location are safe.
   return `${JSON.stringify(process.execPath)} ${JSON.stringify(cli)} hook ${sub}`;
 }
@@ -314,7 +337,7 @@ function preCommitScript(): string {
 # Installed by mpt-workflow. Scope check only; approval gating lives in the MCP commit tool.
 set -euo pipefail
 if [ "\${WF_ALLOW_COMMIT:-0}" = "1" ]; then exit 0; fi
-${JSON.stringify(process.execPath)} ${JSON.stringify(resolveCliPath())} hook pre-commit || exit $?
+${hookCommand('pre-commit')} || exit $?
 exit 0
 `;
 }
