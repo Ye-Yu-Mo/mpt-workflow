@@ -65,6 +65,70 @@ function caller(wf: Workflow, role: 'main' | 'plan' | 'todo' | 'user'): Caller {
   };
 }
 
+test('message tools through the MCP layer', async () => {
+  const { wf } = fixture();
+  const todo = caller(wf, 'todo');
+  const plan = caller(wf, 'plan');
+  const main = caller(wf, 'main');
+
+  // todo -> main question is denied by the send ACL
+  const denied = await todo('send_message', { to: 'main', kind: 'question', subject: 'x' });
+  assert.equal(denied.isError, true);
+  assert.match(denied.text, /ACL/);
+
+  // todo -> plan event works
+  const sent = await todo('send_message', {
+    to: 'plan',
+    kind: 'event',
+    subject: 'please review',
+  });
+  assert.ok(!sent.isError, sent.text);
+
+  const inbox = await plan('inbox', {});
+  assert.match(inbox.text, /please review/);
+  const id = /(msg-\d{8}-\d{6}-[a-z0-9]{4})/.exec(inbox.text)?.[1];
+  assert.ok(id, 'message id parsed');
+
+  const ack = await plan('ack_message', { id, note: 'done' });
+  assert.ok(!ack.isError, ack.text);
+  assert.match(ack.text, /已 ack/);
+
+  // wait_message returns immediately when something is unread
+  await todo('send_message', { to: 'plan', kind: 'event', subject: 'second' });
+  const waited = await plan('wait_message', { timeout_ms: 1500 });
+  assert.match(waited.text, /收到消息/);
+
+  // broadcast is main-only
+  const b1 = await todo('broadcast', { subject: 'nope' });
+  assert.equal(b1.isError, true);
+  const b2 = await main('broadcast', { subject: 'all hands' });
+  assert.ok(!b2.isError, b2.text);
+  assert.match(b2.text, /已广播/);
+});
+
+test('a blocking message blocks the recipient through the tool layer', async () => {
+  const { wf } = fixture();
+  const plan = caller(wf, 'plan');
+  const todo = caller(wf, 'todo');
+
+  const sent = await plan('send_message', {
+    to: 'todo',
+    kind: 'question',
+    subject: 'stop and read this',
+    blocking: true,
+  });
+  assert.ok(!sent.isError, sent.text);
+
+  const blocked = await todo('milestone_claim', { milestone: 'M1' });
+  assert.equal(blocked.isError, true);
+  assert.match(blocked.text, /blocking 消息/);
+
+  const id = /(msg-\d{8}-\d{6}-[a-z0-9]{4})/.exec(sent.text)?.[1];
+  await todo('ack_message', { id });
+  const ok = await todo('milestone_claim', { milestone: 'M1' });
+  assert.ok(!ok.isError, ok.text);
+});
+
 test('full lifecycle through the MCP tool layer', async () => {
   const { root, abs, wf } = fixture();
   const plan = caller(wf, 'plan');

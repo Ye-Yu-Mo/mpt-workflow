@@ -53,6 +53,7 @@ import {
   withLock,
   type Approval,
 } from './state.js';
+import { MessageStore, actorKey, actorFromRole, type Actor, type Message } from './messages.js';
 import type {
   ProgramConfig,
   ProgramStatus,
@@ -73,12 +74,69 @@ export interface RepoRef {
 export class Workflow {
   root: string;
   cfg: ProgramConfig;
+  private _msgs?: MessageStore;
 
   constructor(root: string, cfg?: ProgramConfig) {
     this.root = path.resolve(root);
     const loaded = cfg || loadConfig(this.root);
     if (!loaded) throw new Error(`未找到 ${path.join(this.root, '.workflow/program.yaml')}`);
     this.cfg = loaded;
+  }
+
+  /** Message store for this program (lazy). */
+  get msgs(): MessageStore {
+    if (!this._msgs) {
+      this._msgs = new MessageStore({
+        root: this.root,
+        project: this.cfg.program,
+        repos: this.cfg.repos.map((r) => r.id),
+      });
+    }
+    return this._msgs;
+  }
+
+  actor(role: Role, repo?: string): Actor {
+    return { role, repo };
+  }
+
+  /** Idempotent workflow event; never fails the state transition. */
+  private notifyEvent(input: {
+    from: Role;
+    repo?: string;
+    to: Actor[];
+    kind: 'event' | 'alert' | 'approval_request';
+    subject: string;
+    body?: string;
+    refs?: Record<string, string | string[]>;
+    blocking?: boolean;
+    key: string;
+  }): void {
+    try {
+      this.msgs.emit({
+        from: { role: input.from, repo: input.repo },
+        to: input.to,
+        kind: input.kind,
+        subject: input.subject,
+        body: input.body,
+        refs: input.refs,
+        blocking: input.blocking,
+        repo: input.repo,
+        idempotencyBase: `${this.cfg.program}:${input.key}`,
+      });
+    } catch {
+      /* notification must not break the state machine */
+    }
+  }
+
+  /** Unacked blocking messages for an actor; used to gate transitions. */
+  private assertNotBlocked(role: Role, repoId: string): void {
+    const blocked = this.msgs.blockingFor({ role, repo: repoId });
+    if (blocked.length) {
+      throw new Error(
+        `有未处理的 blocking 消息，先读并 ack：${blocked.map((m) => m.id).join(', ')}\n` +
+          blocked.map((m) => `  ${m.id}  ${m.subject}`).join('\n'),
+      );
+    }
   }
 
   static discover(start: string): Workflow | null {
@@ -139,6 +197,61 @@ export class Workflow {
 
   findQuestion(id: string): Question | null {
     return this.allQuestions().find((q) => q.id === id) || null;
+  }
+
+  /** Answer a question: update the file, notify the asker, clear the blocker. */
+  answerQuestion(
+    q: Question,
+    answer: string,
+    resolution: string | undefined,
+    by: Actor,
+  ): void {
+    updateQuestion(q.file, q.id, { status: 'answered', answer, resolution });
+    const asker = actorFromRole(String(q.from), q.repo);
+    try {
+      this.msgs.send({
+        from: by,
+        to: asker,
+        kind: 'answer',
+        subject: `${q.id} 已回答：${q.context.split('\n')[0].slice(0, 80)}`,
+        body: answer,
+        refs: { question_id: q.id, repo: q.repo || '' },
+        idempotency_key: `${this.cfg.program}:answer:${q.id}`,
+        repo: q.repo,
+      });
+    } catch {
+      /* the file is updated; notification is best-effort */
+    }
+    // Clear the blocker for whoever the question was addressed to, even when a
+    // human answered on their behalf (e.g. the user answering a PLAN question).
+    this.msgs.ackByRef(by, 'question_id', q.id);
+    const addressee = actorFromRole(String(q.to), q.repo);
+    if (actorKey(addressee) !== actorKey(by)) {
+      this.msgs.ackByRef(addressee, 'question_id', q.id);
+    }
+  }
+
+  /** Close a question: update the file, notify the other party. */
+  closeQuestion(q: Question, resolution: string | undefined, by: Actor): void {
+    updateQuestion(q.file, q.id, { status: 'closed', resolution });
+    const asker = actorFromRole(String(q.from), q.repo);
+    const addressee = actorFromRole(String(q.to), q.repo);
+    const other = actorKey(by) === actorKey(asker) ? addressee : asker;
+    try {
+      this.msgs.send({
+        from: by,
+        to: other,
+        kind: 'event',
+        subject: `${q.id} 已关闭`,
+        body: q.resolution || resolution || '',
+        refs: { question_id: q.id, repo: q.repo || '' },
+        idempotency_key: `${this.cfg.program}:close:${q.id}`,
+        repo: q.repo,
+      });
+    } catch {
+      /* best-effort */
+    }
+    this.msgs.ackByRef(by, 'question_id', q.id);
   }
 
   /* -------------------------- repo state ---------------------------- */
@@ -235,6 +348,11 @@ export class Workflow {
   /* --------------------------- program ------------------------------ */
 
   programStatus(): ProgramStatus {
+    try {
+      this.msgs.expireDue();
+    } catch {
+      /* expiry is best-effort */
+    }
     const repos = this.repoRefs().map((r) => this.repoState(r.id));
     const questions = this.allQuestions();
     const blocking = questions.filter((q) => q.blocking && q.status === 'open');
@@ -383,6 +501,20 @@ export class Workflow {
       this.cfg.active_repo = id;
       this.save();
     });
+    if (id) {
+      this.notifyEvent({
+        from: 'main',
+        to: this.cfg.repos.flatMap((r) => [
+          { role: 'plan' as const, repo: r.id },
+          { role: 'todo' as const, repo: r.id },
+        ]),
+        kind: 'event',
+        subject: `active repo 切换为 ${id}`,
+        body: '串行锁：一次只激活一个仓。未激活的仓暂停实现。',
+        refs: { repo: id },
+        key: `activate:${id}:${Date.now()}`,
+      });
+    }
   }
 
   updatePhase(id: string, status: 'planned' | 'active' | 'accepted' | 'done'): void {
@@ -411,16 +543,27 @@ export class Workflow {
   }
 
   claim(repoId: string, milestone: string, role: Role): MilestoneState {
+    this.assertNotBlocked(role, repoId);
     const { abs, doc } = this.requireTodo(repoId, milestone);
     if (!['todo_ready', 'rejected', 'planned'].includes(doc.status)) {
       throw new Error(`${milestone} 当前状态为 ${doc.statusRaw}，不能 claim（需 待实现/已打回）`);
     }
     writeAtomic(abs, setTodoStatus(readText(abs), 'implementing'));
     logEvent(this.root, { role, tool: 'milestone_claim', repo: repoId, milestone, ok: true });
+    this.notifyEvent({
+      from: role,
+      repo: repoId,
+      to: [{ role: 'plan', repo: repoId }],
+      kind: 'event',
+      subject: `${repoId}/${milestone} 开始实现`,
+      refs: { repo: repoId, milestone },
+      key: `${repoId}:${milestone}:claim`,
+    });
     return this.milestone(repoId, milestone);
   }
 
   complete(repoId: string, milestone: string, role: Role): MilestoneState {
+    this.assertNotBlocked(role, repoId);
     const { abs, doc } = this.requireTodo(repoId, milestone);
     if (doc.status !== 'implementing') {
       throw new Error(`${milestone} 当前状态为 ${doc.statusRaw}，不能 complete（需 实现中）`);
@@ -431,6 +574,20 @@ export class Workflow {
     }
     writeAtomic(abs, setTodoStatus(readText(abs), 'review'));
     logEvent(this.root, { role, tool: 'milestone_complete', repo: repoId, milestone, ok: true });
+    this.notifyEvent({
+      from: role,
+      repo: repoId,
+      to: [{ role: 'plan', repo: repoId }],
+      kind: 'event',
+      subject: `${repoId}/${milestone} 实现完成，待验收`,
+      body: `证据 ${evidence.length} 条；最后一条 ${evidence[evidence.length - 1]?.command || '-'}`,
+      refs: {
+        repo: repoId,
+        milestone,
+        evidence_id: evidence[evidence.length - 1]?.id || '',
+      },
+      key: `${repoId}:${milestone}:complete:${evidence.length}`,
+    });
     return this.milestone(repoId, milestone);
   }
 
@@ -450,6 +607,7 @@ export class Workflow {
     if (role !== 'plan' && role !== 'main') {
       throw new Error(`只有 PLAN/主 agent 能验收；当前角色 ${role}`);
     }
+    this.assertNotBlocked(role, repoId);
     const { abs, doc } = this.requireTodo(repoId, milestone);
     if (doc.status !== 'review' && !opts.force) {
       throw new Error(`${milestone} 当前状态为 ${doc.statusRaw}，需先 milestone_complete 进入待验收`);
@@ -490,6 +648,16 @@ export class Workflow {
       ok: true,
       detail: { head: gi.head, tree_hash: currentHash, evidence: evidence.length },
     });
+    this.notifyEvent({
+      from: role,
+      repo: repoId,
+      to: [{ role: 'main' }, { role: 'user' }],
+      kind: 'event',
+      subject: `${repoId}/${milestone} 已验收，待 review/提交`,
+      body: `受验 SHA ${gi.head || 'working-tree'}；证据 ${evidence.length} 条。`,
+      refs: { repo: repoId, milestone, sha: gi.head || '' },
+      key: `${repoId}:${milestone}:accept:${gi.head || 'wt'}`,
+    });
     return this.milestone(repoId, milestone);
   }
 
@@ -503,6 +671,7 @@ export class Workflow {
       throw new Error(`只有 PLAN/主 agent 能打回；当前角色 ${role}`);
     }
     if (!reason.trim()) throw new Error('打回必须写原因');
+    this.assertNotBlocked(role, repoId);
     const { abs, doc } = this.requireTodo(repoId, milestone);
     if (doc.status !== 'review') {
       throw new Error(`${milestone} 当前状态为 ${doc.statusRaw}，只有待验收的 M 可以打回`);
@@ -527,6 +696,16 @@ export class Workflow {
       milestone,
       ok: true,
       detail: { reason },
+    });
+    this.notifyEvent({
+      from: role,
+      repo: repoId,
+      to: [{ role: 'todo', repo: repoId }],
+      kind: 'event',
+      subject: `${repoId}/${milestone} 被打回`,
+      body: reason,
+      refs: { repo: repoId, milestone, reason },
+      key: `${repoId}:${milestone}:reject:${Date.now()}`,
     });
     return this.milestone(repoId, milestone);
   }
@@ -707,6 +886,20 @@ export class Workflow {
       ok: true,
       detail: { approval: a.id, files: files.length },
     });
+    this.notifyEvent({
+      from: input.role,
+      repo: input.repoId,
+      to: [{ role: 'user' }],
+      kind: 'approval_request',
+      subject: `${input.repoId} 请求提交：${input.message}`,
+      body: `${files.length} 个文件\n${diffStat(ref.abs)}`,
+      refs: {
+        repo: input.repoId,
+        approval_id: a.id,
+        files,
+      },
+      key: `${input.repoId}:commit-request:${a.id}`,
+    });
     return { approval: a, diffStat: diffStat(ref.abs), files };
   }
 
@@ -760,6 +953,16 @@ export class Workflow {
       repo: input.repoId,
       ok: true,
       detail: { approval: a.id, head, files: files.length },
+    });
+    this.notifyEvent({
+      from: input.role,
+      repo: input.repoId,
+      to: [{ role: 'main' }, { role: 'user' }],
+      kind: 'event',
+      subject: `${input.repoId} 已提交 @ ${head.slice(0, 8)}`,
+      body: a.message,
+      refs: { repo: input.repoId, commit: head, sha: head, approval_id: a.id },
+      key: `${input.repoId}:commit:${head}`,
     });
     return { ok: true, head, files, message: a.message };
   }

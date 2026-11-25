@@ -7,6 +7,8 @@ import { loadConfig } from '../core/config.js';
 import { setRoleLease } from '../core/hooks.js';
 import { questionsFile, appendQuestion, updateQuestion, nextQuestionId } from '../core/questions.js';
 import { logEvent } from '../core/state.js';
+import { readText, writeAtomic } from '../core/fsutil.js';
+import { actorKey, formatMessage, canSend, type Actor, type MessageKind } from '../core/messages.js';
 import path from 'node:path';
 import type { Role } from '../core/types.js';
 
@@ -47,6 +49,16 @@ function err(s: string) {
 function statusText(wf: Workflow, role: Role | null, repo: string | null): string {
   const st = wf.programStatus();
   const lines: string[] = [];
+  const me: Actor | null = role ? { role, repo: repo ?? undefined } : null;
+  const unread = me ? wf.msgs.unreadCount(me) : 0;
+  const blocking = me ? wf.msgs.blockingFor(me) : [];
+  if (me && (unread || blocking.length)) {
+    lines.push(`未读 ${unread} 条${blocking.length ? ` · blocking ${blocking.length} 条` : ''}（用 inbox 查看）`);
+    for (const m of blocking) {
+      lines.push(`  [blocking] ${m.id} ${m.subject}`);
+    }
+    lines.push('');
+  }
   lines.push(`程序: ${st.program}`);
   lines.push(`根目录: ${st.root}`);
   lines.push(`active repo: ${st.activeRepo ?? '(none)'}`);
@@ -124,13 +136,26 @@ function buildTools(opts: ServerOptions): ToolSpec[] {
         setRoleLease(ctx.wf.root, { role, repo: repo ?? undefined, at: new Date().toISOString() });
         ctx.role = role;
         ctx.repo = repo;
+        const me: Actor = { role, repo: repo ?? undefined };
+        ctx.wf.msgs.ping(me);
+        ctx.wf.msgs.promoteQueued(me);
+        ctx.wf.msgs.expireDue();
+        const unread = ctx.wf.msgs.unreadCount(me);
+        const blocking = ctx.wf.msgs.blockingFor(me);
+        const recent = ctx.wf.msgs.forActor(me, { limit: 3 });
         logEvent(ctx.wf.root, { role, tool: 'bootstrap', repo: repo ?? undefined, ok: true });
         return [
           `已绑定角色 ${role}${repo ? ` @ ${repo}` : ''}。`,
           '',
           describeAcl(role),
           '',
-          '可以用工作流工具了。下一步：调用 status 看全局，或 next 看该做什么。',
+          unread
+            ? `未读 ${unread} 条${blocking.length ? `（blocking ${blocking.length}）` : ''}：`
+            : '没有未读消息。',
+          ...blocking.map((m) => `  [blocking] ${m.id} ${m.subject}`),
+          ...(unread ? recent.map((m) => `  ${m.id} [${m.status}] ${m.subject}`) : []),
+          '',
+          '下一步：status 看全局，next 看该做什么，inbox 看消息。',
         ].join('\n');
       },
     },
@@ -173,14 +198,28 @@ function buildTools(opts: ServerOptions): ToolSpec[] {
       roles: READ_ROLES,
       schema: {},
       handler: (_a, ctx) => {
+        const me: Actor = { role: ctx.role, repo: ctx.repo ?? undefined };
+        const blocking = ctx.wf.msgs.blockingFor(me);
         const st = ctx.wf.programStatus();
-        if (!st.next.length) return '没有识别到待办；检查程序配置。';
-        return st.next
-          .map(
-            (n) =>
-              `[${n.actor}] ${n.action}${n.repo ? ` — ${n.repo}${n.milestone ? '/' + n.milestone : ''}` : ''}\n    ${n.detail}`,
-          )
-          .join('\n');
+        const lines: string[] = [];
+        if (blocking.length) {
+          lines.push('先处理 blocking 消息（ack 后才能推进）：');
+          for (const m of blocking) lines.push(`  ${m.id}  ${m.subject}`);
+          lines.push('');
+        }
+        if (!st.next.length) {
+          lines.push('没有识别到待办；检查程序配置。');
+          return lines.join('\n');
+        }
+        lines.push(
+          st.next
+            .map(
+              (n) =>
+                `[${n.actor}] ${n.action}${n.repo ? ` — ${n.repo}${n.milestone ? '/' + n.milestone : ''}` : ''}\n    ${n.detail}`,
+            )
+            .join('\n'),
+        );
+        return lines.join('\n');
       },
     },
     {
@@ -252,6 +291,14 @@ function buildTools(opts: ServerOptions): ToolSpec[] {
           : (args.repo as string) || ctx.repo || ctx.wf.cfg.active_repo;
         if (!toUserFromMain && !repoId) return err('需要指定 repo');
         if (repoId) ctx.wf.repoRef(repoId);
+        const toActor: Actor =
+          to === 'PLAN'
+            ? { role: 'plan', repo: repoId || undefined }
+            : to === 'main'
+              ? { role: 'main' }
+              : { role: 'user' };
+        const acl = canSend(meActor(ctx), toActor, 'question');
+        if (!acl.ok) return err(`不能向 ${actorKey(toActor)} 提问：${acl.reason}`);
         const file = toUserFromMain && !repoId
           ? path.join(ctx.wf.root, 'docs', 'agent-questions.md')
           : questionsFile(ctx.wf.repoRef(repoId as string).abs);
@@ -280,13 +327,33 @@ function buildTools(opts: ServerOptions): ToolSpec[] {
           ok: true,
           detail: { to, blocking: Boolean(args.blocking) },
         });
-        return [
-          `已创建 ${id} → ${to}（${path.relative(ctx.wf.root, file)}）。`,
-          Boolean(args.blocking) ? 'blocking: yes —— 现在停下等待回答，不要继续实现。' : '',
-          '用户可以在看板里直接回答，或转发给对方 agent。',
-        ]
-          .filter(Boolean)
-          .join('\n');
+        // notify the addressee (best-effort; the question file stays the source of truth)
+        try {
+          const { message } = ctx.wf.msgs.send({
+            from: meActor(ctx),
+            to: toActor,
+            kind: 'question',
+            subject: `${id} ${String(args.context).split('\n')[0].slice(0, 90)}`,
+            body: String(args.context),
+            refs: { question_id: id, repo: repoId || '' },
+            blocking: Boolean(args.blocking),
+            repo: repoId ?? undefined,
+            idempotency_key: `${ctx.wf.cfg.program}:q:${id}`,
+          });
+          ctx.wf.msgs.ping(meActor(ctx));
+          return [
+            `已创建 ${id} → ${to}（${path.relative(ctx.wf.root, file)}），已通知 ${actorKey(toActor)}（${message.id}）。`,
+            Boolean(args.blocking) ? 'blocking: yes —— 现在停下等待回答，不要继续实现。' : '',
+            '用户可以在看板里直接回答，或转发给对方 agent。',
+          ]
+            .filter(Boolean)
+            .join('\n');
+        } catch (e) {
+          return [
+            `已创建 ${id} → ${to}（${path.relative(ctx.wf.root, file)}）。`,
+            `⚠️ 通知投递失败：${(e as Error).message}（消息未丢失，对方可用 inbox 查询）`,
+          ].join('\n');
+        }
       },
     },
     {
@@ -308,11 +375,12 @@ function buildTools(opts: ServerOptions): ToolSpec[] {
           (to === 'main' && ctx.role === 'main');
         if (!allowed) return err(`问题 ${q.id} 是问 ${q.to} 的，你不能回答`);
         if (q.status === 'closed') return err(`问题 ${q.id} 已关闭`);
-        updateQuestion(q.file, q.id, {
-          status: 'answered',
-          answer: String(args.answer),
-          resolution: args.resolution ? String(args.resolution) : undefined,
-        });
+        ctx.wf.answerQuestion(
+          q,
+          String(args.answer),
+          args.resolution ? String(args.resolution) : undefined,
+          meActor(ctx),
+        );
         logEvent(ctx.wf.root, {
           role: ctx.role,
           tool: 'question_answer',
@@ -345,12 +413,207 @@ function buildTools(opts: ServerOptions): ToolSpec[] {
         if (!q.status.startsWith('answered') && !q.answer && ctx.role !== 'user' && ctx.role !== 'main') {
           return err(`${q.id} 还没有回答，不能关闭`);
         }
-        updateQuestion(q.file, q.id, {
-          status: 'closed',
-          resolution: args.resolution ? String(args.resolution) : q.resolution,
-        });
+        ctx.wf.closeQuestion(
+          q,
+          args.resolution ? String(args.resolution) : q.resolution,
+          meActor(ctx),
+        );
         logEvent(ctx.wf.root, { role: ctx.role, tool: 'question_close', question: q.id, repo: q.repo, ok: true });
-        return `已关闭 ${q.id}。记得确认 PLAN/TODO 已经反映结论。`;
+        return `已关闭 ${q.id}，已通知对方。记得确认 PLAN/TODO 已经反映结论。`;
+      },
+    },
+    {
+      name: 'send_message',
+      description:
+        '向另一个 agent 定向发送工作流消息（持久化、可查、可 ack）。受发送 ACL 限制。',
+      roles: READ_ROLES,
+      schema: {
+        to: z.enum(['main', 'plan', 'todo', 'user']),
+        to_repo: z.string().optional().describe('plan/todo 的仓库；默认自己的仓'),
+        kind: z
+          .enum(['question', 'answer', 'event', 'handoff', 'alert', 'approval_request'])
+          .default('event'),
+        subject: z.string(),
+        body: z.string().optional(),
+        refs: z.record(z.string(), z.string()).optional(),
+        blocking: z.boolean().default(false),
+        expires_at: z.string().optional(),
+        idempotency_key: z.string().optional(),
+      },
+      handler: (args, ctx) => {
+        const to = resolveActor(String(args.to), args.to_repo as string | undefined, ctx);
+        const { message, duplicate } = ctx.wf.msgs.send({
+          from: meActor(ctx),
+          to,
+          kind: args.kind as MessageKind,
+          subject: String(args.subject),
+          body: args.body ? String(args.body) : '',
+          refs: (args.refs as Record<string, string>) || {},
+          blocking: Boolean(args.blocking),
+          expires_at: args.expires_at as string | undefined,
+          idempotency_key: args.idempotency_key as string | undefined,
+          repo: (args.to_repo as string) || ctx.repo || undefined,
+        });
+        ctx.wf.msgs.ping(meActor(ctx));
+        return `${duplicate ? '已存在（幂等命中）' : '已发送'} ${message.id} → ${actorKey(to)} [${message.status}]`;
+      },
+    },
+    {
+      name: 'inbox',
+      description:
+        '列出消息。默认当前 actor；main/user 可查任意 role。会顺带把 queued 提升为 unread。',
+      roles: READ_ROLES,
+      schema: {
+        role: z.enum(['main', 'plan', 'todo', 'user']).optional(),
+        repo: z.string().optional(),
+        unread_only: z.boolean().optional(),
+        include_acked: z.boolean().optional(),
+        kind: z
+          .enum(['question', 'answer', 'event', 'handoff', 'alert', 'approval_request'])
+          .optional(),
+        limit: z.number().optional(),
+      },
+      handler: (args, ctx) => {
+        const target = args.role
+          ? resolveActor(String(args.role), args.repo as string | undefined, ctx)
+          : meActor(ctx);
+        assertCanQuery(ctx, target);
+        ctx.wf.msgs.promoteQueued(target);
+        ctx.wf.msgs.expireDue();
+        const list = ctx.wf.msgs.forActor(target, {
+          unreadOnly: Boolean(args.unread_only),
+          includeAcked: Boolean(args.include_acked),
+          kind: args.kind as MessageKind | undefined,
+          limit: args.limit as number | undefined,
+        });
+        const unread = ctx.wf.msgs.unreadCount(target);
+        const blocking = ctx.wf.msgs.blockingFor(target).length;
+        if (!list.length) return `${actorKey(target)}: 没有消息（未读 0）。`;
+        return [
+          `${actorKey(target)}: ${list.length} 条 · 未读 ${unread} · blocking ${blocking}`,
+          '',
+          ...list.map((m) => formatMessage(m)),
+        ].join('\n');
+      },
+    },
+    {
+      name: 'read_message',
+      description: '读取一条消息并标记为已读。',
+      roles: READ_ROLES,
+      schema: { id: z.string() },
+      handler: (args, ctx) => {
+        const m = ctx.wf.msgs.get(String(args.id));
+        if (!m) return err(`找不到消息 ${args.id}`);
+        assertCanQuery(ctx, m.to);
+        const updated = ctx.wf.msgs.markRead(m.id)!;
+        return formatMessage(updated, { full: true });
+      },
+    },
+    {
+      name: 'ack_message',
+      description: '确认已处理一条消息（ack）。blocking 消息 ack 后才会解除拦截。',
+      roles: READ_ROLES,
+      schema: { id: z.string(), note: z.string().optional() },
+      handler: (args, ctx) => {
+        const m = ctx.wf.msgs.get(String(args.id));
+        if (!m) return err(`找不到消息 ${args.id}`);
+        assertCanQuery(ctx, m.to);
+        const updated = ctx.wf.msgs.ack(m.id, args.note as string | undefined)!;
+        logEvent(ctx.wf.root, {
+          role: ctx.role,
+          tool: 'message_ack',
+          repo: m.repo,
+          ok: true,
+          detail: { message: m.id },
+        });
+        return `已 ack ${updated.id}（${updated.status}）${updated.blocking ? '，blocking 已解除' : ''}`;
+      },
+    },
+    {
+      name: 'wait_message',
+      description:
+        '长轮询等待新消息（默认 30s，最长 120s）。收到后自动标记已读。适合空闲的 plan/todo 会话。',
+      roles: READ_ROLES,
+      schema: {
+        role: z.enum(['main', 'plan', 'todo', 'user']).optional(),
+        repo: z.string().optional(),
+        timeout_ms: z.number().optional(),
+      },
+      handler: async (args, ctx) => {
+        const target = args.role
+          ? resolveActor(String(args.role), args.repo as string | undefined, ctx)
+          : meActor(ctx);
+        assertCanQuery(ctx, target);
+        const timeout = Math.min(Number(args.timeout_ms ?? 30_000), 120_000);
+        const deadline = Date.now() + timeout;
+        ctx.wf.msgs.ping(target);
+        while (Date.now() < deadline) {
+          ctx.wf.msgs.expireDue();
+          ctx.wf.msgs.promoteQueued(target);
+          const [next] = ctx.wf.msgs.forActor(target, { unreadOnly: true, limit: 1 });
+          if (next) {
+            const read = ctx.wf.msgs.markRead(next.id)!;
+            return `收到消息：\n${formatMessage(read, { full: true })}`;
+          }
+          await new Promise((r) => setTimeout(r, 500));
+        }
+        return `timeout: ${actorKey(target)} 在 ${Math.round(timeout / 1000)}s 内没有新消息。`;
+      },
+    },
+    {
+      name: 'broadcast',
+      description: '向所有 plan/todo 广播（仅 main）。',
+      roles: ['main'],
+      schema: {
+        kind: z.enum(['event', 'alert']).default('event'),
+        subject: z.string(),
+        body: z.string().optional(),
+        refs: z.record(z.string(), z.string()).optional(),
+      },
+      handler: (args, ctx) => {
+        const targets: Actor[] = ctx.wf.cfg.repos.flatMap((r) => [
+          { role: 'plan' as const, repo: r.id },
+          { role: 'todo' as const, repo: r.id },
+        ]);
+        const msgs = ctx.wf.msgs.emit({
+          from: meActor(ctx),
+          to: targets,
+          kind: args.kind as MessageKind,
+          subject: String(args.subject),
+          body: args.body ? String(args.body) : '',
+          refs: (args.refs as Record<string, string>) || {},
+          idempotencyBase: `broadcast:${Date.now()}`,
+        });
+        return `已广播 ${msgs.length} 条：${msgs.map((m) => m.id).join(', ')}`;
+      },
+    },
+    {
+      name: 'presence',
+      description: '登记/查看 agent 在线状态。',
+      roles: READ_ROLES,
+      schema: { session: z.string().optional() },
+      handler: (args, ctx) => {
+        ctx.wf.msgs.ping(meActor(ctx), args.session as string | undefined);
+        const list = ctx.wf.msgs.presence();
+        if (!list.length) return '没有 presence 记录。';
+        return list
+          .map(
+            (p) =>
+              `${p.online ? '●' : '○'} ${actorKey(p.actor)}  ${p.last_seen}` +
+              (p.session ? `  [${p.session}]` : ''),
+          )
+          .join('\n');
+      },
+    },
+    {
+      name: 'escalate',
+      description: '把一条消息升级给用户（并记录原因）。',
+      roles: READ_ROLES,
+      schema: { id: z.string(), reason: z.string() },
+      handler: (args, ctx) => {
+        const m = ctx.wf.msgs.escalate(String(args.id), String(args.reason), meActor(ctx));
+        if (!m) return err(`找不到消息 ${args.id}`);
+        return `已升级 ${args.id} → ${m.id}（→ user）`;
       },
     },
     {
@@ -541,6 +804,23 @@ function requireRepo(args: Record<string, unknown>, ctx: Ctx): string {
   if (!repo) throw new Error('需要指定 repo（或先 bootstrap 绑定仓库）');
   ctx.wf.repoRef(repo);
   return repo;
+}
+
+function meActor(ctx: Ctx): Actor {
+  return { role: ctx.role, repo: ctx.repo ?? undefined };
+}
+
+function resolveActor(role: string, repo: string | undefined, ctx: Ctx): Actor {
+  if (role === 'plan' || role === 'todo') {
+    return { role, repo: repo || ctx.repo || ctx.wf.cfg.active_repo || undefined };
+  }
+  return { role: role as Actor['role'] };
+}
+
+function assertCanQuery(ctx: Ctx, target: Actor): void {
+  if (ctx.role === 'main' || ctx.role === 'user') return;
+  if (actorKey(meActor(ctx)) === actorKey(target)) return;
+  throw new Error(`角色 ${actorKey(meActor(ctx))} 不能读取 ${actorKey(target)} 的消息`);
 }
 
 export async function runMcpServer(opts: ServerOptions): Promise<void> {

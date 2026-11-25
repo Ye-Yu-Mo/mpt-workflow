@@ -67,6 +67,43 @@ bootstrap(role="plan", repo="fut-algo-api")
 
 装了这个 MCP 后，会话第一句就可以是 `status` 或 `next`，不用再解释“我是谁、做到哪了”。
 
+### 1.5 消息与通知
+
+角色之间不再需要人工转发。每个状态动作都会自动给相关方发一条**持久化消息**：
+
+```
+todo: milestone_complete   → plan@repo   「待验收」
+plan: milestone_accept     → main, user  「已验收，待 review/提交」
+plan: milestone_reject     → todo@repo   「被打回」+ 原因
+any:  commit_request       → user        approval_request + approval id
+any:  commit               → main, user  「已提交 @ sha」
+todo: ask(to=PLAN)         → plan@repo   question（blocking 时拦截对方推进）
+```
+
+收发：
+
+```bash
+workflow-mcp inbox --role plan --repo fut-algo-api --unread
+workflow-mcp read msg-...        # 标记已读
+workflow-mcp ack msg-... --note "已处理"
+workflow-mcp wait --role plan --repo fut-algo-api --timeout 60000
+workflow-mcp watch --role main   # 前台持续看
+```
+
+MCP 工具：`inbox` / `read_message` / `ack_message` / `wait_message` /
+`send_message` / `broadcast`（仅 main）/ `presence` / `escalate`。
+
+规则：
+
+- **不丢**：offline 时 `queued`，下一次 `bootstrap`/`inbox` 变 `unread`；消息只增不删。
+- **blocking**：未 ack 时接收方不能 `milestone_claim/complete/accept/reject`；`next` 会把它排在最前。
+  回答 question 会自动 ack 对应的阻塞消息。
+- **超时**：blocking 默认 45 分钟过期，过期后自动升级一条 alert 给 user 和 main。
+- **幂等**：带 `idempotency_key` 的重复发送只产生一条。
+- **ACL**：`todo@repo → plan@同仓`；`todo → main` 仅 `alert`；`plan → main`；`plan → todo@同仓`；
+  `plan → user` 仅 `alert`；`main`/`user`/`system` 不受限；跨仓必须经 main。
+- 唤醒是 best-effort：SessionStart hook 会注入未读摘要，但**消息本身以存储为准**。
+
 ### 2. 主 agent（main）
 
 - `status` / `next` / `doctor` —— 全局视图。
@@ -96,9 +133,11 @@ bootstrap(role="plan", repo="fut-algo-api")
 
 - 看板：`http://127.0.0.1:7788`
   - 问题收件箱：直接选选项、写决定 → 回写 Markdown，agent 下一次 `questions` 就能看到。**不用再复制粘贴转发。**
+  - 消息：未读 / blocking / 审批请求，点“标记已处理”即 ack。
   - 批准提交：review 完 diff 点“批准”，agent 才能 `commit`。
   - 切换 active repo。
-- 终端等价物：`workflow-mcp answer Q-005 --answer "..."`、`workflow-mcp approve <id>`。
+- 终端等价物：`workflow-mcp answer Q-005 --answer "..."`、`workflow-mcp approve <id>`、
+  `workflow-mcp ack msg-...`。
 
 ## 提交是怎么被拦住的
 
@@ -144,6 +183,9 @@ agent: commit(approval="ap-xxx")
 | `scope_check` | 全部 | 改动 vs ACL + TODO 文件清单 |
 | `commit_request` / `commit` | 全部 | 提交审批与执行 |
 | `phase_activate` | main/user | 激活仓（串行锁） |
+| `send_message` / `inbox` / `read_message` / `ack_message` | 全部（按 ACL） | 定向消息 |
+| `wait_message` | 全部 | 长轮询等新消息（30–120s） |
+| `broadcast` / `presence` / `escalate` | main / 全部 / 全部 | 广播、在线状态、升级 |
 
 只保留原生工具**做不到**的：状态推导、跨进程状态、门禁、证据执行、审批。
 读写文件仍然用 Edit/Write，不另造一套。
@@ -172,7 +214,7 @@ agent: commit(approval="ap-xxx")
 |---|---|---|
 | 三个角色三个 server，靠工具列表过滤 | 一个 server + `bootstrap` 握手 | 项目 `.mcp.json` 对所有会话生效，三个 server 会全部暴露；stdio 每会话一个进程，握手等价且更简单 |
 | 角色 ACL 由 MCP 写工具校验 | 同一 ACL 引擎同时用于 MCP 和 **PreToolUse hook** | agent 改文件用 Edit/Write，不经过 MCP；hook 才是真正的拦截层 |
-| 40+ 工具 | 17 个 | `plan_write`/`todo_get` 之类是 Edit/Read 的薄包装，占 token、增加选错概率 |
+| 40+ 工具 | 25 个 | `plan_write`/`todo_get` 之类是 Edit/Read 的薄包装，占 token、增加选错概率 |
 | 前端放 v0.3 | 与 MCP 同期 | 问题转发（P2/P11）是最高频痛点，只有 UI 能根治 |
 | `.workflow/repo.yaml` 放每个子仓 | 全部状态放伞仓 `.workflow/` | 少 4 份要同步的状态，且不污染子仓 diff |
 | 手写 evidence | `evidence_run` 由 server 执行并绑定 tree oid | 手写证据无法验证 |
@@ -192,15 +234,15 @@ agent: commit(approval="ap-xxx")
 
 ```bash
 npm run typecheck
-npm test          # 12 个核心测试 + 1 个看板渲染测试（需要看板在 7791 跑）
+npm test          # 29 个测试（看板渲染测试需要 web 在 7791 跑，否则跳过）
 npm run build
 ```
 
 代码结构：
 
 ```
-src/core/       解析、状态机、ACL、git、证据、审批
-src/mcp/        MCP server（17 个工具）
+src/core/       解析、状态机、ACL、git、证据、审批、消息
+src/mcp/        MCP server（25 个工具）
 src/web/        HTTP API + 单页看板
 src/cli.ts      init/status/doctor/web/mcp/hook
 tests/          node:test

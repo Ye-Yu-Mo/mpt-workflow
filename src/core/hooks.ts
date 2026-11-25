@@ -214,6 +214,28 @@ export function runSessionStart(): number {
     }
   }
 
+  if (lease) {
+    const me = { role: lease.role, repo: lease.repo };
+    try {
+      wf.msgs.ping(me);
+      wf.msgs.expireDue();
+      const unread = wf.msgs.unreadCount(me);
+      const blocking = wf.msgs.blockingFor(me);
+      if (unread || blocking.length) {
+        lines.push('');
+        lines.push(`## 未读消息 ${unread} 条${blocking.length ? `（blocking ${blocking.length}）` : ''}`);
+        for (const m of blocking) lines.push(`- [blocking] ${m.id} ${m.subject}（ack 后才能推进 M）`);
+        for (const m of wf.msgs.forActor(me, { limit: 3 })) {
+          if (blocking.some((b) => b.id === m.id)) continue;
+          lines.push(`- ${m.id} [${m.kind}] ${m.subject}`);
+        }
+        lines.push('用 inbox 查看，read/ack 处理。');
+      }
+    } catch {
+      /* messages are optional in the hook */
+    }
+  }
+
   if (st.next.length) {
     lines.push('');
     lines.push('## 建议下一步');
@@ -225,7 +247,7 @@ export function runSessionStart(): number {
   lines.push('');
   lines.push(
     '规则：只用 MCP 的 workflow 工具推进状态；不要手改 PLAN/TODO 状态；' +
-      '有歧义先提问（question_ask）；提交需用户批准。',
+      '有歧义先提问（question_ask）；提交需用户批准；blocking 消息要 ack 才能继续。',
   );
   process.stdout.write(lines.join('\n') + '\n');
   return 0;

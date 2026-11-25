@@ -67,7 +67,7 @@ test('dashboard renders from the live API', async (t) => {
   assert.ok(ms.length >= 4, 'milestone chips rendered');
 
   const tiles = doc.querySelectorAll('#tiles .tile');
-  assert.equal(tiles.length, 4, 'four stat tiles');
+  assert.equal(tiles.length, 5, 'five stat tiles');
 
   const next = doc.querySelectorAll('#next .row-item');
   assert.ok(next.length > 0, 'next actions rendered');

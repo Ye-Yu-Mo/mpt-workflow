@@ -9,6 +9,7 @@ import { runMcpServer } from './mcp/server.js';
 import { startWebServer } from './web/server.js';
 import { describeAcl } from './core/acl.js';
 import { updateQuestion } from './core/questions.js';
+import { formatMessage, type MessageKind } from './core/messages.js';
 import type { Role } from './core/types.js';
 
 function usage(): string {
@@ -22,6 +23,15 @@ function usage(): string {
   workflow-mcp doctor [--root DIR]
   workflow-mcp questions [--root DIR] [--json] [--all]
   workflow-mcp answer <Q-id> --answer TEXT [--resolution TEXT] [--root DIR]
+  workflow-mcp inbox [--role R] [--repo NAME] [--unread] [--all] [--json]
+  workflow-mcp read <msg-id>
+  workflow-mcp ack <msg-id> [--note TEXT]
+  workflow-mcp send --to <actor> [--to-repo NAME] [--kind K] --subject TEXT
+                    [--body TEXT] [--blocking] [--refs JSON] [--from R]
+  workflow-mcp wait [--role R] [--repo NAME] [--timeout MS]
+  workflow-mcp watch [--role R] [--repo NAME] [--interval MS]
+  workflow-mcp escalate <msg-id> --reason TEXT
+  workflow-mcp presence [--session NAME]
   workflow-mcp approve <approval-id> [--root DIR]
   workflow-mcp activate <repo|-> [--root DIR]
   workflow-mcp role <main|plan|todo|user> [--repo NAME] [--root DIR]
@@ -210,6 +220,153 @@ async function main() {
           resolution: typeof flags.resolution === 'string' ? flags.resolution : undefined,
         });
         console.log(`已回答 ${id}。记得回写 PLAN/TODO。`);
+        return;
+      }
+
+      case 'inbox': {
+        const wf = resolveWorkflow(flags);
+        const lease = readRoleLease(wf.root);
+        const role = (flags.role as string) || lease?.role || 'user';
+        const repo = (flags.repo as string) || lease?.repo;
+        const target = { role: role as Role, repo };
+        wf.msgs.promoteQueued(target);
+        wf.msgs.expireDue();
+        const list = wf.msgs.forActor(target, {
+          unreadOnly: Boolean(flags.unread),
+          includeAcked: Boolean(flags.all),
+          limit: typeof flags.limit === 'string' ? Number(flags.limit) : undefined,
+        });
+        if (flags.json) {
+          console.log(JSON.stringify({ unread: wf.msgs.unreadCount(target), messages: list }, null, 2));
+          return;
+        }
+        const unread = wf.msgs.unreadCount(target);
+        const blocking = wf.msgs.blockingFor(target).length;
+        console.log(`${role}${repo ? '@' + repo : ''}: ${list.length} 条 · 未读 ${unread} · blocking ${blocking}`);
+        for (const m of list) console.log('\n' + formatMessage(m));
+        return;
+      }
+
+      case 'read': {
+        const wf = resolveWorkflow(flags);
+        const id = positional[1];
+        if (!id) throw new Error('用法: workflow-mcp read <msg-id>');
+        const m = wf.msgs.markRead(id);
+        if (!m) throw new Error(`找不到消息 ${id}`);
+        console.log(formatMessage(m, { full: true }));
+        return;
+      }
+
+      case 'ack': {
+        const wf = resolveWorkflow(flags);
+        const id = positional[1];
+        if (!id) throw new Error('用法: workflow-mcp ack <msg-id> [--note TEXT]');
+        const m = wf.msgs.ack(id, typeof flags.note === 'string' ? flags.note : undefined);
+        if (!m) throw new Error(`找不到消息 ${id}`);
+        console.log(`已 ack ${id}`);
+        return;
+      }
+
+      case 'send': {
+        const wf = resolveWorkflow(flags);
+        const lease = readRoleLease(wf.root);
+        const fromRole = ((flags.from as string) || lease?.role || 'user') as Role;
+        const fromRepo = (flags['from-repo'] as string) || (fromRole === 'plan' || fromRole === 'todo' ? lease?.repo : undefined);
+        if (!flags.to) throw new Error('用法: workflow-mcp send --to <main|plan|todo|user> --subject TEXT');
+        const toRole = String(flags.to);
+        const toRepo = (flags['to-repo'] as string) || (toRole === 'plan' || toRole === 'todo' ? lease?.repo : undefined);
+        let refs: Record<string, string> = {};
+        if (typeof flags.refs === 'string') {
+          try {
+            refs = JSON.parse(flags.refs) as Record<string, string>;
+          } catch {
+            throw new Error('--refs 必须是 JSON 对象');
+          }
+        }
+        const { message, duplicate } = wf.msgs.send({
+          from: { role: fromRole, repo: fromRepo },
+          to: { role: toRole as Role, repo: toRepo },
+          kind: ((flags.kind as string) || 'event') as MessageKind,
+          subject: String(flags.subject || '(no subject)'),
+          body: typeof flags.body === 'string' ? flags.body : '',
+          refs,
+          blocking: Boolean(flags.blocking),
+          idempotency_key: typeof flags['idempotency-key'] === 'string' ? flags['idempotency-key'] : undefined,
+        });
+        console.log(`${duplicate ? '已存在' : '已发送'} ${message.id} → ${toRole}${toRepo ? '@' + toRepo : ''} [${message.status}]`);
+        return;
+      }
+
+      case 'wait': {
+        const wf = resolveWorkflow(flags);
+        const lease = readRoleLease(wf.root);
+        const role = ((flags.role as string) || lease?.role || 'user') as Role;
+        const repo = (flags.repo as string) || lease?.repo;
+        const target = { role, repo };
+        const timeout = typeof flags.timeout === 'string' ? Number(flags.timeout) : 60_000;
+        const deadline = Date.now() + Math.min(timeout, 600_000);
+        wf.msgs.ping(target);
+        while (Date.now() < deadline) {
+          wf.msgs.expireDue();
+          wf.msgs.promoteQueued(target);
+          const [next] = wf.msgs.forActor(target, { unreadOnly: true, limit: 1 });
+          if (next) {
+            console.log(formatMessage(wf.msgs.markRead(next.id)!, { full: true }));
+            return;
+          }
+          await new Promise((r) => setTimeout(r, 500));
+        }
+        console.log('timeout: 没有新消息。');
+        return;
+      }
+
+      case 'watch': {
+        const wf = resolveWorkflow(flags);
+        const lease = readRoleLease(wf.root);
+        const role = ((flags.role as string) || lease?.role || 'user') as Role;
+        const repo = (flags.repo as string) || lease?.repo;
+        const target = { role, repo };
+        const interval = typeof flags.interval === 'string' ? Number(flags.interval) : 2000;
+        const seen = new Set<string>();
+        wf.msgs.ping(target);
+        console.log(`watching ${role}${repo ? '@' + repo : ''} … (Ctrl-C 退出)`);
+        // print anything already unread once
+        for (;;) {
+          wf.msgs.expireDue();
+          wf.msgs.promoteQueued(target);
+          const list = wf.msgs.forActor(target, { unreadOnly: true, limit: 20 });
+          for (const m of list.reverse()) {
+            if (seen.has(m.id)) continue;
+            seen.add(m.id);
+            console.log('\n' + formatMessage(m));
+            wf.msgs.markRead(m.id);
+          }
+          await new Promise((r) => setTimeout(r, interval));
+        }
+      }
+
+      case 'escalate': {
+        const wf = resolveWorkflow(flags);
+        const id = positional[1];
+        const reason = typeof flags.reason === 'string' ? flags.reason : '';
+        if (!id || !reason) throw new Error('用法: workflow-mcp escalate <msg-id> --reason TEXT');
+        const lease = readRoleLease(wf.root);
+        const m = wf.msgs.escalate(id, reason, {
+          role: (lease?.role as Role) || 'user',
+          repo: lease?.repo,
+        });
+        if (!m) throw new Error(`找不到消息 ${id}`);
+        console.log(`已升级 → ${m.id}`);
+        return;
+      }
+
+      case 'presence': {
+        const wf = resolveWorkflow(flags);
+        const lease = readRoleLease(wf.root);
+        if (lease) wf.msgs.ping({ role: lease.role, repo: lease.repo }, typeof flags.session === 'string' ? flags.session : undefined);
+        for (const p of wf.msgs.presence()) {
+          console.log(`${p.online ? '●' : '○'} ${p.actor.role}${p.actor.repo ? '@' + p.actor.repo : ''}  ${p.last_seen}${p.session ? '  [' + p.session + ']' : ''}`);
+        }
         return;
       }
 

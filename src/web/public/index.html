@@ -126,7 +126,7 @@ header.top {
 .btn:disabled { opacity: .45; cursor: not-allowed; }
 
 /* tiles */
-.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+.tiles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 20px; }
 .tile {
   background: var(--card); border: 1px solid var(--ring); border-radius: 12px; padding: 14px 16px;
   min-height: 92px; display: flex; flex-direction: column; justify-content: space-between;
@@ -331,6 +331,11 @@ details.ms-detail[open] summary::before { content: "▾"; }
 
     <aside class="col">
       <section class="card">
+        <div class="card-head"><h2>消息</h2><span class="count" id="message-count"></span></div>
+        <div class="list" id="messages"></div>
+      </section>
+
+      <section class="card">
         <div class="card-head"><h2>下一步</h2><span class="count" id="next-count"></span></div>
         <div class="list" id="next"></div>
       </section>
@@ -377,6 +382,7 @@ const QSTATUS = { open: '待回答', answered: '已回答', applied: '已应用'
 
 let data = null;
 let showClosed = false;
+let messagesData = { unread: 0, blocking: [], messages: [] };
 
 async function get(path) {
   const r = await fetch(path);
@@ -418,6 +424,7 @@ function renderTiles(st) {
 
   const tiles = [
     { label: '阻塞问题', value: blocking, hint: blocking ? '实现必须先停下回答' : '没有阻塞', sym: blocking ? 'crit' : 'good', ch: blocking ? '!' : '✓' },
+    { label: '未读消息', value: messagesData.unread, hint: messagesData.blocking.length ? `${messagesData.blocking.length} 条 blocking` : 'inbox 里没有新消息', sym: messagesData.blocking.length ? 'crit' : messagesData.unread ? 'info' : 'good', ch: messagesData.blocking.length ? '!' : '●' },
     { label: '进行中的 M', value: inProgress, hint: '实现中 + 待验收', sym: 'info', ch: '◐' },
     { label: '待批准提交', value: (window.__approvals || []).filter(a => !a.used_at).length, hint: '需要用户 review diff', sym: 'warn', ch: '!' },
     { label: '工作区有改动', value: dirty + ' / ' + st.repos.length, hint: '仓库未提交状态', sym: dirty ? 'warn' : 'good', ch: dirty ? '●' : '✓' },
@@ -590,6 +597,44 @@ function relayText(q) {
   return lines.join('\n');
 }
 
+function renderMessages() {
+  const box = $('#messages');
+  box.innerHTML = '';
+  const list = messagesData.messages || [];
+  $('#message-count').textContent = `${messagesData.unread} 未读` + (messagesData.blocking.length ? ` · ${messagesData.blocking.length} blocking` : '');
+  if (!list.length) { box.appendChild(el('div', 'empty', '没有新消息。')); return; }
+  for (const m of list.slice(0, 8)) {
+    const r = el('div', 'row-item');
+    const refs = Object.entries(m.refs || {}).filter(([, v]) => v && (!Array.isArray(v) || v.length));
+    r.innerHTML = `
+      <div class="v" style="flex:1">
+        <div>
+          ${m.blocking ? '<span class="tag bad">blocking</span> ' : ''}
+          <b>${esc(m.subject)}</b>
+        </div>
+        <div class="repo-meta">${esc(m.kind)} · ${esc(m.from.role)}${m.from.repo ? '@' + esc(m.from.repo) : ''} → ${esc(m.to.role)}${m.to.repo ? '@' + esc(m.to.repo) : ''} · ${esc(ago(m.created_at))}</div>
+        ${m.body ? '<div class="q-context clamp" style="margin:5px 0;font-size:12.5px">' + esc(m.body) + '</div>' : ''}
+        ${refs.length ? '<div class="repo-meta">' + refs.map(([k, v]) => esc(k) + '=' + esc(Array.isArray(v) ? v.join(',') : v)).join(' · ') + '</div>' : ''}
+        <div style="margin-top:6px">
+          <button class="btn" data-ack="${esc(m.id)}">标记已处理</button>
+          ${m.status === 'unread' || m.status === 'queued' ? `<button class="btn ghost" data-read="${esc(m.id)}">标记已读</button>` : ''}
+        </div>
+      </div>`;
+    const ack = r.querySelector('[data-ack]');
+    if (ack) ack.onclick = async () => {
+      ack.disabled = true;
+      try { await post(`/api/message/${encodeURIComponent(m.id)}/ack`, {}); await load(); }
+      catch (e) { alert(e.message); ack.disabled = false; }
+    };
+    const rd = r.querySelector('[data-read]');
+    if (rd) rd.onclick = async () => {
+      try { await post(`/api/message/${encodeURIComponent(m.id)}/read`, {}); await load(); }
+      catch (e) { alert(e.message); }
+    };
+    box.appendChild(r);
+  }
+}
+
 function renderNext(st) {
   const box = $('#next');
   box.innerHTML = '';
@@ -661,14 +706,17 @@ function renderTimeline(events) {
 
 async function load() {
   try {
-    const [st, approvals, events, doctor] = await Promise.all([
+    const [st, approvals, events, doctor, messages] = await Promise.all([
       get('/api/status'), get('/api/approvals'), get('/api/events?limit=120'), get('/api/doctor'),
+      get('/api/messages?role=user'),
     ]);
     data = st;
     window.__approvals = approvals;
+    messagesData = messages;
     renderTiles(st);
     renderRepos(st);
     renderQuestions(st);
+    renderMessages();
     renderNext(st);
     renderApprovals();
     renderDoctor(doctor);
