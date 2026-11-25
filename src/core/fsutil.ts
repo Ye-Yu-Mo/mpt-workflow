@@ -74,6 +74,20 @@ export function within(parent: string, child: string): boolean {
   return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
 }
 
+/**
+ * Resolve symlinks in the longest existing prefix. Used before ACL and HTTP
+ * containment checks so a symlink cannot escape a repo or the public dir.
+ */
+export function realPath(p: string): string {
+  try {
+    return fs.realpathSync(p);
+  } catch {
+    const parent = path.dirname(p);
+    if (parent === p) return p;
+    return path.join(realPath(parent), path.basename(p));
+  }
+}
+
 export function slugDate(d = new Date()): string {
   return d.toISOString().replace(/[:.]/g, '-');
 }

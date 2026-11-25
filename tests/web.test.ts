@@ -50,7 +50,7 @@ function fixture() {
 }
 
 test('dashboard renders from a live API', async () => {
-  const { wf } = fixture();
+  const { root, abs, wf } = fixture();
   const server = await startWebServer(wf, 0);
   const base = server.url;
   const html = fs.readFileSync(path.resolve(process.cwd(), 'src/web/public/index.html'), 'utf8');
@@ -163,15 +163,43 @@ test('dashboard renders from a live API', async () => {
     });
     assert.equal(cross.status, 403);
 
+    const otherPort = await fetch(`${base}/api/activate`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: 'http://127.0.0.1:9999' },
+      body: JSON.stringify({ repo: 'repo-a' }),
+    });
+    assert.equal(otherPort.status, 403);
+
     // The file API is restricted to workflow documents, not source or secrets.
     const source = await fetch(`${base}/api/files?repo=repo-a&path=src/lib.rs`);
     assert.equal(source.status, 403);
     const todo = await fetch(`${base}/api/files?repo=repo-a&path=TODO-M1.md`);
     assert.equal(todo.status, 200);
 
+    const secret = path.join(root, 'outside-secret.json');
+    fs.writeFileSync(secret, '{"secret":true}');
+    fs.symlinkSync(secret, path.join(abs, 'docs/leak.json'));
+    const leak = await fetch(`${base}/api/files?repo=repo-a&path=docs/leak.json`);
+    assert.equal(leak.status, 403);
+
     assert.equal(errors.length, 0, 'no runtime errors: ' + errors.map((e) => e.message).join('; '));
   } finally {
     dom.window.close();
+    await server.close();
+  }
+});
+
+test('dashboard rejects encoded path traversal ids', async () => {
+  const { wf } = fixture();
+  const server = await startWebServer(wf, 0);
+  try {
+    const res = await fetch(`${server.url}/api/message/..%2F..%2Fsecret/ack`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    });
+    assert.equal(res.status, 404);
+  } finally {
     await server.close();
   }
 });

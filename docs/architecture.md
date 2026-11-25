@@ -101,6 +101,14 @@ Paths inside **any** configured repo are normalised relative to that repo, so a
 rule is repo-relative for all repos, not just the bound one. Deny rules win over
 allow rules.
 
+Agent roles are also denied `.claude/**`, `.mcp.json`, `.workflow/runtime/**`,
+`.git/**` and the question board, so the enforcement plane is not writable
+through the guarded path. The MCP process seeds its role/repo from
+`WF_ROLE`/`WF_REPO` (or `bootstrap`), requires `plan`/`todo` to stay inside the
+bound repo, and the hooks fail closed on an invalid role or malformed config.
+Agent Bash `git commit`/`git push` and CLI `approve`/`commit` are refused; an
+agent commits through the MCP tool after the human approval.
+
 The role is **self-declared**: the MCP process is per-session (stdio), so
 `bootstrap(role, repo)` scopes that process. It prevents accidental
 cross-role work; it is not authentication. Concurrent sessions should pass

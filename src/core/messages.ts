@@ -72,6 +72,7 @@ export interface SendInput {
 const MAX_BODY = 32 * 1024;
 const PRESENCE_TTL_MS = 5 * 60 * 1000;
 const DEFAULT_BLOCKING_TTL_MIN = 45;
+const MESSAGE_ID_RE = /^msg-[A-Za-z0-9-]+$/;
 
 export function actorKey(a: Actor): string {
   if (a.role === 'main' || a.role === 'user' || a.role === 'system') return a.role;
@@ -151,8 +152,8 @@ export class MessageStore {
     ensureDir(path.join(this.dir, 'presence'));
   }
 
-  private file(id: string): string {
-    return path.join(this.dir, `${id}.json`);
+  private file(id: string): string | null {
+    return MESSAGE_ID_RE.test(id) ? path.join(this.dir, `${id}.json`) : null;
   }
 
   private audit(entry: Record<string, unknown>): void {
@@ -174,7 +175,7 @@ export class MessageStore {
     for (const n of names) {
       try {
         const m = JSON.parse(readText(path.join(this.dir, n))) as Message;
-        if (m?.id) out.push(m);
+        if (m?.id && MESSAGE_ID_RE.test(m.id)) out.push(m);
       } catch {
         /* skip corrupt messages */
       }
@@ -184,7 +185,7 @@ export class MessageStore {
 
   get(id: string): Message | null {
     const p = this.file(id);
-    if (!exists(p)) return null;
+    if (!p || !exists(p)) return null;
     try {
       return JSON.parse(readText(p)) as Message;
     } catch {
@@ -193,7 +194,9 @@ export class MessageStore {
   }
 
   private save(m: Message): void {
-    writeAtomic(this.file(m.id), JSON.stringify(m, null, 2));
+    const p = this.file(m.id);
+    if (!p) throw new Error(`非法消息 id: ${m.id}`);
+    writeAtomic(p, JSON.stringify(m, null, 2));
   }
 
   findByKey(key: string): Message | null {

@@ -15,6 +15,7 @@ import {
 import { appendQuestion, nextQuestionId, questionsFile } from '../core/questions.js';
 import { logEvent } from '../core/state.js';
 import type { Role } from '../core/types.js';
+import { isRole } from '../core/types.js';
 import { Workflow } from '../core/workflow.js';
 import { VERSION } from '../version.js';
 
@@ -32,6 +33,8 @@ interface Ctx {
   wf: Workflow;
   role: Role;
   repo: string | null;
+  /** False until --role, WF_ROLE, or bootstrap declares the session. */
+  declared?: boolean;
 }
 
 export interface ServerOptions {
@@ -142,6 +145,7 @@ function buildTools(_opts: ServerOptions): ToolSpec[] {
         setRoleLease(ctx.wf.root, { role, repo: repo ?? undefined, at: new Date().toISOString() });
         ctx.role = role;
         ctx.repo = repo;
+        ctx.declared = true;
         const me: Actor = { role, repo: repo ?? undefined };
         ctx.wf.msgs.ping(me);
         ctx.wf.msgs.promoteQueued(me);
@@ -298,6 +302,13 @@ function buildTools(_opts: ServerOptions): ToolSpec[] {
           ? (args.repo as string | undefined) || null
           : (args.repo as string) || ctx.repo || ctx.wf.cfg.active_repo;
         if (!toUserFromMain && !repoId) return err('需要指定 repo');
+        if (
+          (ctx.role === 'plan' || ctx.role === 'todo') &&
+          repoId !== null &&
+          repoId !== ctx.repo
+        ) {
+          return err(`角色 ${ctx.role} 绑定在 ${ctx.repo ?? '(未绑定)'}，不能向 ${repoId} 提问`);
+        }
         if (repoId) ctx.wf.repoRef(repoId);
         const toActor: Actor =
           to === 'PLAN'
@@ -377,6 +388,11 @@ function buildTools(_opts: ServerOptions): ToolSpec[] {
       handler: (args, ctx) => {
         const q = ctx.wf.findQuestion(String(args.id));
         if (!q) return err(`找不到问题 ${args.id}`);
+        if ((ctx.role === 'plan' || ctx.role === 'todo') && q.repo && q.repo !== ctx.repo) {
+          return err(
+            `角色 ${ctx.role} 绑定在 ${ctx.repo ?? '(未绑定)'}，不能回答 ${q.repo} 的问题`,
+          );
+        }
         const to = String(q.to).toLowerCase();
         const allowed =
           ctx.role === 'user' ||
@@ -415,6 +431,11 @@ function buildTools(_opts: ServerOptions): ToolSpec[] {
       handler: (args, ctx) => {
         const q = ctx.wf.findQuestion(String(args.id));
         if (!q) return err(`找不到问题 ${args.id}`);
+        if ((ctx.role === 'plan' || ctx.role === 'todo') && q.repo && q.repo !== ctx.repo) {
+          return err(
+            `角色 ${ctx.role} 绑定在 ${ctx.repo ?? '(未绑定)'}，不能关闭 ${q.repo} 的问题`,
+          );
+        }
         const isAsker = String(q.from).toLowerCase() === ctx.role;
         if (!isAsker && ctx.role !== 'user' && ctx.role !== 'main') {
           return err(`只有提问方（${q.from}）或用户/主 agent 能关闭 ${q.id}`);
@@ -829,7 +850,16 @@ function buildTools(_opts: ServerOptions): ToolSpec[] {
 }
 
 function requireRepo(args: Record<string, unknown>, ctx: Ctx): string {
-  const repo = (args.repo as string) || ctx.repo || ctx.wf.cfg.active_repo;
+  const explicit = typeof args.repo === 'string' ? args.repo : undefined;
+  if (ctx.role === 'plan' || ctx.role === 'todo') {
+    if (!ctx.repo) throw new Error(`角色 ${ctx.role} 还没有绑定仓库；先 bootstrap(role, repo)`);
+    ctx.wf.repoRef(ctx.repo);
+    if (explicit && explicit !== ctx.repo) {
+      throw new Error(`角色 ${ctx.role} 绑定在 ${ctx.repo}，不能操作其他仓库 ${explicit}`);
+    }
+    return ctx.repo;
+  }
+  const repo = explicit || ctx.repo || ctx.wf.cfg.active_repo;
   if (!repo) throw new Error('需要指定 repo（或先 bootstrap 绑定仓库）');
   ctx.wf.repoRef(repo);
   return repo;
@@ -859,7 +889,28 @@ export async function runMcpServer(opts: ServerOptions): Promise<void> {
     process.exit(1);
   }
   const wf = new Workflow(opts.root, cfg);
-  const ctx: Ctx = { wf, role: opts.role || 'user', repo: opts.repo || null };
+  const envRole = process.env.WF_ROLE;
+  const envRepo = process.env.WF_REPO;
+  const requested = opts.role ?? envRole;
+  if (requested !== undefined && !isRole(requested)) {
+    process.stderr.write(`[workflow] 无效的 role ${requested}；允许：main, plan, todo, user\n`);
+    process.exit(1);
+  }
+  const role: Role = (requested as Role | undefined) ?? 'user';
+  const repo = opts.repo ?? envRepo ?? null;
+  if (repo) {
+    try {
+      wf.repoRef(repo);
+    } catch (e) {
+      process.stderr.write(`[workflow] ${(e as Error).message}\n`);
+      process.exit(1);
+    }
+  }
+  if ((role === 'plan' || role === 'todo') && !repo) {
+    process.stderr.write(`[workflow] 角色 ${role} 必须通过 --repo 或 WF_REPO 绑定仓库\n`);
+    process.exit(1);
+  }
+  const ctx: Ctx = { wf, role, repo, declared: Boolean(requested) };
   // Do not write the machine-wide role lease at startup: several role sessions
   // may run at once. Hooks should get their role from WF_ROLE/WF_REPO; the
   // bootstrap tool may declare it explicitly for single-session use.
@@ -928,6 +979,10 @@ export async function invokeTool(
 ): Promise<ToolReturn> {
   const t = tools.find((x) => x.name === name);
   if (!t) return err(`未知工具 ${name}`);
+  const publicTools = new Set(['bootstrap', 'status', 'next', 'doctor', 'questions']);
+  if (ctx.declared === false && !publicTools.has(name)) {
+    return err(`先调用 bootstrap(role, repo) 声明本会话角色，再调用 ${name}`);
+  }
   if (!t.roles.includes(ctx.role)) {
     return err(
       `角色 ${ctx.role} 不能调用 ${name}（允许: ${t.roles.join(', ')}）。` +

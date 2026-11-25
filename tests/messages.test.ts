@@ -292,3 +292,10 @@ test('actorKey formats addresses', () => {
   assert.equal(actorKey({ role: 'main' }), 'main');
   assert.equal(actorKey({ role: 'user' }), 'user');
 });
+
+test('message ids cannot escape the message store', () => {
+  const { wf } = fixture();
+  assert.equal(wf.msgs.get('../../x'), null);
+  assert.equal(wf.msgs.markRead('../../x'), null);
+  assert.equal(wf.msgs.ack('../../x'), null);
+});

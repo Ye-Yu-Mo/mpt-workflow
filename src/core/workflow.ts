@@ -1151,13 +1151,7 @@ export class Workflow {
  * questions board change as a normal part of the workflow.
  */
 export function isMachineManagedFile(file: string): boolean {
-  return (
-    /^TODO-M\d+\.md$/.test(file) ||
-    file === 'docs/agent-questions.md' ||
-    file === '.mcp.json' ||
-    file.startsWith('.claude/') ||
-    file.startsWith('.workflow/')
-  );
+  return /^TODO-M\d+\.md$/.test(file) || file === 'docs/agent-questions.md';
 }
 
 /** Machine-managed files plus the plan itself (derived-scope checks only). */

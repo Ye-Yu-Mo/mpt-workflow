@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Permission boundary.** MCP seeds the session role from `WF_ROLE`/`WF_REPO`
+  and refuses state changes until `bootstrap`; `plan`/`todo` are repo-bound in
+  MCP and in the hooks; hooks fail closed on invalid roles, malformed config and
+  malformed hook input.
+- Agent Bash `git commit` / `git push` (including `-C`, `-c`, `--git-dir`) and
+  `mpt-workflow approve|commit` are refused. `.claude/**`, `.mcp.json`,
+  `.workflow/runtime/**`, `.git/**` and the question board are denied to agent
+  roles, so the enforcement plane cannot be edited through the guarded path.
+- Approval and message ids are validated before touching the filesystem; the
+  dashboard compares the exact `host:port` Origin and resolves symlinks before
+  repo/public-directory containment checks.
+- `init` repairs stale MCP/hook CLI paths instead of leaving `doctor`'s
+  `stale-cli` warning unfixable.
+
 ### Changed
 
 - Tooling: Biome 2 now formats and lints `src/`, `tests/`, `scripts/` and the

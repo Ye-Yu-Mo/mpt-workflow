@@ -270,3 +270,50 @@ test('pretool hook blocks plan writing source and todo writing PLAN', async () =
   assert.equal(run('todo', 'Write', { file_path: path.join(abs, 'src/lib.rs') }), 0);
   assert.equal(run('todo', 'Bash', { command: 'git push origin main' }), 2);
 });
+
+function twoRepoFixture() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wf-mcp2-'));
+  for (const id of ['repo-a', 'repo-b']) {
+    const abs = path.join(root, id);
+    fs.mkdirSync(path.join(abs, 'docs'), { recursive: true });
+    fs.mkdirSync(path.join(abs, 'src'), { recursive: true });
+    fs.writeFileSync(
+      path.join(abs, 'PLAN.md'),
+      `# PLAN: ${id}\n\n| M | 名称 |\n|---|---|\n| M1 | first |\n`,
+    );
+    fs.writeFileSync(
+      path.join(abs, 'TODO-M1.md'),
+      `# TODO-M1: first\n\n> 状态：待实现\n\n- **影响文件**：\n  - \`src/lib.rs\`\n`,
+    );
+    fs.writeFileSync(path.join(abs, 'src/lib.rs'), 'fn f() {}\n');
+    git(abs, ['init', '-q']);
+    git(abs, ['config', 'user.email', 't@example.com']);
+    git(abs, ['config', 'user.name', 't']);
+    git(abs, ['add', '-A']);
+    git(abs, ['commit', '-qm', 'init']);
+  }
+  init({ root, program: 'mcp-two', repos: ['repo-a', 'repo-b'], adopt: true });
+  return { root, wf: new Workflow(root) };
+}
+
+test('a repo-bound agent cannot drive another repo through MCP', async () => {
+  const { wf } = twoRepoFixture();
+  const todo = caller(wf, 'todo');
+  const plan = caller(wf, 'plan');
+
+  const claim = await todo('milestone_claim', { milestone: 'M1', repo: 'repo-b' });
+  assert.equal(claim.isError, true);
+  assert.match(claim.text, /不能操作其他仓库/);
+
+  const commit = await todo('commit_request', { message: 'x', repo: 'repo-b' });
+  assert.equal(commit.isError, true);
+  assert.match(commit.text, /不能操作其他仓库/);
+
+  const accept = await plan('milestone_accept', { milestone: 'M1', repo: 'repo-b' });
+  assert.equal(accept.isError, true);
+  assert.match(accept.text, /不能操作其他仓库/);
+
+  const ask = await todo('ask', { to: 'main', context: 'x', repo: 'repo-b' });
+  assert.equal(ask.isError, true);
+  assert.match(ask.text, /不能向 repo-b 提问/);
+});

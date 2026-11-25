@@ -55,3 +55,9 @@ sandbox and it is not multi-tenant.
   working-tree hash, so approve only what you have seen.
 - Treat `--install-hooks` as a convenience, not a security control: hooks can be
   bypassed with `--no-verify` or by editing `.git/hooks`.
+- Agent roles are denied `.claude/**`, `.mcp.json`, `.workflow/runtime/**`,
+  `.git/**` and the question board, so the enforcement plane is not editable by
+  the sessions it guards. Agent Bash `git commit` / `git push` and
+  `mpt-workflow approve|commit` are refused; use the MCP commit tool.
+- Git aliases are not resolved by the Bash guard. A shell-capable agent can
+  still do arbitrary things; the hooks are guardrails, not a sandbox.

@@ -3,7 +3,7 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { exists, readText, within } from '../core/fsutil.js';
+import { exists, readText, realPath, within } from '../core/fsutil.js';
 import { diffStat, diffUnified, recentLog } from '../core/git.js';
 import { logEvent, readEvents } from '../core/state.js';
 import type { Workflow } from '../core/workflow.js';
@@ -25,14 +25,14 @@ function hostName(req: http.IncomingMessage): string {
 }
 
 /**
- * Browsers attach Origin to cross-origin writes. Rejecting them closes the
- * CSRF hole without adding tokens to a localhost-only dashboard.
+ * Reject a different loopback port too: another local dev server must not be
+ * able to write as the user just because its hostname is 127.0.0.1.
  */
 function isCrossOrigin(req: http.IncomingMessage): boolean {
   const origin = req.headers.origin;
   if (!origin) return false;
   try {
-    return !LOCAL_HOSTS.has(new URL(origin).hostname);
+    return new URL(origin).host !== req.headers.host;
   } catch {
     return true;
   }
@@ -53,7 +53,10 @@ function readBody(req: http.IncomingMessage): Promise<Record<string, unknown>> {
     let data = '';
     req.on('data', (c) => {
       data += c;
-      if (data.length > 2 * 1024 * 1024) reject(new Error('body too large'));
+      if (data.length > 2 * 1024 * 1024) {
+        req.destroy();
+        reject(new Error('body too large'));
+      }
     });
     req.on('end', () => {
       if (!data) return resolve({});
@@ -70,11 +73,16 @@ function readBody(req: http.IncomingMessage): Promise<Record<string, unknown>> {
 function serveStatic(res: http.ServerResponse, rel: string) {
   const cleaned = rel.replace(/^\/+/, '') || 'index.html';
   const abs = path.resolve(PUBLIC_DIR, cleaned);
-  if (!within(PUBLIC_DIR, abs) || !exists(abs) || fs.statSync(abs).isDirectory()) {
+  const realAbs = realPath(abs);
+  if (
+    !within(realPath(PUBLIC_DIR), realAbs) ||
+    !exists(realAbs) ||
+    fs.statSync(realAbs).isDirectory()
+  ) {
     res.writeHead(404).end('not found');
     return;
   }
-  const ext = path.extname(abs);
+  const ext = path.extname(realAbs);
   const types: Record<string, string> = {
     '.html': 'text/html; charset=utf-8',
     '.css': 'text/css; charset=utf-8',
@@ -86,7 +94,7 @@ function serveStatic(res: http.ServerResponse, rel: string) {
     'content-type': types[ext] || 'application/octet-stream',
     'x-content-type-options': 'nosniff',
   });
-  fs.createReadStream(abs).pipe(res);
+  fs.createReadStream(realAbs).pipe(res);
 }
 
 export interface WebHandle {
@@ -97,17 +105,29 @@ export interface WebHandle {
 
 export function startWebServer(wf: Workflow, port: number): Promise<WebHandle> {
   const server = http.createServer(async (req, res) => {
-    const url = new URL(req.url || '/', `http://127.0.0.1:${port}`);
+    let url: URL;
+    try {
+      url = new URL(req.url || '/', `http://127.0.0.1:${port}`);
+    } catch {
+      res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' }).end('bad request');
+      return;
+    }
     const p = url.pathname;
-    const method = req.method || 'GET';
 
-    // Loopback-only + same-origin writes. The server has no authentication, so
-    // DNS rebinding and cross-site form posts must be refused here.
+    // Loopback-only + same-origin. The server has no authentication, so DNS
+    // rebinding, cross-site form posts and other localhost ports must be refused.
     if (!LOCAL_HOSTS.has(hostName(req))) {
       res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' }).end('forbidden');
       return;
     }
-    if (!['GET', 'HEAD', 'OPTIONS'].includes(method) && isCrossOrigin(req)) {
+    const site = String(req.headers['sec-fetch-site'] || '');
+    if (site && site !== 'same-origin' && site !== 'none') {
+      res
+        .writeHead(403, { 'content-type': 'text/plain; charset=utf-8' })
+        .end('cross-site request rejected');
+      return;
+    }
+    if (isCrossOrigin(req)) {
       res
         .writeHead(403, { 'content-type': 'text/plain; charset=utf-8' })
         .end('cross-origin request rejected');
@@ -150,23 +170,22 @@ export function startWebServer(wf: Workflow, port: number): Promise<WebHandle> {
             }),
           });
         }
-        if (req.method === 'POST' && /^\/api\/message\/[^/]+\/ack$/.test(p)) {
-          const id = decodeURIComponent(p.split('/')[3]);
-          const body = await readBody(req);
-          const m = wf.msgs.ack(id, body.note ? String(body.note) : undefined);
+        if (req.method === 'POST' && /^\/api\/message\/[A-Za-z0-9-]+\/(ack|read)$/.test(p)) {
+          const [, , , id, action] = p.split('/');
+          const body = action === 'ack' ? await readBody(req) : {};
+          const m =
+            action === 'ack'
+              ? wf.msgs.ack(id, body.note ? String(body.note) : undefined)
+              : wf.msgs.markRead(id);
           if (!m) return json(res, { error: `no such message ${id}` }, 404);
-          logEvent(wf.root, {
-            role: 'user',
-            tool: 'web_message_ack',
-            ok: true,
-            detail: { message: id },
-          });
-          return json(res, m);
-        }
-        if (req.method === 'POST' && /^\/api\/message\/[^/]+\/read$/.test(p)) {
-          const id = decodeURIComponent(p.split('/')[3]);
-          const m = wf.msgs.markRead(id);
-          if (!m) return json(res, { error: `no such message ${id}` }, 404);
+          if (action === 'ack') {
+            logEvent(wf.root, {
+              role: 'user',
+              tool: 'web_message_ack',
+              ok: true,
+              detail: { message: id },
+            });
+          }
           return json(res, m);
         }
         if (req.method === 'GET' && p === '/api/presence') {
@@ -186,8 +205,8 @@ export function startWebServer(wf: Workflow, port: number): Promise<WebHandle> {
           const id = decodeURIComponent(p.slice('/api/repo/'.length));
           return json(res, wf.repoState(id));
         }
-        if (req.method === 'POST' && /^\/api\/question\/[^/]+\/answer$/.test(p)) {
-          const id = decodeURIComponent(p.split('/')[3]);
+        if (req.method === 'POST' && /^\/api\/question\/[A-Za-z0-9_-]+\/answer$/.test(p)) {
+          const id = p.split('/')[3];
           const body = await readBody(req);
           const q = wf.findQuestion(id);
           if (!q) return json(res, { error: `no such question ${id}` }, 404);
@@ -206,8 +225,8 @@ export function startWebServer(wf: Workflow, port: number): Promise<WebHandle> {
           });
           return json(res, { ok: true, id });
         }
-        if (req.method === 'POST' && /^\/api\/question\/[^/]+\/close$/.test(p)) {
-          const id = decodeURIComponent(p.split('/')[3]);
+        if (req.method === 'POST' && /^\/api\/question\/[A-Za-z0-9_-]+\/close$/.test(p)) {
+          const id = p.split('/')[3];
           const body = await readBody(req);
           const q = wf.findQuestion(id);
           if (!q) return json(res, { error: `no such question ${id}` }, 404);
@@ -249,8 +268,10 @@ export function startWebServer(wf: Workflow, port: number): Promise<WebHandle> {
           if (!repo || !rel) return json(res, { error: 'repo and path required' }, 400);
           const ref = wf.repoRef(repo);
           const abs = path.resolve(ref.abs, rel);
-          if (!within(ref.abs, abs)) return json(res, { error: 'outside repo' }, 400);
-          const relPosix = path.relative(ref.abs, abs).split(path.sep).join('/');
+          const realAbs = realPath(abs);
+          const realRepo = realPath(ref.abs);
+          if (!within(realRepo, realAbs)) return json(res, { error: 'outside repo' }, 403);
+          const relPosix = path.relative(realRepo, realAbs).split(path.sep).join('/');
           const allowed =
             relPosix === 'PLAN.md' ||
             /^TODO-M\d+\.md$/.test(relPosix) ||

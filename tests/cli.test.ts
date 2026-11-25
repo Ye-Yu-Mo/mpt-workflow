@@ -37,3 +37,19 @@ test('CLI gc is a dry run by default', { skip: !fs.existsSync(CLI) }, () => {
   assert.match(out, /dry-run/);
   assert.match(out, /未删除任何文件/);
 });
+
+test('CLI rejects invalid roles', { skip: !fs.existsSync(CLI) }, () => {
+  const { root } = createDemoWorkspace();
+  for (const args of [
+    ['acl', 'bogus'],
+    ['mcp', '--root', root, '--role', 'PLAN'],
+  ]) {
+    try {
+      execFileSync(process.execPath, [CLI, ...args], { encoding: 'utf8', timeout: 10_000 });
+      assert.fail(`expected ${args.join(' ')} to fail`);
+    } catch (e) {
+      const err = e as { status?: number; stderr?: string };
+      assert.equal(err.status, 1);
+    }
+  }
+});

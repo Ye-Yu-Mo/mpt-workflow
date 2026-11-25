@@ -14,6 +14,7 @@ import {
   parseQuestionsFile,
   updateQuestion,
 } from '../src/core/questions.js';
+import { createApproval, readApproval, writeApproval } from '../src/core/state.js';
 import { Workflow } from '../src/core/workflow.js';
 
 function sh(cwd: string, cmd: string, args: string[]) {
@@ -370,4 +371,25 @@ test('init is idempotent and does not overwrite', () => {
   init({ root, program: 'test', repos: ['repo-a', 'repo-b'], adopt: true });
   assert.equal(fs.readFileSync(path.join(root, 'repo-a/PLAN.md'), 'utf8'), planBefore);
   assert.equal(fs.readFileSync(path.join(root, 'repo-a/docs/agent-questions.md'), 'utf8'), qBefore);
+});
+
+test('approval ids cannot escape the approvals directory', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wf-ap-'));
+  const a = createApproval(root, { repo: 'x', tree_hash: 'h', message: 'm', files: [] });
+  assert.equal(readApproval(root, a.id)?.id, a.id);
+  assert.equal(readApproval(root, '../x'), null);
+  assert.equal(readApproval(root, '..%2F..%2Fx'), null);
+  assert.throws(() => writeApproval(root, { ...a, id: '../../x' }), /非法审批 id/);
+});
+
+test('acl resolves symlinks before scope checks', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wf-acl-link-'));
+  const repo = path.join(root, 'repo-a');
+  fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
+  fs.mkdirSync(path.join(repo, 'docs'), { recursive: true });
+  fs.symlinkSync(path.join(repo, 'src'), path.join(repo, 'docs', 'evil'), 'dir');
+  const d = checkAcl('plan', path.join(repo, 'docs', 'evil', 'pwn.ts'), root, 'repo-a', repo, [
+    { id: 'repo-a', abs: repo },
+  ]);
+  assert.equal(d.allowed, false);
 });
