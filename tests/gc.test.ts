@@ -137,3 +137,17 @@ test('doctor reports stale CLI references and runtime size', () => {
   assert.ok(findings.some((f) => f.code === 'stale-cli' && f.level === 'WARN'));
   assert.ok(findings.some((f) => f.code === 'runtime-size'));
 });
+
+test('gc reports deletion failures instead of claiming success', {
+  skip: typeof process.getuid === 'function' && process.getuid() === 0,
+}, () => {
+  const { root, msgDir } = fixture();
+  fs.chmodSync(msgDir, 0o555);
+  try {
+    const r = runGc(root, { olderThanDays: 30, apply: true });
+    assert.ok(r.failed.length > 0);
+    assert.ok(fs.existsSync(path.join(msgDir, 'old-acked.json')));
+  } finally {
+    fs.chmodSync(msgDir, 0o755);
+  }
+});

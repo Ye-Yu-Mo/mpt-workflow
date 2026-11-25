@@ -375,12 +375,13 @@ export class Workflow {
   nextActions(repos: RepoState[], blocking: Question[]): NextAction[] {
     const out: NextAction[] = [];
 
-    const toMe = blocking.filter((q) => q.to === 'main' || q.to === 'user');
-    for (const q of toMe) {
+    for (const q of blocking) {
+      const to = String(q.to).toLowerCase();
       out.push({
-        actor: q.to === 'user' ? 'user' : 'main',
+        actor: to === 'plan' ? 'plan' : to === 'user' ? 'user' : 'main',
         action: '回答阻塞问题',
         detail: `${q.id} (${q.from} → ${q.to})：${q.context.split('\n')[0].slice(0, 120)}`,
+        repo: q.repo,
         question: q.id,
         blocking: true,
       });
@@ -561,6 +562,13 @@ export class Workflow {
     return { abs, doc };
   }
 
+  private assertActiveRepo(repoId: string): void {
+    const active = this.cfg.active_repo;
+    if (active && active !== repoId) {
+      throw new Error(`仓库 ${repoId} 不是 active_repo（当前 ${active}）；先 activate ${repoId}`);
+    }
+  }
+
   claim(repoId: string, milestone: string, role: Role): MilestoneState {
     return withLock(this.root, `todo-${repoId}-${milestone}`, () =>
       this.claimUnlocked(repoId, milestone, role),
@@ -568,6 +576,7 @@ export class Workflow {
   }
 
   private claimUnlocked(repoId: string, milestone: string, role: Role): MilestoneState {
+    this.assertActiveRepo(repoId);
     this.assertNotBlocked(role, repoId);
     const { abs, doc } = this.requireTodo(repoId, milestone);
     if (!['todo_ready', 'rejected', 'planned'].includes(doc.status)) {
@@ -595,6 +604,7 @@ export class Workflow {
   }
 
   private completeUnlocked(repoId: string, milestone: string, role: Role): MilestoneState {
+    this.assertActiveRepo(repoId);
     this.assertNotBlocked(role, repoId);
     const { abs, doc } = this.requireTodo(repoId, milestone);
     if (doc.status !== 'implementing') {
@@ -647,6 +657,7 @@ export class Workflow {
     role: Role,
     opts: { note?: string; force?: boolean } = {},
   ): MilestoneState {
+    this.assertActiveRepo(repoId);
     if (role !== 'plan' && role !== 'main') {
       throw new Error(`只有 PLAN/主 agent 能验收；当前角色 ${role}`);
     }
@@ -720,6 +731,7 @@ export class Workflow {
     role: Role,
     reason: string,
   ): MilestoneState {
+    this.assertActiveRepo(repoId);
     if (role !== 'plan' && role !== 'main') {
       throw new Error(`只有 PLAN/主 agent 能打回；当前角色 ${role}`);
     }
@@ -783,6 +795,7 @@ export class Workflow {
   }> {
     const { repoId, milestone, command, role } = input;
     const ref = this.repoRef(repoId);
+    this.assertActiveRepo(repoId);
     this.requireTodo(repoId, milestone); // validate early
     const cwd = input.cwd ? path.resolve(ref.abs, input.cwd) : ref.abs;
     if (!within(ref.abs, cwd)) throw new Error(`evidence cwd 必须在仓库内: ${cwd}`);

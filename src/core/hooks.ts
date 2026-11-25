@@ -319,7 +319,7 @@ export function runSessionStart(): number {
   lines.push('');
   lines.push(
     '规则：只用 MCP 的 workflow 工具推进状态；不要手改 PLAN/TODO 状态；' +
-      '有歧义先提问（question_ask）；提交需用户批准；blocking 消息要 ack 才能继续。',
+      '有歧义先提问（ask）；提交需用户批准；blocking 消息要 ack 才能继续。',
   );
   process.stdout.write(lines.join('\n') + '\n');
   return 0;

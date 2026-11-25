@@ -152,6 +152,13 @@ export function init(options: InitOptions): InitResult {
     if (JSON.stringify(cfg) !== cfgSnapshot) saveConfig(root, cfg);
   }
 
+  // Generated machine-specific files must stay out of the diff even with
+  // --no-adopt.
+  for (const r of cfg.repos) {
+    const abs = path.join(root, r.path);
+    if (exists(abs)) excludeFromGit(abs, ['.mcp.json', '.claude/settings.json']);
+  }
+
   if (options.installHooks) {
     const res = installHooks(root, cfg);
     created.push(...res.created);

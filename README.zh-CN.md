@@ -277,7 +277,7 @@ mpt-workflow gc --apply --evidence-days 90   # 同时删除 90 天前的完整�
 npm run typecheck
 npm run lint      # Biome：格式 + lint
 npm run format    # Biome：写入安全修复
-npm test          # 67 个测试（含示例、MCP stdio 与看板端到端）
+npm test          # 72 个测试（含示例、MCP stdio 与看板端到端）
 npm run build
 ```
 

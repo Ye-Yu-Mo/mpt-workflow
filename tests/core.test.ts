@@ -280,6 +280,35 @@ test('blocking question surfaces in status and next', () => {
   assert.equal(st.blockingQuestions.length, 1);
   const repo = st.repos.find((r) => r.id === 'repo-a')!;
   assert.ok(repo.problems.some((p) => p.includes('Q-001')));
+  assert.ok(st.next.some((n) => n.actor === 'plan' && n.question === 'Q-001'));
+});
+
+test('milestone mutations require the active repo', () => {
+  const { wf } = setup();
+  wf.setActiveRepo('repo-b');
+  assert.throws(() => wf.claim('repo-a', 'M1', 'todo'), /不是 active_repo/);
+  wf.setActiveRepo('repo-a');
+  assert.equal(wf.claim('repo-a', 'M1', 'todo').status, 'implementing');
+});
+
+test('init --no-adopt still excludes generated config from git', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wf-noadopt-'));
+  const repo = path.join(root, 'repo-a');
+  fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(repo, 'src/lib.rs'), 'fn f() {}\n');
+  for (const args of [
+    ['init', '-q'],
+    ['config', 'user.email', 't@example.com'],
+    ['config', 'user.name', 't'],
+    ['add', '-A'],
+    ['commit', '-qm', 'init'],
+  ]) {
+    sh(repo, 'git', args);
+  }
+  init({ root, program: 'no-adopt', repos: ['repo-a'], adopt: false });
+  const status = execFileSync('git', ['-C', repo, 'status', '--porcelain'], { encoding: 'utf8' });
+  assert.doesNotMatch(status, /\.mcp\.json/);
+  assert.doesNotMatch(status, /\.claude\//);
 });
 
 /* ------------------------------- scope ---------------------------------- */

@@ -299,3 +299,21 @@ test('message ids cannot escape the message store', () => {
   assert.equal(wf.msgs.markRead('../../x'), null);
   assert.equal(wf.msgs.ack('../../x'), null);
 });
+
+test('agent idempotency keys cannot suppress workflow notifications', () => {
+  const { wf } = fixture();
+  const plan = { role: 'plan' as const, repo: 'repo-a' };
+  const todo = { role: 'todo' as const, repo: 'repo-a' };
+  wf.msgs.send({
+    from: todo,
+    to: plan,
+    kind: 'event',
+    subject: 'pre-sent',
+    idempotency_key: 'msg-test:repo-a:M1:claim:plan@repo-a',
+  });
+  wf.claim('repo-a', 'M1', 'todo');
+  const claims = wf.msgs
+    .forActor(plan, { includeAcked: true })
+    .filter((m) => m.subject.includes('开始实现'));
+  assert.equal(claims.length, 1);
+});

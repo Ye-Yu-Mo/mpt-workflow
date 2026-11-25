@@ -362,7 +362,7 @@ src/core/     parsing, state machine, ACL, git, evidence, approvals, messages
 src/mcp/      MCP server (25 tools)
 src/web/      HTTP API + single-page dashboard
 src/cli.ts    init / status / doctor / web / mcp / hook / inbox / send ...
-tests/        node:test suites (67 tests, incl. real examples + MCP stdio)
+tests/        node:test suites (72 tests, incl. real examples + MCP stdio)
 docs/         architecture and requirement notes
 ```
 
@@ -373,7 +373,7 @@ npm run typecheck   # tsc --noEmit
 npm run typecheck:tests  # typecheck the test suite too
 npm run lint        # Biome: formatting + lint
 npm run format      # Biome: write safe fixes
-npm test            # runs the 67 tests via tsx
+npm test            # runs the 72 tests via tsx
 npm run build       # tsc + copies the dashboard assets into dist/
 ```
 

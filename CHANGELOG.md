@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- CLI boolean flags are parsed strictly: `--apply false` / `--apply=false` no
+  longer delete, and a non-boolean value exits non-zero. `--key=value` is
+  supported.
+- `gc --apply` reports deletion failures and exits non-zero instead of claiming
+  success.
+- `next` surfaces blocking questions addressed to PLAN.
+- `active_repo` is enforced for claim/complete/evidence/accept/reject.
+- Agent-supplied message idempotency keys are namespaced by sender, so they
+  cannot suppress workflow notifications.
+- `init --no-adopt` excludes generated `.mcp.json` / `.claude` files in repos.
+- SessionStart now names the real tool `ask` instead of `question_ask`.
+
 ## [0.7.0] - 2026-11-25
 
 ### Fixed

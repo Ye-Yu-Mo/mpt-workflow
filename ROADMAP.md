@@ -42,7 +42,8 @@ feature surface.
 - [x] Dashboard: focus retention and visible write errors.
 - [x] Release: idempotent publish, prerelease tags, stronger gates, npm docs
   links.
-- [ ] Release `0.7.0`.
+- [x] Release `0.7.0`.
+- [ ] Release `0.7.1` (operational leftovers).
 
 ## Decided
 
