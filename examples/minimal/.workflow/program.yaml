@@ -1,0 +1,14 @@
+program: example-minimal
+active_repo: demo-service
+repos:
+  - id: demo-service
+    path: demo-service
+phases:
+  - id: P1
+    title: 契约与基线冻结
+    status: active
+    repos:
+      - demo-service
+    exit_criteria:
+      - M1 验收
+contracts: []

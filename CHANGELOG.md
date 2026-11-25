@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Runnable [examples](examples/) for a minimal repo, a multi-repo program with
+  the serial `active_repo` lock, and a Rust crate with `cargo test` evidence.
+- [docs/troubleshooting.md](docs/troubleshooting.md) covering ACL/hooks,
+  blocking messages, commit refusals, evidence, dashboard access and `gc`.
+
 ## [0.6.0] - 2026-11-25
 
 ### Added

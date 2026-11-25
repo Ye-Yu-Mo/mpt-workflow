@@ -15,6 +15,17 @@ PLAN → TODO → implement → accept → commit workflow into an enforceable s
 
 ---
 
+## Try it in 60 seconds
+
+```bash
+npx mpt-workflow demo
+# prints a disposable workspace; then run the printed command:
+npx mpt-workflow web --root <printed path> --port 7788
+```
+
+The demo creates everything under `$TMPDIR`; nothing outside it is touched.
+Larger, checked-in workspaces live in [examples/](examples/).
+
 ## Why
 
 Running several Claude Code sessions against several git repos looks fine until
@@ -126,6 +137,17 @@ mpt-workflow web --root /path/to/workspace --port 7788
 ```
 
 Every command also works as `npx mpt-workflow <command>`.
+
+## Examples
+
+| Example | Shows |
+|---|---|
+| [examples/minimal](examples/minimal/) | One repo, two milestones, a question board |
+| [examples/multi-repo](examples/multi-repo/) | Serial `active_repo` lock and umbrella contract docs |
+| [examples/rust](examples/rust/) | `cargo test` evidence and the Cargo ACL entries |
+
+They are parsed by `tests/examples.test.ts`, so the checked-in Markdown cannot
+silently rot.
 
 Want to see it work first? `mpt-workflow demo` builds a throwaway workspace,
 adopts it, prints status and sends a message. Nothing outside `$TMPDIR` is
@@ -319,7 +341,7 @@ src/core/     parsing, state machine, ACL, git, evidence, approvals, messages
 src/mcp/      MCP server (25 tools)
 src/web/      HTTP API + single-page dashboard
 src/cli.ts    init / status / doctor / web / mcp / hook / inbox / send ...
-tests/        node:test suites (44 tests, incl. a real MCP stdio round-trip)
+tests/        node:test suites (45 tests, incl. real examples + MCP stdio)
 docs/         architecture and requirement notes
 ```
 
@@ -327,12 +349,13 @@ docs/         architecture and requirement notes
 
 ```bash
 npm run typecheck   # tsc --noEmit
-npm test            # runs the 44 tests via tsx
+npm test            # runs the 45 tests via tsx
 npm run build       # tsc + copies the dashboard assets into dist/
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow, and
 [docs/architecture.md](docs/architecture.md) for the design rationale.
+Stuck? See [docs/troubleshooting.md](docs/troubleshooting.md).
 
 ## License
 

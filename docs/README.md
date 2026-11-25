@@ -8,6 +8,8 @@
 | [requirements-agent-messaging-v0.1.md](requirements-agent-messaging-v0.1.md) | Original messaging requirements (Chinese), as received |
 | [platform-support.md](platform-support.md) | Supported platforms and the native-Windows gap |
 | [releasing.md](releasing.md) | Version bump, tag, npm publish and release workflow |
+| [troubleshooting.md](troubleshooting.md) | Role/ACL, hooks, blocking messages, commits, evidence, dashboard and `gc` |
+| [../examples/README.md](../examples/README.md) | Runnable minimal, multi-repo and Rust workspaces |
 
 The user-facing documentation lives in the repository root:
 [README.md](../README.md), [CONTRIBUTING.md](../CONTRIBUTING.md),
