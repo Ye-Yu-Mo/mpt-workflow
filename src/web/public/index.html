@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>workflow · 开发看板</title>
+<title>mpt-workflow · 开发看板</title>
 <style>
 /* Palette: dataviz reference. State colours are paired with a symbol AND a text
    label everywhere, so colour never carries meaning alone. */
@@ -114,6 +114,7 @@ header.top {
   padding: 3px 10px; font-size: 12px; color: var(--ink-2); background: var(--card);
 }
 .pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.pill[hidden] { display: none; }
 .pill.active .dot { background: var(--good); }
 .btn {
   border: 1px solid var(--ring); background: var(--card); color: var(--ink);
@@ -266,7 +267,57 @@ details.ms-detail[open] summary::before { content: "▾"; }
 .lv.WARN { background: color-mix(in srgb, var(--warning) 22%, transparent); color: var(--ink); }
 .lv.OK { background: color-mix(in srgb, var(--good) 14%, transparent); color: var(--good-text); }
 .empty { padding: 16px; color: var(--muted); font-size: 12.5px; }
+.empty b { color: var(--ink); }
+.empty pre {
+  background: var(--surface-1); border: 1px solid var(--ring); border-radius: 6px;
+  padding: 7px 9px; margin: 6px 0; overflow: auto; font-size: 11.5px; color: var(--ink);
+}
 .footer { color: var(--muted); font-size: 11.5px; margin-top: 24px; display: flex; gap: 14px; flex-wrap: wrap; }
+
+/* feedback and controls */
+:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.banner {
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  background: color-mix(in srgb, var(--critical) 9%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--critical) 35%, transparent);
+  color: var(--ink); border-radius: 10px; padding: 10px 14px; margin-bottom: 16px;
+}
+.banner[hidden] { display: none; }
+.banner .grow { flex: 1; min-width: 200px; }
+.pill input[type="checkbox"] { margin: 0; }
+.msg-filters { display: flex; gap: 6px; padding: 9px 16px; border-bottom: 1px solid var(--grid); flex-wrap: wrap; }
+.chip {
+  border: 1px solid var(--ring); background: var(--card); color: var(--ink-2);
+  border-radius: 999px; padding: 3px 10px; font-size: 11.5px; cursor: pointer;
+}
+.chip:hover { border-color: var(--line); }
+.chip.active { background: var(--track); color: var(--ink); border-color: var(--line); font-weight: 600; }
+
+/* diff modal */
+.modal {
+  position: fixed; inset: 0; z-index: 50; padding: 20px;
+  background: rgba(0, 0, 0, .45); display: grid; place-items: center;
+}
+.modal[hidden] { display: none; }
+.modal-card {
+  background: var(--card); color: var(--ink); border: 1px solid var(--ring);
+  border-radius: 12px; width: min(1040px, 100%); max-height: 88vh;
+  display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 18px 60px rgba(0,0,0,.25);
+}
+.modal-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--grid); }
+.modal-head h2 { font-size: 14px; margin: 0; }
+.modal-head .btn { margin-left: auto; }
+.modal-body { padding: 14px 16px; overflow: auto; }
+.diff {
+  background: var(--surface-1); border: 1px solid var(--ring); border-radius: 8px;
+  padding: 10px; overflow: auto; max-height: 52vh; margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; line-height: 1.55;
+}
+.diff .dline { display: block; white-space: pre; }
+.dline.add { color: var(--good-text); background: color-mix(in srgb, var(--good) 9%, transparent); }
+.dline.rem { color: var(--critical); background: color-mix(in srgb, var(--critical) 9%, transparent); }
+.dline.hunk { color: var(--blue); }
+.modal-actions { display: flex; gap: 8px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
 
 @media (max-width: 1000px) {
   .grid { grid-template-columns: 1fr; }
@@ -284,9 +335,9 @@ details.ms-detail[open] summary::before { content: "▾"; }
 <div class="wrap">
   <header class="top">
     <div class="brand">
-      <div class="mark">wf</div>
+      <div class="mark">mpt</div>
       <div>
-        <h1 id="program-name">workflow</h1>
+        <h1 id="program-name">mpt-workflow</h1>
         <div class="sub" id="root-path">正在加载…</div>
       </div>
     </div>
@@ -296,11 +347,20 @@ details.ms-detail[open] summary::before { content: "▾"; }
       <span class="lbl">个里程碑已验收</span>
     </div>
     <div class="top-tools">
+      <span class="pill" id="version" hidden></span>
       <span class="pill" id="active-repo"><span class="dot"></span><span>无 active repo</span></span>
+      <label class="pill" title="自动刷新不会在你输入或查看详情时打断">
+        <input type="checkbox" id="autorefresh" checked /> 自动刷新
+      </label>
       <button class="btn ghost" id="refresh">刷新</button>
       <button class="btn ghost" id="theme">切换主题</button>
     </div>
   </header>
+
+  <div id="error" class="banner" role="alert" hidden>
+    <span class="grow" id="error-msg"></span>
+    <button class="btn" id="retry">重试</button>
+  </div>
 
   <div class="tiles" id="tiles"></div>
 
@@ -332,6 +392,7 @@ details.ms-detail[open] summary::before { content: "▾"; }
     <aside class="col">
       <section class="card">
         <div class="card-head"><h2>消息</h2><span class="count" id="message-count"></span></div>
+        <div class="msg-filters" id="message-filters"></div>
         <div class="list" id="messages"></div>
       </section>
 
@@ -358,9 +419,20 @@ details.ms-detail[open] summary::before { content: "▾"; }
   </div>
 
   <div class="footer">
-    <span>本地只读看板 · 写操作只有：回答/关闭问题、批准提交、切换 active repo</span>
+    <span>本地看板（仅 127.0.0.1）· 写操作：回答/关闭问题、批准提交、ack 消息、切换 active repo</span>
     <span>数据源：Markdown + .workflow/runtime</span>
-    <span id="generated"></span>
+    <span id="auto-state" aria-live="polite"></span>
+    <span id="generated" aria-live="polite"></span>
+  </div>
+</div>
+
+<div id="modal" class="modal" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-head">
+      <h2 id="modal-title">提交详情</h2>
+      <button class="btn ghost" id="modal-close">关闭</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
   </div>
 </div>
 
@@ -383,6 +455,14 @@ const QSTATUS = { open: '待回答', answered: '已回答', applied: '已应用'
 let data = null;
 let showClosed = false;
 let messagesData = { unread: 0, blocking: [], messages: [] };
+let messageFilter = 'unread';
+let autoRefresh = localStorage.getItem('wf-auto') !== 'off';
+let openDetail = null;
+let modalOpen = false;
+let lastFocus = null;
+let loading = false;
+const drafts = new Map();
+const openForms = new Set();
 
 async function get(path) {
   const r = await fetch(path);
@@ -406,6 +486,57 @@ function ago(ts) {
   return Math.floor(s / 86400) + 'd';
 }
 
+function isEditing() {
+  const a = document.activeElement;
+  if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return true;
+  return !!document.querySelector('.q-form.open');
+}
+
+function updateAutoState() {
+  const box = $('#auto-state');
+  if (!box) return;
+  if (!autoRefresh) box.textContent = '自动刷新已关闭';
+  else if (document.visibilityState === 'hidden') box.textContent = '自动刷新暂停（页面隐藏）';
+  else if (isEditing()) box.textContent = '自动刷新暂停（正在编辑）';
+  else box.textContent = '自动刷新 15s';
+}
+
+function showError(msg) {
+  $('#error-msg').textContent = msg;
+  $('#error').hidden = false;
+}
+
+function hideError() {
+  $('#error').hidden = true;
+}
+
+async function copyText(text, btn) {
+  const old = btn ? btn.textContent : '';
+  try {
+    await navigator.clipboard.writeText(text);
+    if (btn) btn.textContent = '已复制';
+  } catch {
+    window.prompt('复制以下内容', text);
+  }
+  if (btn) setTimeout(() => { btn.textContent = old; }, 1500);
+}
+
+function openModal(title, html) {
+  lastFocus = document.activeElement;
+  $('#modal-title').textContent = title;
+  $('#modal-body').innerHTML = html;
+  $('#modal').hidden = false;
+  modalOpen = true;
+  $('#modal-close').focus();
+}
+
+function closeModal() {
+  if (!modalOpen) return;
+  modalOpen = false;
+  $('#modal').hidden = true;
+  if (lastFocus && lastFocus.focus) lastFocus.focus();
+}
+
 function renderTiles(st) {
   const milestones = st.repos.flatMap(r => r.milestones);
   const accepted = milestones.filter(m => m.status === 'accepted' || m.status === 'committed').length;
@@ -413,6 +544,9 @@ function renderTiles(st) {
   $('#hero-of').textContent = '/ ' + milestones.length;
   $('#program-name').textContent = st.program;
   $('#root-path').textContent = st.root;
+  const ver = $('#version');
+  if (st.version) { ver.hidden = false; ver.textContent = 'v' + st.version; }
+  else ver.hidden = true;
 
   const active = $('#active-repo');
   active.classList.toggle('active', !!st.activeRepo);
@@ -445,6 +579,16 @@ function renderRepos(st) {
   const box = $('#repos');
   box.innerHTML = '';
   $('#repo-count').textContent = st.repos.length + ' 个仓库';
+  if (!st.repos.length) {
+    box.innerHTML = `<div class="empty onboarding">
+      <b>还没有仓库</b>
+      <p>在工作区根目录运行：</p>
+      <pre>mpt-workflow init --root "${esc(st.root)}" --adopt</pre>
+      <pre>mpt-workflow init --root "${esc(st.root)}" --install-hooks</pre>
+      <p>然后用角色启动 agent：<code>WF_ROLE=plan WF_REPO=&lt;repo&gt; claude</code></p>
+    </div>`;
+    return;
+  }
   for (const r of st.repos) {
     const total = r.milestones.length;
     const done = r.milestones.filter(m => ['accepted', 'committed'].includes(m.status)).length;
@@ -471,6 +615,7 @@ function renderRepos(st) {
       const b = el('button', 'ms ' + m.status);
       b.innerHTML = `<span class="sy">${s.sym}</span><span class="id">${esc(m.id)}</span><span>${s.label}</span>`;
       b.title = m.title + (m.sha ? ' · ' + m.sha : '');
+      b.setAttribute('aria-label', `${m.id} ${m.title} · ${s.label}`);
       b.onclick = () => toggleDetail(wrap, r, m, b);
       track.appendChild(b);
     }
@@ -488,17 +633,21 @@ function renderRepos(st) {
       p.innerHTML = r.problems.map(x => '<span style="color:var(--serious)">! ' + esc(x) + '</span>').join(' · ');
       wrap.appendChild(p);
     }
+    if (total === 0) {
+      const hint = el('div', 'repo-meta');
+      hint.style.marginTop = '6px';
+      hint.innerHTML = '先写 PLAN.md 的里程碑表或 TODO-M1.md，然后点刷新。';
+      wrap.appendChild(hint);
+    }
+    if (openDetail && openDetail.repo === r.id) {
+      const m = r.milestones.find(x => x.id === openDetail.ms);
+      if (m) appendDetail(wrap, r, m);
+    }
     box.appendChild(wrap);
   }
 }
 
-function toggleDetail(wrap, repo, m, btn) {
-  const existing = wrap.querySelector('details.ms-detail');
-  if (existing) {
-    const same = existing.dataset.ms === m.id;
-    existing.remove();
-    if (same) return;
-  }
+function appendDetail(wrap, repo, m) {
   const d = el('details', 'ms-detail');
   d.dataset.ms = m.id;
   d.open = true;
@@ -524,16 +673,50 @@ function toggleDetail(wrap, repo, m, btn) {
   wrap.appendChild(d);
 }
 
+function toggleDetail(wrap, repo, m) {
+  const existing = wrap.querySelector('details.ms-detail');
+  const same = existing && existing.dataset.ms === m.id;
+  if (existing) existing.remove();
+  if (same) {
+    openDetail = null;
+    return;
+  }
+  openDetail = { repo: repo.id, ms: m.id };
+  appendDetail(wrap, repo, m);
+}
+
 function renderQuestions(st) {
   const box = $('#questions');
+  // Preserve half-written answers across refreshes.
+  box.querySelectorAll('.q').forEach(qn => {
+    const id = qn.dataset.qid;
+    if (!id) return;
+    const ta = qn.querySelector('textarea');
+    const input = qn.querySelector('input');
+    if (ta) drafts.set(id, { answer: ta.value, resolution: input ? input.value : '' });
+  });
   box.innerHTML = '';
   const all = st.questions;
-  const list = all.filter(q => showClosed ? true : (q.status !== 'closed' && q.status !== 'canceled'));
+  const list = all
+    .filter(q => showClosed ? true : (q.status !== 'closed' && q.status !== 'canceled'))
+    .sort((a, b) => {
+      const rank = q => (q.blocking && q.status === 'open' ? 0 : q.status === 'open' ? 1 : q.status === 'answered' ? 2 : 3);
+      return rank(a) - rank(b);
+    });
   $('#question-count').textContent = `${list.length} 条 · ${all.filter(q => q.blocking && q.status === 'open').length} 阻塞`;
-  if (!list.length) { box.appendChild(el('div', 'empty', '没有需要处理的问题。')); return; }
+  if (!list.length) {
+    box.appendChild(el('div', 'empty', '没有需要处理的问题。agent 调用 <code>ask</code> 后会出现在这里。'));
+    return;
+  }
   for (const q of list) {
+    if (q.status === 'closed' || q.status === 'canceled') {
+      openForms.delete(q.id);
+      drafts.delete(q.id);
+    }
     const n = el('div', 'q');
+    n.dataset.qid = q.id;
     const opts = q.options.map(o => `<div class="q-opt"><b>${esc(o.id)}</b><span>${esc(o.text)}</span></div>`).join('');
+    const draft = drafts.get(q.id) || { answer: '', resolution: '' };
     n.innerHTML = `
       <div class="q-head">
         <span class="q-id">${esc(q.id)}</span>
@@ -541,41 +724,66 @@ function renderQuestions(st) {
         ${q.blocking ? '<span class="tag bad">blocking</span>' : ''}
         <span class="q-flow">${esc(q.from)} → ${esc(q.to)} · ${esc(q.repo || 'root')}</span>
       </div>
-      <div class="q-context clamp">${esc(q.context)}</div>
+      <div class="q-context clamp" data-context>${esc(q.context)}</div>
       ${opts ? '<div class="q-opts">' + opts + '</div>' : ''}
       ${q.recommendation ? '<div class="q-rec">建议：' + esc(q.recommendation) + '</div>' : ''}
       ${q.answer ? '<div class="q-rec" style="border-color:var(--good)">回答：' + esc(q.answer) + '</div>' : ''}
       <div class="q-actions">
         ${q.status !== 'closed' ? '<button class="btn primary" data-act="answer">回答</button>' : ''}
+        ${q.recommendation && q.status !== 'closed' ? '<button class="btn" data-act="rec">采纳建议</button>' : ''}
         ${q.status !== 'closed' ? '<button class="btn" data-act="close">关闭</button>' : ''}
+        <button class="btn ghost" data-act="expand">展开/收起</button>
         <button class="btn ghost" data-act="relay">复制转发文本</button>
       </div>
-      <div class="q-form">
-        <textarea placeholder="写下决定（会写入 docs/agent-questions.md 的 answer 字段）"></textarea>
-        <input placeholder="resolution（回写 PLAN/TODO/decisions 的位置，可选）" />
+      <div class="q-form${openForms.has(q.id) ? ' open' : ''}">
+        <textarea placeholder="写下决定（会写入 docs/agent-questions.md 的 answer 字段）">${esc(draft.answer)}</textarea>
+        <input placeholder="resolution（回写 PLAN/TODO/decisions 的位置，可选）" value="${esc(draft.resolution)}" />
         <div class="row"><button class="btn primary" data-act="submit">提交回答</button><span class="repo-meta" data-msg></span></div>
       </div>`;
     const form = n.querySelector('.q-form');
     const msg = n.querySelector('[data-msg]');
+    const ta = form.querySelector('textarea');
+    const input = form.querySelector('input');
+    const sync = () => drafts.set(q.id, { answer: ta.value, resolution: input.value });
+    ta.addEventListener('input', sync);
+    input.addEventListener('input', sync);
     n.querySelectorAll('[data-act]').forEach(b => {
       b.onclick = async () => {
         const act = b.dataset.act;
-        if (act === 'answer') { form.classList.toggle('open'); return; }
+        if (act === 'expand') {
+          n.querySelector('[data-context]').classList.toggle('clamp');
+          return;
+        }
         if (act === 'relay') {
-          const text = relayText(q);
-          try { await navigator.clipboard.writeText(text); msg.textContent = '已复制'; }
-          catch { window.prompt('复制以下文本', text); }
+          await copyText(relayText(q), b);
+          return;
+        }
+        if (act === 'answer') {
+          const opening = !form.classList.contains('open');
+          form.classList.toggle('open', opening);
+          if (opening) { openForms.add(q.id); ta.focus(); }
+          else openForms.delete(q.id);
+          return;
+        }
+        if (act === 'rec') {
+          openForms.add(q.id);
+          form.classList.add('open');
+          ta.value = q.recommendation || '';
+          sync();
+          ta.focus();
           return;
         }
         try {
           if (act === 'close') {
             await post(`/api/question/${encodeURIComponent(q.id)}/close`, {});
           } else {
-            const answer = form.querySelector('textarea').value.trim();
-            const resolution = form.querySelector('input').value.trim();
-            if (!answer) { msg.textContent = '先写回答'; return; }
+            const answer = ta.value.trim();
+            const resolution = input.value.trim();
+            if (!answer) { msg.textContent = '先写回答'; ta.focus(); return; }
             await post(`/api/question/${encodeURIComponent(q.id)}/answer`, { answer, resolution });
           }
+          drafts.delete(q.id);
+          openForms.delete(q.id);
           await load();
         } catch (e) { msg.textContent = '失败：' + e.message; }
       };
@@ -597,26 +805,51 @@ function relayText(q) {
   return lines.join('\n');
 }
 
+function renderMessageFilters() {
+  const box = $('#message-filters');
+  const defs = [['unread', '未读'], ['blocking', 'blocking'], ['all', '全部']];
+  box.innerHTML = defs
+    .map(([k, label]) => `<button class="chip${messageFilter === k ? ' active' : ''}" data-filter="${k}">${label}</button>`)
+    .join('');
+  box.querySelectorAll('[data-filter]').forEach(b => {
+    b.onclick = () => { messageFilter = b.dataset.filter; renderMessages(); };
+  });
+}
+
 function renderMessages() {
+  renderMessageFilters();
   const box = $('#messages');
   box.innerHTML = '';
-  const list = messagesData.messages || [];
-  $('#message-count').textContent = `${messagesData.unread} 未读` + (messagesData.blocking.length ? ` · ${messagesData.blocking.length} blocking` : '');
-  if (!list.length) { box.appendChild(el('div', 'empty', '没有新消息。')); return; }
-  for (const m of list.slice(0, 8)) {
+  const all = messagesData.messages || [];
+  const list = all.filter(m => {
+    if (messageFilter === 'all') return true;
+    if (messageFilter === 'blocking') return m.blocking && !['acked', 'expired'].includes(m.status);
+    return m.status === 'queued' || m.status === 'unread';
+  });
+  $('#message-count').textContent = `${messagesData.unread} 未读` +
+    (messagesData.blocking.length ? ` · ${messagesData.blocking.length} blocking` : '') +
+    ` · 显示 ${list.length}`;
+  if (!list.length) {
+    const empty = messageFilter === 'all' ? '还没有消息。' : messageFilter === 'blocking' ? '没有 blocking 消息。' : '没有未读消息。';
+    box.appendChild(el('div', 'empty', empty));
+    return;
+  }
+  for (const m of list) {
     const r = el('div', 'row-item');
     const refs = Object.entries(m.refs || {}).filter(([, v]) => v && (!Array.isArray(v) || v.length));
+    const done = m.status === 'acked';
     r.innerHTML = `
       <div class="v" style="flex:1">
         <div>
           ${m.blocking ? '<span class="tag bad">blocking</span> ' : ''}
+          <span class="tag">${esc(m.status)}</span>
           <b>${esc(m.subject)}</b>
         </div>
         <div class="repo-meta">${esc(m.kind)} · ${esc(m.from.role)}${m.from.repo ? '@' + esc(m.from.repo) : ''} → ${esc(m.to.role)}${m.to.repo ? '@' + esc(m.to.repo) : ''} · ${esc(ago(m.created_at))}</div>
         ${m.body ? '<div class="q-context clamp" style="margin:5px 0;font-size:12.5px">' + esc(m.body) + '</div>' : ''}
         ${refs.length ? '<div class="repo-meta">' + refs.map(([k, v]) => esc(k) + '=' + esc(Array.isArray(v) ? v.join(',') : v)).join(' · ') + '</div>' : ''}
         <div style="margin-top:6px">
-          <button class="btn" data-ack="${esc(m.id)}">标记已处理</button>
+          ${done ? '<span class="tag ok">已处理</span>' : `<button class="btn" data-ack="${esc(m.id)}">标记已处理</button>`}
           ${m.status === 'unread' || m.status === 'queued' ? `<button class="btn ghost" data-read="${esc(m.id)}">标记已读</button>` : ''}
         </div>
       </div>`;
@@ -624,12 +857,12 @@ function renderMessages() {
     if (ack) ack.onclick = async () => {
       ack.disabled = true;
       try { await post(`/api/message/${encodeURIComponent(m.id)}/ack`, {}); await load(); }
-      catch (e) { alert(e.message); ack.disabled = false; }
+      catch (e) { showError(e.message); ack.disabled = false; }
     };
     const rd = r.querySelector('[data-read]');
     if (rd) rd.onclick = async () => {
       try { await post(`/api/message/${encodeURIComponent(m.id)}/read`, {}); await load(); }
-      catch (e) { alert(e.message); }
+      catch (e) { showError(e.message); }
     };
     box.appendChild(r);
   }
@@ -639,16 +872,70 @@ function renderNext(st) {
   const box = $('#next');
   box.innerHTML = '';
   $('#next-count').textContent = st.next.length ? st.next.length + ' 项' : '';
-  if (!st.next.length) { box.appendChild(el('div', 'empty', '没有识别到待办。')); return; }
+  if (!st.next.length) {
+    box.appendChild(el('div', 'empty', '没有识别到待办。运行 <code>mpt-workflow doctor</code> 检查配置。'));
+    return;
+  }
   for (const n of st.next) {
+    const cmd = n.actor === 'user'
+      ? `mpt-workflow web --root ${JSON.stringify(st.root)}`
+      : `WF_ROLE=${n.actor}${n.repo ? ` WF_REPO=${n.repo}` : ''} claude`;
     const r = el('div', 'row-item');
     r.innerHTML = `
       <span class="next-actor">${esc(n.actor)}</span>
-      <div class="v">
+      <div class="v" style="flex:1">
         <div style="color:var(--ink);font-weight:600">${esc(n.action)}${n.repo ? ' <span class="repo-meta">' + esc(n.repo) + (n.milestone ? '/' + esc(n.milestone) : '') + '</span>' : ''}</div>
         <div>${esc(n.detail)}</div>
+        <div class="repo-meta" style="margin-top:5px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <code>${esc(cmd)}</code>
+          <button class="btn ghost" data-copy="${esc(cmd)}">复制</button>
+        </div>
       </div>`;
+    r.querySelector('[data-copy]').onclick = (e) => copyText(e.currentTarget.dataset.copy, e.currentTarget);
     box.appendChild(r);
+  }
+}
+
+function diffLines(diff) {
+  if (!diff) return '<span class="dline">(no diff)</span>';
+  return diff.slice(0, 200000).split('\n').map(line => {
+    let cls = '';
+    if (line.startsWith('@@')) cls = 'hunk';
+    else if (line.startsWith('+') && !line.startsWith('+++')) cls = 'add';
+    else if (line.startsWith('-') && !line.startsWith('---')) cls = 'rem';
+    return `<span class="dline ${cls}">${esc(line) || ' '}</span>`;
+  }).join('');
+}
+
+async function openDiff(a) {
+  openModal(`提交 ${a.id}`, '<div class="empty">正在加载 diff…</div>');
+  try {
+    const d = await get(`/api/diff?repo=${encodeURIComponent(a.repo)}`);
+    const files = (a.files || []).map(f => `<li><code>${esc(f)}</code></li>`).join('');
+    const log = (d.log || []).map(x => `<div class="repo-meta">${esc(x)}</div>`).join('');
+    $('#modal-body').innerHTML = `
+      <div class="repo-meta">${esc(a.repo)} · ${esc(a.message)}</div>
+      <div class="repo-meta">tree <code>${esc(a.tree_hash)}</code> · ${(a.files || []).length} 个文件</div>
+      <div class="modal-actions">
+        ${a.approved_at ? '<span class="tag ok">已批准</span>' : '<button class="btn primary" id="modal-approve">批准这个提交</button>'}
+        <span class="repo-meta">批准绑定当前工作区 hash；批准后 agent 才能 commit。</span>
+      </div>
+      <h3 style="font-size:12px;margin:14px 0 6px">改动文件</h3>
+      <ul style="margin:0;padding-left:18px;font-size:12px">${files}</ul>
+      <h3 style="font-size:12px;margin:14px 0 6px">diff 摘要</h3>
+      <pre class="diff">${esc(d.stat || '(no stat)')}</pre>
+      <h3 style="font-size:12px;margin:14px 0 6px">diff</h3>
+      <pre class="diff">${diffLines(d.diff || '')}</pre>
+      ${log ? '<h3 style="font-size:12px;margin:14px 0 6px">最近提交</h3>' + log : ''}`;
+    const btn = $('#modal-approve');
+    if (btn) btn.onclick = async () => {
+      btn.disabled = true;
+      btn.textContent = '批准中…';
+      try { await post('/api/approve', { id: a.id }); closeModal(); await load(); }
+      catch (e) { btn.disabled = false; btn.textContent = '批准提交'; showError(e.message); }
+    };
+  } catch (e) {
+    $('#modal-body').innerHTML = '<div class="empty">加载 diff 失败：' + esc(e.message) + '</div>';
   }
 }
 
@@ -658,19 +945,30 @@ function renderApprovals() {
   box.innerHTML = '';
   if (!list.length) { box.appendChild(el('div', 'empty', '没有待批准的提交。')); return; }
   for (const a of list) {
+    const files = (a.files || []).map(f => `<li><code>${esc(f)}</code></li>`).join('');
     const r = el('div', 'row-item');
     r.innerHTML = `
       <div class="v" style="flex:1">
-        <div><code>${esc(a.id)}</code> · ${esc(a.repo)}</div>
+        <div><code>${esc(a.id)}</code> · ${esc(a.repo)} ${a.approved_at ? '<span class="tag ok">已批准</span>' : '<span class="tag">待批准</span>'}</div>
         <div style="color:var(--ink-2)">${esc(a.message)}</div>
-        <div class="repo-meta">${a.files.length} 个文件 · tree ${esc(a.tree_hash)} · ${a.approved_at ? '已批准' : '等待批准'}</div>
-        <div style="margin-top:6px">${a.approved_at ? '' : '<button class="btn primary" data-approve="' + esc(a.id) + '">批准提交</button>'}</div>
+        <div class="repo-meta">${(a.files || []).length} 个文件 · tree ${esc(a.tree_hash)}</div>
+        <details class="repo-meta" style="margin-top:4px">
+          <summary>查看文件列表</summary>
+          <ul style="margin:4px 0 0;padding-left:18px">${files}</ul>
+        </details>
+        <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn" data-diff="${esc(a.id)}">查看 diff</button>
+          ${a.approved_at ? '' : `<button class="btn primary" data-approve="${esc(a.id)}">批准提交</button>`}
+        </div>
       </div>`;
+    const diffBtn = r.querySelector('[data-diff]');
+    if (diffBtn) diffBtn.onclick = () => openDiff(a);
     const b = r.querySelector('[data-approve]');
     if (b) b.onclick = async () => {
       b.disabled = true;
+      b.textContent = '批准中…';
       try { await post('/api/approve', { id: a.id }); await load(); }
-      catch (e) { alert(e.message); b.disabled = false; }
+      catch (e) { showError(e.message); b.disabled = false; b.textContent = '批准提交'; }
     };
     box.appendChild(r);
   }
@@ -704,11 +1002,14 @@ function renderTimeline(events) {
   }
 }
 
-async function load() {
+async function load(opts = {}) {
+  if (loading) return;
+  loading = true;
+  const y = window.scrollY;
   try {
     const [st, approvals, events, doctor, messages] = await Promise.all([
       get('/api/status'), get('/api/approvals'), get('/api/events?limit=120'), get('/api/doctor'),
-      get('/api/messages?role=user'),
+      get('/api/messages?role=user&all=1&limit=100'),
     ]);
     data = st;
     window.__approvals = approvals;
@@ -721,13 +1022,27 @@ async function load() {
     renderApprovals();
     renderDoctor(doctor);
     renderTimeline(events);
+    hideError();
     $('#generated').textContent = '更新于 ' + new Date(st.generatedAt).toLocaleTimeString();
+    if (!opts.silent && y > 0) { try { window.scrollTo(0, y); } catch { /* jsdom/no-op */ } }
   } catch (e) {
-    $('#root-path').textContent = '加载失败：' + e.message;
+    showError('加载失败：' + e.message);
+  } finally {
+    loading = false;
+    updateAutoState();
   }
 }
 
-$('#refresh').onclick = load;
+const autoBox = $('#autorefresh');
+autoBox.checked = autoRefresh;
+autoBox.onchange = () => {
+  autoRefresh = autoBox.checked;
+  localStorage.setItem('wf-auto', autoRefresh ? 'on' : 'off');
+  updateAutoState();
+};
+
+$('#refresh').onclick = () => load();
+$('#retry').onclick = () => load();
 $('#show-closed').onchange = (e) => { showClosed = e.target.checked; if (data) renderQuestions(data); };
 $('#theme').onclick = () => {
   const cur = document.documentElement.getAttribute('data-theme');
@@ -735,11 +1050,24 @@ $('#theme').onclick = () => {
   document.documentElement.setAttribute('data-theme', next);
   localStorage.setItem('wf-theme', next);
 };
+$('#modal-close').onclick = closeModal;
+$('#modal').addEventListener('click', (e) => { if (e.target === $('#modal')) closeModal(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+document.addEventListener('visibilitychange', () => {
+  updateAutoState();
+  if (document.visibilityState === 'visible' && autoRefresh && !isEditing() && !modalOpen) load({ silent: true });
+});
 const saved = localStorage.getItem('wf-theme');
 if (saved) document.documentElement.setAttribute('data-theme', saved);
 
 load();
-setInterval(load, 15000);
+setInterval(() => {
+  if (!autoRefresh || document.visibilityState === 'hidden' || isEditing() || modalOpen) {
+    updateAutoState();
+    return;
+  }
+  load({ silent: true });
+}, 15000);
 </script>
 </body>
 </html>
