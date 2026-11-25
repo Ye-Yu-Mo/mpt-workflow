@@ -16,6 +16,9 @@ feature surface.
 
 ## 0.5 — adoption
 
+- [x] Dashboard UX: diff review before approve, draft-safe refresh, message
+      filters, copyable session commands, onboarding empty states.
+- [x] `mpt-workflow demo` and `--version`; npx-stable init configuration.
 - English model-facing contract (MCP tool descriptions and server instructions);
   decide the locale strategy for CLI output and the dashboard.
 - Quickstart, troubleshooting and 2–3 real examples (`minimal`, `multi-repo`,
