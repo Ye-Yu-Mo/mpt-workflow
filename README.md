@@ -251,6 +251,21 @@ detail, and shows a retry banner if the API fails.
 The only write actions are: answer/close a question, approve a commit, ack a
 message, switch the active repo.
 
+## Maintenance
+
+```bash
+mpt-workflow doctor                          # runtime size + stale CLI paths
+mpt-workflow gc                              # dry run: list eligible state
+mpt-workflow gc --apply                      # delete processed messages/approvals
+                                             # older than 30 days + stale presence/locks
+mpt-workflow gc --apply --evidence-days 90   # also delete full evidence logs older than 90 days
+```
+
+`gc` is a dry run unless you pass `--apply`. It never removes unread messages or
+pending approvals, and evidence logs are kept unless `--evidence-days` is set
+(the TODO keeps a truncated tail). Use `--older-than N` to change the processed
+state threshold.
+
 ## MCP tools
 
 | Tool | Roles | Purpose |
@@ -304,7 +319,7 @@ src/core/     parsing, state machine, ACL, git, evidence, approvals, messages
 src/mcp/      MCP server (25 tools)
 src/web/      HTTP API + single-page dashboard
 src/cli.ts    init / status / doctor / web / mcp / hook / inbox / send ...
-tests/        node:test suites (40 tests, incl. a real MCP stdio round-trip)
+tests/        node:test suites (44 tests, incl. a real MCP stdio round-trip)
 docs/         architecture and requirement notes
 ```
 
@@ -312,7 +327,7 @@ docs/         architecture and requirement notes
 
 ```bash
 npm run typecheck   # tsc --noEmit
-npm test            # runs the 40 tests via tsx
+npm test            # runs the 44 tests via tsx
 npm run build       # tsc + copies the dashboard assets into dist/
 ```
 

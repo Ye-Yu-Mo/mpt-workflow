@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `mpt-workflow gc`: dry-run by default; `--apply` removes processed messages
+  and used approvals older than 30 days, stale presence records and stale lock
+  directories. `--evidence-days N` optionally removes old full evidence logs.
+- `doctor` reports the `runtime/` size and stale absolute CLI paths in
+  `.mcp.json` / hooks (for example after an npx cache eviction or a moved
+  checkout).
+
 ## [0.5.0] - 2026-11-25
 
 ### Added
