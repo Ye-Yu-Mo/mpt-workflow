@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-> 状态：pre-1.0。0.4.0 已准备，见 [ROADMAP.md](ROADMAP.md)。
+> 状态：pre-1.0。**0.4.0 已发布**，见 [ROADMAP.md](ROADMAP.md)。
 
 多 agent、多仓开发的**流程状态机**：一个本地 MCP server + 一个只读看板。
 
@@ -22,24 +22,23 @@ docs/agent-questions.md →  问答板、阻塞判定、前端回答
 ## 快速开始
 
 > npm 包名是 **`mpt-workflow`**（`workflow-mcp` 已被无关包占用，不要安装那个名字）。
-> 目前尚未发布到 npm，下面是从源码安装；首次发布后可用 `npx mpt-workflow <命令>`。
+> 已发布到 npm：`npm i -g mpt-workflow`，或直接用 `npx mpt-workflow <命令>`。
 
 ```bash
-npm install
-npm run build
+npm install -g mpt-workflow
 
 # 1. 在工作流根目录（伞仓）初始化，采用已有 PLAN/TODO/questions，不覆盖任何文件
-node dist/cli.js init --root /path/to/workspace --adopt
+mpt-workflow init --root /path/to/workspace --adopt
 
 # 2. 看一眼状态
-node dist/cli.js status --root /path/to/workspace
+mpt-workflow status --root /path/to/workspace
 
 # 3. 起看板
-node dist/cli.js web --root /path/to/workspace --port 7788
+mpt-workflow web --root /path/to/workspace --port 7788
 #    → http://127.0.0.1:7788
 ```
 
-想先看效果：`./scripts/demo.sh` 会在 `$TMPDIR` 里建一个一次性工作区，
+想先看效果（需要源码 checkout）：`./scripts/demo.sh` 会在 `$TMPDIR` 里建一个一次性工作区，
 走一遍 init → status → doctor → 消息，不碰任何现有目录。
 
 `init` 会做这些事（全部幂等，已存在的文件不覆盖）：
@@ -54,7 +53,7 @@ node dist/cli.js web --root /path/to/workspace --port 7788
 装护栏（可选，但强烈建议）：
 
 ```bash
-node dist/cli.js init --root /path/to/workspace --install-hooks
+mpt-workflow init --root /path/to/workspace --install-hooks
 ```
 
 会写 `.claude/settings.json`（每个仓 + 根目录）和 `.git/hooks/pre-commit`。

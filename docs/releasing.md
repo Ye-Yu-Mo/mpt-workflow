@@ -13,11 +13,13 @@ belongs to an unrelated project.
 
    ```bash
    npm run typecheck
-   npm test
    npm run build
+   npm test
    npm run test:coverage
    npm pack --dry-run
    ```
+
+   Build before test: three hook/MCP tests spawn `dist/cli.js`.
 
 4. Commit as `chore(release): vX.Y.Z`, then create and push an annotated tag:
 
@@ -40,20 +42,38 @@ belongs to an unrelated project.
 
 | Secret | Purpose |
 |---|---|
-| `NPM_TOKEN` | npm automation token with publish rights for `mpt-workflow` |
+| `NPM_TOKEN` | npm **Automation** token, or a granular token with **bypass 2FA** enabled, with publish rights for `mpt-workflow` |
+
+npm rejects tokens without 2FA bypass with `E403 ... Two-factor authentication
+or granular access token with bypass 2fa enabled is required`.
 
 The workflow already requests `id-token: write` for provenance and
 `contents: write` for the GitHub release.
 
 ## First publish
 
-If `mpt-workflow` does not exist on npm yet, a manual first publish may be
-required:
+The tag workflow performs the first publish; no manual step is needed as long
+as the token can create a new package.
+
+During a first publish npm may create a temporary `0.0.0-stage` version. It is
+a staged-publishing placeholder, not the `latest` tag — verify with:
 
 ```bash
-npm login
-npm publish --access public
+npm view mpt-workflow dist-tags
+# { latest: 'X.Y.Z' }
 ```
 
-After that, tag-driven releases are enough. Use a 2FA-enabled account and keep
-the automation token scoped to this package.
+If you publish manually instead, do not push the same version through the
+workflow: it will fail because the version already exists. Either let the
+workflow publish, or create the tag and GitHub release manually.
+
+## Troubleshooting
+
+- `Cannot find module .../dist/cli.js` during tests: run `npm run build` before
+  `npm test`.
+- `E403` during publish: the token lacks 2FA bypass; regenerate it as an
+  Automation token or a granular token with bypass 2FA.
+- A failed tag run can be re-run after fixing the secret. If the workflow
+  itself must change, move the tag to a commit containing the fix only when npm
+  and GitHub have no artifact for that version; otherwise bump the patch
+  version.
