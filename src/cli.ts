@@ -63,16 +63,24 @@ function usage(): string {
 function parseArgs(argv: string[]) {
   const positional: string[] = [];
   const flags: Record<string, string | boolean | string[]> = {};
+  const set = (key: string, value: string) => {
+    const cur = flags[key];
+    if (cur === undefined) flags[key] = value;
+    else if (Array.isArray(cur)) cur.push(value);
+    else flags[key] = [String(cur), value];
+  };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a.startsWith('--')) {
+      const eq = a.indexOf('=');
+      if (eq !== -1) {
+        set(a.slice(2, eq), a.slice(eq + 1));
+        continue;
+      }
       const key = a.slice(2);
       const next = argv[i + 1];
       if (next !== undefined && !next.startsWith('--')) {
-        const cur = flags[key];
-        if (cur === undefined) flags[key] = next;
-        else if (Array.isArray(cur)) cur.push(next);
-        else flags[key] = [String(cur), next];
+        set(key, next);
         i++;
       } else {
         flags[key] = true;
@@ -82,6 +90,18 @@ function parseArgs(argv: string[]) {
     }
   }
   return { positional, flags };
+}
+
+function boolFlag(flags: Record<string, unknown>, name: string, fallback = false): boolean {
+  const v = flags[name];
+  if (v === undefined) return fallback;
+  if (v === true) return true;
+  if (typeof v === 'string') {
+    const s = v.toLowerCase();
+    if (['true', '1', 'yes', 'on'].includes(s)) return true;
+    if (['false', '0', 'no', 'off'].includes(s)) return false;
+  }
+  throw new Error(`--${name} 只接受布尔值（true/false）`);
 }
 
 function resolveWorkflow(flags: Record<string, unknown>): Workflow {
@@ -199,8 +219,8 @@ async function main() {
           root,
           program: typeof flags.program === 'string' ? flags.program : undefined,
           repos,
-          adopt: !flags['no-adopt'],
-          installHooks: Boolean(flags['install-hooks']),
+          adopt: !boolFlag(flags, 'no-adopt'),
+          installHooks: boolFlag(flags, 'install-hooks'),
         });
         console.log(formatInitResult(res));
         return;
@@ -208,7 +228,7 @@ async function main() {
 
       case 'status': {
         const wf = resolveWorkflow(flags);
-        printStatus(wf, Boolean(flags.json));
+        printStatus(wf, boolFlag(flags, 'json'));
         return;
       }
 
@@ -250,18 +270,20 @@ async function main() {
         const report = runGc(wf.root, {
           olderThanDays: numberFlag('older-than', 30),
           evidenceDays: numberFlag('evidence-days', 0),
-          apply: Boolean(flags.apply),
+          apply: boolFlag(flags, 'apply'),
         });
-        if (flags.json) console.log(JSON.stringify(report, null, 2));
+        if (boolFlag(flags, 'json')) console.log(JSON.stringify(report, null, 2));
         else console.log(formatGcReport(report));
+        if (report.failed.length) process.exitCode = 1;
         return;
       }
 
       case 'questions': {
         const wf = resolveWorkflow(flags);
         let qs = wf.allQuestions();
-        if (!flags.all) qs = qs.filter((q) => q.status !== 'closed' && q.status !== 'canceled');
-        if (flags.json) {
+        if (!boolFlag(flags, 'all'))
+          qs = qs.filter((q) => q.status !== 'closed' && q.status !== 'canceled');
+        if (boolFlag(flags, 'json')) {
           console.log(JSON.stringify(qs, null, 2));
           return;
         }
@@ -302,11 +324,11 @@ async function main() {
         wf.msgs.promoteQueued(target);
         wf.msgs.expireDue();
         const list = wf.msgs.forActor(target, {
-          unreadOnly: Boolean(flags.unread),
-          includeAcked: Boolean(flags.all),
+          unreadOnly: boolFlag(flags, 'unread'),
+          includeAcked: boolFlag(flags, 'all'),
           limit: typeof flags.limit === 'string' ? Number(flags.limit) : undefined,
         });
-        if (flags.json) {
+        if (boolFlag(flags, 'json')) {
           console.log(
             JSON.stringify({ unread: wf.msgs.unreadCount(target), messages: list }, null, 2),
           );
@@ -369,7 +391,7 @@ async function main() {
           subject: String(flags.subject || '(no subject)'),
           body: typeof flags.body === 'string' ? flags.body : '',
           refs,
-          blocking: Boolean(flags.blocking),
+          blocking: boolFlag(flags, 'blocking'),
           idempotency_key:
             typeof flags['idempotency-key'] === 'string' ? flags['idempotency-key'] : undefined,
         });

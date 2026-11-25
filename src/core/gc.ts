@@ -29,6 +29,7 @@ export interface GcReport {
   locks: GcGroup;
   evidence: GcGroup & { files: number; removableBytes: number };
   events: { bytes: number };
+  failed: string[];
 }
 
 export function formatBytes(n: number): string {
@@ -200,6 +201,7 @@ export function runGc(root: string, opts: GcOptions = {}): GcReport {
     }
   }
 
+  const failed: string[] = [];
   if (apply) {
     for (const p of [
       ...messages.removable,
@@ -210,8 +212,8 @@ export function runGc(root: string, opts: GcOptions = {}): GcReport {
     ]) {
       try {
         fs.rmSync(p, { recursive: true, force: true });
-      } catch {
-        /* ignore */
+      } catch (e) {
+        failed.push(`${p}: ${(e as Error).message}`);
       }
     }
   }
@@ -228,6 +230,7 @@ export function runGc(root: string, opts: GcOptions = {}): GcReport {
     locks,
     evidence,
     events: { bytes: exists(eventsPath(root)) ? fileSize(eventsPath(root)) : 0 },
+    failed,
   };
 }
 
@@ -246,8 +249,13 @@ export function formatGcReport(r: GcReport): string {
         : ''),
     `事件日志: ${formatBytes(r.events.bytes)}（不自动清理）`,
     '',
-    r.apply ? '已删除符合条件的文件。' : '未删除任何文件。确认无误后加 --apply。',
+    r.failed.length ? `删除失败 ${r.failed.length} 个：\n  ${r.failed.join('\n  ')}` : '',
+    r.apply
+      ? r.failed.length
+        ? '部分文件删除失败；见上方列表。'
+        : '已删除符合条件的文件。'
+      : '未删除任何文件。确认无误后加 --apply。',
     '注意：证据默认保留；只有显式传 --evidence-days N 才会删除旧证据。',
-  ];
+  ].filter((line) => line !== '');
   return lines.join('\n');
 }

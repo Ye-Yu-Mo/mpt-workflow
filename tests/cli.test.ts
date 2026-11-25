@@ -53,3 +53,29 @@ test('CLI rejects invalid roles', { skip: !fs.existsSync(CLI) }, () => {
     }
   }
 });
+
+test('CLI boolean flags reject non-boolean values and honor false', {
+  skip: !fs.existsSync(CLI),
+}, () => {
+  const { root } = createDemoWorkspace();
+  assert.match(
+    execFileSync(process.execPath, [CLI, 'gc', '--root', root, '--apply', 'false'], {
+      encoding: 'utf8',
+    }),
+    /dry-run/,
+  );
+  assert.match(
+    execFileSync(process.execPath, [CLI, 'gc', '--root', root, '--apply=false'], {
+      encoding: 'utf8',
+    }),
+    /dry-run/,
+  );
+  try {
+    execFileSync(process.execPath, [CLI, 'gc', '--root', root, '--apply=maybe'], {
+      encoding: 'utf8',
+    });
+    assert.fail('non-boolean --apply should fail');
+  } catch (e) {
+    assert.equal((e as { status?: number }).status, 1);
+  }
+});

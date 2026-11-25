@@ -255,8 +255,15 @@ export class MessageStore {
       );
     }
 
-    if (input.idempotency_key) {
-      const existing = this.findByKey(input.idempotency_key);
+    // Agent-supplied keys are namespaced by sender so they cannot suppress a
+    // workflow notification that uses a reserved/predictable key.
+    const idempotencyKey = input.idempotency_key
+      ? input.auto
+        ? input.idempotency_key
+        : `agent:${actorKey(input.from)}:${input.idempotency_key}`
+      : undefined;
+    if (idempotencyKey) {
+      const existing = this.findByKey(idempotencyKey);
       if (existing) return { message: existing, duplicate: true };
     }
 
@@ -291,7 +298,7 @@ export class MessageStore {
       created_at: now.toISOString(),
       expires_at: expires,
       correlation_id: input.correlation_id,
-      idempotency_key: input.idempotency_key,
+      idempotency_key: idempotencyKey,
       auto: input.auto,
     };
     this.save(msg);
