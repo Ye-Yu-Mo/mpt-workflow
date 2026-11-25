@@ -4,12 +4,14 @@
 
 | Platform | Status | Verified by |
 |---|---|---|
-| macOS (arm64 / x64) | Supported | CI `macos-latest` |
+| macOS (arm64) | Supported | CI `macos-latest` |
+| macOS (x64) | Expected to work | Not CI-tested |
 | Linux (x64) | Supported | CI `ubuntu-latest` |
 | WSL2 | Supported (same requirements as Linux) | Not CI-tested |
 
-Requirements: Node.js 22+, git, and `bash`. The tool runs as your own user, on
-your own machine.
+Requirements: Node.js 22+, git, and `bash`. Development (tests) needs Node
+22.13+ because jsdom 29 requires it. The tool runs as your own user, on your own
+machine.
 
 ## Not supported yet: native Windows
 

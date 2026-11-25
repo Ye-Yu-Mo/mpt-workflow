@@ -8,8 +8,8 @@ The product is **Chinese-first**:
 
 - CLI output, errors, status text and the dashboard are Chinese.
 - MCP tool descriptions, tool results and the server `instructions` are Chinese.
-- `README.zh-CN.md` and the documents under `docs/` are Chinese (the
-  architecture notes are English).
+- `README.zh-CN.md` is Chinese. Most documents under `docs/` are English; the
+  historical design notes are Chinese.
 - `README.md` is English for discovery.
 
 We deliberately do **not** half-translate. A mixed UI is worse than a consistent

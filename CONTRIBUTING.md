@@ -15,9 +15,10 @@ opinion are more welcome than changes that add surface area.
 ## Development setup
 
 ```bash
-node --version        # must be >= 22
+node --version        # >= 22.13 for development (jsdom requires it)
 npm install
 npm run typecheck
+npm run typecheck:tests
 npm run lint          # Biome: formatting + lint
 npm run build
 npm test
@@ -85,7 +86,7 @@ the README.
 - Include the reasoning in the PR description: what problem, what alternative
   you rejected, and what you did **not** verify.
 - Add a `CHANGELOG.md` entry under `## [Unreleased]`.
-- CI must be green (Node 20, 22 and 24).
+- CI must be green (Node 22 and 24).
 
 ## PR checklist
 

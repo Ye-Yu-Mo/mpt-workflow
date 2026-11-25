@@ -15,6 +15,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@v7
         with:
@@ -35,11 +37,45 @@ jobs:
           fi
 
       - run: npm run typecheck
+      - run: npm run typecheck:tests
+      - run: npm run lint
       - run: npm run build
-      - run: npm test
+      - run: npm run test:coverage
 
-      - name: publish with provenance
-        run: npm publish --provenance --access public
+      - name: package.json and built VERSION agree
+        run: |
+          set -euo pipefail
+          pkg="$(node -p "require('./package.json').version")"
+          built="$(node -p "require('./dist/version.js').VERSION")"
+          if [ "$pkg" != "$built" ]; then
+            echo "package.json $pkg != dist/version.js $built" >&2
+            exit 1
+          fi
+
+      - name: package contents
+        run: npm pack --dry-run
+
+      - name: determine npm dist-tag
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          if [[ "$tag" == *-* ]]; then
+            echo "DIST_TAG=next" >> "$GITHUB_ENV"
+          else
+            echo "DIST_TAG=latest" >> "$GITHUB_ENV"
+          fi
+
+      - name: publish with provenance (idempotent)
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          if npm view "mpt-workflow@$version" version >/dev/null 2>&1; then
+            echo "mpt-workflow@$version already published; skipping npm publish"
+          else
+            # Build and tests already ran; --ignore-scripts keeps NPM_TOKEN away
+            # from package lifecycle scripts.
+            npm publish --provenance --access public --tag "$DIST_TAG" --ignore-scripts
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
@@ -47,3 +83,4 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
