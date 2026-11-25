@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { Workflow } from './workflow.js';
+import { Workflow, isMachineManagedFile } from './workflow.js';
 import { checkAcl } from './acl.js';
 import { exists, readText, writeAtomic, within } from './fsutil.js';
 import { runtimeDir } from './config.js';
@@ -145,7 +145,7 @@ function guardBash(
   if (blocking.length && lease.role === 'todo') {
     return (
       `[workflow] 有阻塞问题未回答，先停下: ${blocking.map((q) => q.id).join(', ')}\n` +
-      `在 docs/agent-questions.md 等待回答；或让用户用 workflow-mcp status 查看。\n`
+      `在 docs/agent-questions.md 等待回答；或让用户用 mpt-workflow status 查看。\n`
     );
   }
 
@@ -160,7 +160,7 @@ function guardBash(
     if (!ok) {
       return (
         `[workflow] 拒绝提交：没有与当前工作区匹配的用户批准。\n` +
-        `正确流程: commit_request → 用户执行 workflow-mcp approve <id> → commit\n` +
+        `正确流程: commit_request → 用户执行 mpt-workflow approve <id> → commit\n` +
         `（当前工作区 hash: ${hash}）\n`
       );
     }
@@ -271,6 +271,7 @@ export function runPreCommit(): number {
   const violations: string[] = [];
 
   for (const f of files) {
+    if (isMachineManagedFile(f)) continue; // tools update these themselves
     const abs = path.join(owned.abs, f);
     const d = checkAcl(role, abs, wf.root, owned.id, owned.abs, repos);
     if (!d.allowed) violations.push(`${f}: ${d.reason}`);
@@ -284,6 +285,7 @@ export function runPreCommit(): number {
     const todoDoc = parseTodoSafe(todo);
     if (todoDoc?.allowedFiles.length) {
       for (const f of files) {
+        if (isMachineManagedFile(f)) continue;
         if (!todoDoc.allowedFiles.some((a) => matchPath(f, a))) {
           violations.push(`${f}: 不在 ${m.id} 的「影响文件」清单内`);
         }
