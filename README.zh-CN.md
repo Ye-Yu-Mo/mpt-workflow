@@ -34,6 +34,9 @@ node dist/cli.js web --root /home/lxu/fut-trade-system --port 7788
 #    → http://127.0.0.1:7788
 ```
 
+想先看效果：`./scripts/demo.sh` 会在 `$TMPDIR` 里建一个一次性工作区，
+走一遍 init → status → doctor → 消息，不碰任何现有目录。
+
 `init` 会做这些事（全部幂等，已存在的文件不覆盖）：
 
 | 产物 | 作用 |
@@ -249,3 +252,15 @@ src/web/        HTTP API + 单页看板
 src/cli.ts      init/status/doctor/web/mcp/hook
 tests/          node:test
 ```
+
+## 参与贡献
+
+- 开发环境、测试、加一个 MCP 工具的步骤：[CONTRIBUTING.md](CONTRIBUTING.md)
+- 安全模型与漏洞报告：[SECURITY.md](SECURITY.md)
+- 行为准则：[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+- 变更记录：[CHANGELOG.md](CHANGELOG.md)
+- 架构与设计取舍：[docs/architecture.md](docs/architecture.md)
+
+## 许可证
+
+[MIT](LICENSE)
