@@ -14,11 +14,12 @@ concurrency:
 
 jobs:
   test:
-    name: test (node ${{ matrix.node }})
-    runs-on: ubuntu-latest
+    name: test (node ${{ matrix.node }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest, macos-latest]
         node: [22, 24]
     steps:
       - uses: actions/checkout@v4
@@ -62,3 +63,27 @@ jobs:
           node "$GITHUB_WORKSPACE/dist/cli.js" status --root "$TMP" | tee status.txt
           grep -q "M1" status.txt
           grep -q "todo_ready" status.txt
+
+  pack:
+    name: npm package smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: pack, install and run from the tarball
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/pkg" "$RUNNER_TEMP/install"
+          npm pack --pack-destination "$RUNNER_TEMP/pkg"
+          cd "$RUNNER_TEMP/install"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund "$RUNNER_TEMP"/pkg/mpt-workflow-*.tgz
+          ./node_modules/.bin/mpt-workflow --help | tee help.txt
+          grep -q "mpt-workflow" help.txt
+          ./node_modules/.bin/mpt --help >/dev/null
+          test -f node_modules/mpt-workflow/dist/web/public/index.html

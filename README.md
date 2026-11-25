@@ -1,4 +1,4 @@
-# workflow-mcp
+# mpt-workflow
 
 **A local MCP server, CLI and dashboard that turn a multi-agent, multi-repo
 PLAN → TODO → implement → accept → commit workflow into an enforceable state machine.**
@@ -17,7 +17,7 @@ Running several Claude Code sessions against several git repos looks fine until
 it doesn't:
 
 - **Nobody knows where the work stands.** A new session has to be told "you are
-  the PLAN agent for `fut-algo-api`, M3 is accepted, M4 has no TODO yet".
+  the PLAN agent for `my-service`, M3 is accepted, M4 has no TODO yet".
 - **Roles are advisory.** The PLAN agent is told not to edit source. Nothing
   stops it.
 - **The human is the message bus.** You copy a question from the TODO session
@@ -34,7 +34,7 @@ evidence, one-shot commit approvals, and persistent messaging between agents.
 
 ```
                         ┌─────────────────────────────────────────┐
-   PLAN.md / TODO-Mn.md │              workflow-mcp                │
+   PLAN.md / TODO-Mn.md │              mpt-workflow                │
    docs/agent-questions │  parse → derive state → gate → notify    │
    .workflow/program.yaml        │            │           │
                         └────────┼────────────┼───────────┼────────┘
@@ -89,8 +89,11 @@ node dist/cli.js --help
 Optionally put it on your `PATH`:
 
 ```bash
-npm link          # provides `workflow-mcp` and `wf`
+npm link          # provides `mpt-workflow` and `mpt`
 ```
+
+The npm package name is **`mpt-workflow`**. `workflow-mcp` is already taken by
+an unrelated package, so do not install or run that name.
 
 ## Quick start
 
@@ -108,6 +111,9 @@ node dist/cli.js next
 # Open the dashboard
 node dist/cli.js web --root /path/to/workspace --port 7788
 ```
+
+After the first npm release the same commands work as
+`npx mpt-workflow <command>`.
 
 Want to see it work first? `./scripts/demo.sh` builds a throwaway workspace,
 adopts it, prints status and sends a message. Nothing outside `$TMPDIR` is touched.
@@ -165,7 +171,7 @@ based on derived state.
 ```
 agent: commit_request(message="feat: ...")
    → scope check, returns a one-shot approval id
-user:  approve in the dashboard, or `workflow-mcp approve ap-xxx`
+user:  approve in the dashboard, or `mpt-workflow approve ap-xxx`
 agent: commit(approval="ap-xxx")
    → refuses if the working tree changed since approval
    → local git commit only; push is always manual
@@ -191,11 +197,11 @@ queryable and acknowledged:
 | `phase_activate` | `main → all plan/todo` |
 
 ```bash
-workflow-mcp inbox --role plan --repo my-service --unread
-workflow-mcp read msg-...
-workflow-mcp ack msg-... --note "handled"
-workflow-mcp wait --role plan --repo my-service --timeout 60000
-workflow-mcp watch --role main
+mpt-workflow inbox --role plan --repo my-service --unread
+mpt-workflow read msg-...
+mpt-workflow ack msg-... --note "handled"
+mpt-workflow wait --role plan --repo my-service --timeout 60000
+mpt-workflow watch --role main
 ```
 
 - **At-least-once.** A message is a file on disk; a failed wake-up never loses it.
@@ -212,7 +218,7 @@ workflow-mcp watch --role main
 
 ## Dashboard
 
-`workflow-mcp web` serves a single-page, local-only dashboard:
+`mpt-workflow web` serves a single-page, local-only dashboard:
 
 - program progress, blocking issues, unread messages, in-flight milestones
 - repo cards with a milestone track, evidence and current state
@@ -277,7 +283,7 @@ src/core/     parsing, state machine, ACL, git, evidence, approvals, messages
 src/mcp/      MCP server (25 tools)
 src/web/      HTTP API + single-page dashboard
 src/cli.ts    init / status / doctor / web / mcp / hook / inbox / send ...
-tests/        node:test suites (30 tests, incl. a real MCP stdio round-trip)
+tests/        node:test suites (37 tests, incl. a real MCP stdio round-trip)
 docs/         architecture and requirement notes
 ```
 
@@ -285,7 +291,7 @@ docs/         architecture and requirement notes
 
 ```bash
 npm run typecheck   # tsc --noEmit
-npm test            # runs the 30 tests via tsx
+npm test            # runs the 37 tests via tsx
 npm run build       # tsc + copies the dashboard assets into dist/
 ```
 

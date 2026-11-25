@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Package identity.** The npm package is now `mpt-workflow`; the previous
+  name `workflow-mcp` is taken by an unrelated package. Binaries are
+  `mpt-workflow` and `mpt` (the generic `wf` alias was dropped). The package is
+  no longer `private` and ships a `files` allowlist plus `prepublishOnly`.
+- `committed` is now derived from git instead of being an unmaintained status:
+  an accepted milestone whose TODO record is clean counts as committed.
+
+### Fixed
+
+- **Data safety.** Mutating reads now use `readTextRequired`; a permission or
+  I/O error throws instead of silently returning an empty string that would
+  overwrite the user's TODO or questions file.
+- **Commit scope.** `commit_request` and `commit` now refuse changes outside the
+  current TODO's declared file list, not just ACL violations.
+- **Evidence placement.** New evidence is inserted into `## 证据记录` rather
+  than appended to EOF, so evidence recorded after an acceptance (a rework loop)
+  is still parsed.
+- **Dashboard.** Loopback `Host` and same-origin checks close cross-site writes;
+  path containment uses `within()`; `/api/files` is limited to workflow
+  documents.
+- **Evidence timeout.** Commands run in their own process group, so a timeout
+  kills the whole tree instead of leaving orphaned test processes.
+- **Locks.** `withLock` retries briefly instead of failing immediately when
+  another session holds the lock.
+- **Pre-commit hook.** Workflow-managed files (`TODO-*.md`,
+  `docs/agent-questions.md`, `.mcp.json`, `.claude/**`) are exempt from the
+  backstop, so a todo session can commit the milestone it just completed while
+  out-of-scope source files are still rejected.
+- **Dev-mode init.** `init` warns (and skips hook installation) when
+  `dist/cli.js` does not exist, instead of writing hooks that point at a
+  missing file.
+
 ## [0.3.0] - 2026-11-25
 
 ### Added

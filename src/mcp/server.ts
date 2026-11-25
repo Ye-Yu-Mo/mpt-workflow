@@ -736,7 +736,7 @@ function buildTools(opts: ServerOptions): ToolSpec[] {
     {
       name: 'commit_request',
       description:
-        '请求提交：校验 scope 后生成一次性审批 id，需要用户执行 workflow-mcp approve <id>。',
+        '请求提交：校验 scope 后生成一次性审批 id，需要用户执行 mpt-workflow approve <id>。',
       roles: READ_ROLES,
       schema: {
         message: z.string().describe('commit message'),
@@ -751,7 +751,7 @@ function buildTools(opts: ServerOptions): ToolSpec[] {
           '',
           r.diffStat,
           '',
-          `请用户执行: workflow-mcp approve ${r.approval.id}`,
+          `请用户执行: mpt-workflow approve ${r.approval.id}`,
           '（或在前端看板点“批准提交”）批准后再调用 commit。',
         ].join('\n');
       },

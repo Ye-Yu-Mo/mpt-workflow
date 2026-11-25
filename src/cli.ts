@@ -13,33 +13,33 @@ import { formatMessage, type MessageKind } from './core/messages.js';
 import type { Role } from './core/types.js';
 
 function usage(): string {
-  return `workflow-mcp — 多 agent / 多仓工作流状态机
+  return `mpt-workflow — 多 agent / 多仓工作流状态机
 
 用法:
-  workflow-mcp init [--root DIR] [--program NAME] [--repo NAME]... [--install-hooks]
+  mpt-workflow init [--root DIR] [--program NAME] [--repo NAME]... [--install-hooks]
                   [--no-adopt]
-  workflow-mcp status [--root DIR] [--json]
-  workflow-mcp next [--root DIR]
-  workflow-mcp doctor [--root DIR]
-  workflow-mcp questions [--root DIR] [--json] [--all]
-  workflow-mcp answer <Q-id> --answer TEXT [--resolution TEXT] [--root DIR]
-  workflow-mcp inbox [--role R] [--repo NAME] [--unread] [--all] [--json]
-  workflow-mcp read <msg-id>
-  workflow-mcp ack <msg-id> [--note TEXT]
-  workflow-mcp send --to <actor> [--to-repo NAME] [--kind K] --subject TEXT
+  mpt-workflow status [--root DIR] [--json]
+  mpt-workflow next [--root DIR]
+  mpt-workflow doctor [--root DIR]
+  mpt-workflow questions [--root DIR] [--json] [--all]
+  mpt-workflow answer <Q-id> --answer TEXT [--resolution TEXT] [--root DIR]
+  mpt-workflow inbox [--role R] [--repo NAME] [--unread] [--all] [--json]
+  mpt-workflow read <msg-id>
+  mpt-workflow ack <msg-id> [--note TEXT]
+  mpt-workflow send --to <actor> [--to-repo NAME] [--kind K] --subject TEXT
                     [--body TEXT] [--blocking] [--refs JSON] [--from R]
-  workflow-mcp wait [--role R] [--repo NAME] [--timeout MS]
-  workflow-mcp watch [--role R] [--repo NAME] [--interval MS]
-  workflow-mcp escalate <msg-id> --reason TEXT
-  workflow-mcp presence [--session NAME]
-  workflow-mcp approve <approval-id> [--root DIR]
-  workflow-mcp activate <repo|-> [--root DIR]
-  workflow-mcp role <main|plan|todo|user> [--repo NAME] [--root DIR]
-  workflow-mcp commit <approval-id> [--root DIR]
-  workflow-mcp web [--root DIR] [--port 7788]
-  workflow-mcp mcp [--root DIR] [--role ROLE] [--repo NAME]
-  workflow-mcp hook pretool|session-start|pre-commit
-  workflow-mcp acl <role>
+  mpt-workflow wait [--role R] [--repo NAME] [--timeout MS]
+  mpt-workflow watch [--role R] [--repo NAME] [--interval MS]
+  mpt-workflow escalate <msg-id> --reason TEXT
+  mpt-workflow presence [--session NAME]
+  mpt-workflow approve <approval-id> [--root DIR]
+  mpt-workflow activate <repo|-> [--root DIR]
+  mpt-workflow role <main|plan|todo|user> [--repo NAME] [--root DIR]
+  mpt-workflow commit <approval-id> [--root DIR]
+  mpt-workflow web [--root DIR] [--port 7788]
+  mpt-workflow mcp [--root DIR] [--role ROLE] [--repo NAME]
+  mpt-workflow hook pretool|session-start|pre-commit
+  mpt-workflow acl <role>
 
 环境变量:
   WF_ROLE / WF_REPO   覆盖 .workflow/runtime/role.json 中的会话角色
@@ -80,7 +80,7 @@ function resolveWorkflow(flags: Record<string, unknown>): Workflow {
     throw new Error(
       root
         ? `${root} 有 .workflow 目录但配置无法读取`
-        : `未找到工作流根目录（从 ${start} 向上没有 .workflow/program.yaml）。先运行 workflow-mcp init`,
+        : `未找到工作流根目录（从 ${start} 向上没有 .workflow/program.yaml）。先运行 mpt-workflow init`,
     );
   }
   return wf;
@@ -211,7 +211,7 @@ async function main() {
         const wf = resolveWorkflow(flags);
         const id = positional[1];
         const answer = typeof flags.answer === 'string' ? flags.answer : '';
-        if (!id || !answer) throw new Error('用法: workflow-mcp answer Q-001 --answer "..."');
+        if (!id || !answer) throw new Error('用法: mpt-workflow answer Q-001 --answer "..."');
         const q = wf.findQuestion(id);
         if (!q) throw new Error(`找不到 ${id}`);
         updateQuestion(q.file, id, {
@@ -250,7 +250,7 @@ async function main() {
       case 'read': {
         const wf = resolveWorkflow(flags);
         const id = positional[1];
-        if (!id) throw new Error('用法: workflow-mcp read <msg-id>');
+        if (!id) throw new Error('用法: mpt-workflow read <msg-id>');
         const m = wf.msgs.markRead(id);
         if (!m) throw new Error(`找不到消息 ${id}`);
         console.log(formatMessage(m, { full: true }));
@@ -260,7 +260,7 @@ async function main() {
       case 'ack': {
         const wf = resolveWorkflow(flags);
         const id = positional[1];
-        if (!id) throw new Error('用法: workflow-mcp ack <msg-id> [--note TEXT]');
+        if (!id) throw new Error('用法: mpt-workflow ack <msg-id> [--note TEXT]');
         const m = wf.msgs.ack(id, typeof flags.note === 'string' ? flags.note : undefined);
         if (!m) throw new Error(`找不到消息 ${id}`);
         console.log(`已 ack ${id}`);
@@ -272,7 +272,7 @@ async function main() {
         const lease = readRoleLease(wf.root);
         const fromRole = ((flags.from as string) || lease?.role || 'user') as Role;
         const fromRepo = (flags['from-repo'] as string) || (fromRole === 'plan' || fromRole === 'todo' ? lease?.repo : undefined);
-        if (!flags.to) throw new Error('用法: workflow-mcp send --to <main|plan|todo|user> --subject TEXT');
+        if (!flags.to) throw new Error('用法: mpt-workflow send --to <main|plan|todo|user> --subject TEXT');
         const toRole = String(flags.to);
         const toRepo = (flags['to-repo'] as string) || (toRole === 'plan' || toRole === 'todo' ? lease?.repo : undefined);
         let refs: Record<string, string> = {};
@@ -349,7 +349,7 @@ async function main() {
         const wf = resolveWorkflow(flags);
         const id = positional[1];
         const reason = typeof flags.reason === 'string' ? flags.reason : '';
-        if (!id || !reason) throw new Error('用法: workflow-mcp escalate <msg-id> --reason TEXT');
+        if (!id || !reason) throw new Error('用法: mpt-workflow escalate <msg-id> --reason TEXT');
         const lease = readRoleLease(wf.root);
         const m = wf.msgs.escalate(id, reason, {
           role: (lease?.role as Role) || 'user',
@@ -373,7 +373,7 @@ async function main() {
       case 'approve': {
         const wf = resolveWorkflow(flags);
         const id = positional[1];
-        if (!id) throw new Error('用法: workflow-mcp approve <approval-id>');
+        if (!id) throw new Error('用法: mpt-workflow approve <approval-id>');
         const a = wf.approve(id);
         console.log(`已批准 ${a.id}（${a.repo}，${a.files.length} 个文件）。`);
         console.log('agent 现在可以调用 commit。');
@@ -383,7 +383,7 @@ async function main() {
       case 'commit': {
         const wf = resolveWorkflow(flags);
         const id = positional[1];
-        if (!id) throw new Error('用法: workflow-mcp commit <approval-id>');
+        if (!id) throw new Error('用法: mpt-workflow commit <approval-id>');
         const a = wf.approvals().find((x) => x.id === id);
         if (!a) throw new Error(`找不到审批 ${id}`);
         const r = wf.commitApproved({ repoId: a.repo, approvalId: id, role: 'user' });
@@ -394,7 +394,7 @@ async function main() {
       case 'activate': {
         const wf = resolveWorkflow(flags);
         const repo = positional[1];
-        if (!repo) throw new Error('用法: workflow-mcp activate <repo|->');
+        if (!repo) throw new Error('用法: mpt-workflow activate <repo|->');
         wf.setActiveRepo(repo === '-' ? null : repo);
         console.log(repo === '-' ? 'active repo 已清空' : `active repo = ${repo}`);
         return;
@@ -404,7 +404,7 @@ async function main() {
         const wf = resolveWorkflow(flags);
         const role = (positional[1] || '') as Role;
         if (!['main', 'plan', 'todo', 'user'].includes(role)) {
-          throw new Error('用法: workflow-mcp role <main|plan|todo|user> [--repo NAME]');
+          throw new Error('用法: mpt-workflow role <main|plan|todo|user> [--repo NAME]');
         }
         const repo = typeof flags.repo === 'string' ? flags.repo : undefined;
         setRoleLease(wf.root, { role, repo, at: new Date().toISOString() });
@@ -443,7 +443,7 @@ async function main() {
         if (sub === 'pretool') process.exitCode = runPretool();
         else if (sub === 'session-start') process.exitCode = runSessionStart();
         else if (sub === 'pre-commit') process.exitCode = runPreCommit();
-        else throw new Error('用法: workflow-mcp hook pretool|session-start|pre-commit');
+        else throw new Error('用法: mpt-workflow hook pretool|session-start|pre-commit');
         return;
       }
 
