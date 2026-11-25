@@ -1,7 +1,7 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import { exists, readText } from './fsutil.js';
-import { inlineCode, section, splitFrontMatter } from './markdown.js';
+import { appendToSection, inlineCode, section, splitFrontMatter } from './markdown.js';
 import type { MilestoneStatus, TodoDoc } from './types.js';
 
 const STATUS_MAP: Record<string, MilestoneStatus> = {
@@ -324,7 +324,8 @@ export function appendEvidenceSection(
   ].join('\n');
 
   if (text.includes(header)) {
-    return text.replace(/\s*$/, '\n\n') + block;
+    return appendToSection(text, /证据记录/, block);
   }
-  return text.replace(/\s*$/, '\n\n') + `${header}\n\n${block}`;
+  const withHeader = text.replace(/\s*$/, '\n\n') + `${header}\n`;
+  return appendToSection(withHeader, /证据记录/, block);
 }

@@ -5,11 +5,26 @@ export function ensureDir(p: string): void {
   fs.mkdirSync(p, { recursive: true });
 }
 
+/** Best-effort read for optional inputs. Missing or unreadable files both yield ''. */
 export function readText(p: string): string {
   try {
     return fs.readFileSync(p, 'utf8');
   } catch {
     return '';
+  }
+}
+
+/**
+ * Read a file whose contents are about to be rewritten. A missing file yields ''
+ * (callers create it), but permission/IO errors throw instead of silently
+ * returning an empty string that would then overwrite the user's document.
+ */
+export function readTextRequired(p: string): string {
+  try {
+    return fs.readFileSync(p, 'utf8');
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return '';
+    throw e;
   }
 }
 

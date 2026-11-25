@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { exists, readText, writeAtomic, ensureDir, today } from './fsutil.js';
+import { exists, readText, readTextRequired, writeAtomic, ensureDir, today } from './fsutil.js';
 import type { Question, QuestionStatus, Role } from './types.js';
 
 const HEADING_RE = /^##\s+(Q-[\w-]+)\s*(?:\[([a-z_]+)\])?\s*to:\s*([^\s]+)\s*$/;
@@ -139,7 +139,7 @@ export function appendQuestion(
   q: NewQuestion & { id: string },
 ): string {
   ensureDir(path.dirname(fileAbs));
-  const prev = exists(fileAbs) ? readText(fileAbs) : defaultQuestionsHeader();
+  const prev = exists(fileAbs) ? readTextRequired(fileAbs) : defaultQuestionsHeader();
   const next = prev.replace(/\s*$/, '\n\n') + renderQuestion(q);
   writeAtomic(fileAbs, next);
   return fileAbs;
@@ -225,7 +225,7 @@ export function updateQuestion(
   },
 ): boolean {
   if (!exists(fileAbs)) return false;
-  const text = readText(fileAbs);
+  const text = readTextRequired(fileAbs);
   const range = locate(text, id);
   if (!range) return false;
   const lines = text.split('\n');

@@ -194,6 +194,61 @@ test('failing evidence forces a reject and a rework loop', async () => {
   assert.throws(() => wf.reject('repo-a', 'M1', 'plan', ''), /必须写原因/);
 });
 
+test('evidence recorded after acceptance stays inside the evidence section', async () => {
+  const { wf } = setup();
+  const repoAbs = path.join(wf.root, 'repo-a');
+  wf.claim('repo-a', 'M1', 'todo');
+  await wf.runEvidence({ repoId: 'repo-a', milestone: 'M1', command: 'echo first', role: 'todo' });
+  wf.complete('repo-a', 'M1', 'todo');
+  wf.accept('repo-a', 'M1', 'plan');
+
+  // Rework after acceptance: the new evidence must not land below
+  // `## 验收记录`, where the parser would never see it again.
+  await wf.runEvidence({ repoId: 'repo-a', milestone: 'M1', command: 'echo second', role: 'todo' });
+
+  const m = wf.milestone('repo-a', 'M1');
+  assert.equal(m.evidence.length, 2);
+  assert.ok(m.evidence.some((e) => e.command === 'echo second'));
+  const text = fs.readFileSync(path.join(repoAbs, 'TODO-M1.md'), 'utf8');
+  assert.ok(
+    text.indexOf('echo second') < text.indexOf('## 验收记录'),
+    'new evidence is inserted above the review section',
+  );
+});
+
+test(
+  'mutations refuse to overwrite an unreadable TODO',
+  { skip: typeof process.getuid === 'function' && process.getuid() === 0 },
+  () => {
+    const { wf } = setup();
+    const file = path.join(wf.root, 'repo-a/TODO-M1.md');
+    fs.chmodSync(file, 0o000);
+    try {
+      assert.throws(() => wf.claim('repo-a', 'M1', 'todo'), /EACCES|permission denied/i);
+    } finally {
+      fs.chmodSync(file, 0o644);
+    }
+    assert.match(fs.readFileSync(file, 'utf8'), /TODO-M1/);
+  },
+);
+
+test('accepted milestone becomes committed once its TODO record is committed', async () => {
+  const { wf } = setup();
+  const repoAbs = path.join(wf.root, 'repo-a');
+  wf.claim('repo-a', 'M1', 'todo');
+  await wf.runEvidence({ repoId: 'repo-a', milestone: 'M1', command: 'echo ok', role: 'todo' });
+  wf.complete('repo-a', 'M1', 'todo');
+  wf.accept('repo-a', 'M1', 'plan');
+  assert.equal(wf.milestone('repo-a', 'M1').status, 'accepted');
+
+  fs.writeFileSync(path.join(repoAbs, 'src/lib.rs'), 'fn f() { 1 }\n');
+  const req = wf.requestCommit({ repoId: 'repo-a', message: 'feat(M1): done', role: 'plan' });
+  wf.approve(req.approval.id);
+  wf.commitApproved({ repoId: 'repo-a', approvalId: req.approval.id, role: 'plan' });
+
+  assert.equal(wf.milestone('repo-a', 'M1').status, 'committed');
+});
+
 test('blocking question surfaces in status and next', () => {
   const { wf } = setup();
   const file = path.join(wf.root, 'repo-a/docs/agent-questions.md');
@@ -238,8 +293,7 @@ test('commit requires an approved token bound to the exact tree', () => {
   const repoAbs = path.join(wf.root, 'repo-a');
 
   fs.writeFileSync(path.join(repoAbs, 'src/lib.rs'), 'fn f() { 2 }\n');
-  const req = wf.requestCommit({ repoId: 'repo-a', message: 'feat: x', role: 'todo' });
-  assert.throws(
+  const req = wf.requestCommit({ repoId: 'repo-a', message: 'feat: x', role: 'todo' });  assert.throws(
     () => wf.commitApproved({ repoId: 'repo-a', approvalId: req.approval.id, role: 'todo' }),
     /尚未由用户批准/,
   );
@@ -261,6 +315,23 @@ test('commit requires an approved token bound to the exact tree', () => {
     () => wf.commitApproved({ repoId: 'repo-a', approvalId: req2.approval.id, role: 'todo' }),
     /工作区内容已变化/,
   );
+});
+
+test('commit_request rejects files outside the TODO file list', () => {
+  const { wf } = setup();
+  const repoAbs = path.join(wf.root, 'repo-a');
+  fs.writeFileSync(path.join(repoAbs, 'src/extra.rs'), 'fn g() {}\n');
+  assert.throws(
+    () => wf.requestCommit({ repoId: 'repo-a', message: 'feat: extra', role: 'todo' }),
+    /影响文件/,
+  );
+});
+
+test('plan commits are not limited by the implementation file list', () => {
+  const { wf } = setup();
+  fs.writeFileSync(path.join(wf.root, 'repo-a/docs/notes.md'), '# notes\n');
+  const req = wf.requestCommit({ repoId: 'repo-a', message: 'docs: notes', role: 'plan' });
+  assert.ok(req.approval.id);
 });
 
 test('working tree hash changes with content', () => {
