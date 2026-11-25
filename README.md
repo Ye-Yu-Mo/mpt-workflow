@@ -107,6 +107,9 @@ node dist/cli.js --help
 ## Quick start
 
 ```bash
+# Try it in a throwaway workspace (nothing outside $TMPDIR is touched)
+mpt-workflow demo
+
 # Adopt an existing multi-repo workspace (idempotent; never overwrites files)
 mpt-workflow init --root /path/to/workspace
 
@@ -123,9 +126,9 @@ mpt-workflow web --root /path/to/workspace --port 7788
 
 Every command also works as `npx mpt-workflow <command>`.
 
-Want to see it work first? From a source checkout, `./scripts/demo.sh` builds a
-throwaway workspace, adopts it, prints status and sends a message. Nothing
-outside `$TMPDIR` is touched.
+Want to see it work first? `mpt-workflow demo` builds a throwaway workspace,
+adopts it, prints status and sends a message. Nothing outside `$TMPDIR` is
+touched. From a source checkout, `./scripts/demo.sh` does the same.
 
 `init` writes:
 
@@ -231,10 +234,18 @@ mpt-workflow watch --role main
 
 - program progress, blocking issues, unread messages, in-flight milestones
 - repo cards with a milestone track, evidence and current state
-- question inbox — answer inline (writes back to Markdown, notifies the asker)
-- message panel with read/ack
-- pending commit approvals with a one-click approve
+- question inbox — answer inline (writes back to Markdown, notifies the asker),
+  adopt the recommendation, or copy a relay message
+- message panel with read/ack and **未读 / blocking / 全部** filters
+- pending commit approvals with a **diff review** (file list, stat, unified
+  diff) before you approve
+- copyable agent session command (`WF_ROLE=… WF_REPO=… claude`) for each next
+  action
 - environment checks and an event timeline
+
+The dashboard auto-refreshes every 15 seconds, but **pauses while you are
+typing or reviewing a milestone**, preserves drafts and the open milestone
+detail, and shows a retry banner if the API fails.
 
 The only write actions are: answer/close a question, approve a commit, ack a
 message, switch the active repo.
@@ -292,7 +303,7 @@ src/core/     parsing, state machine, ACL, git, evidence, approvals, messages
 src/mcp/      MCP server (25 tools)
 src/web/      HTTP API + single-page dashboard
 src/cli.ts    init / status / doctor / web / mcp / hook / inbox / send ...
-tests/        node:test suites (37 tests, incl. a real MCP stdio round-trip)
+tests/        node:test suites (40 tests, incl. a real MCP stdio round-trip)
 docs/         architecture and requirement notes
 ```
 
@@ -300,7 +311,7 @@ docs/         architecture and requirement notes
 
 ```bash
 npm run typecheck   # tsc --noEmit
-npm test            # runs the 37 tests via tsx
+npm test            # runs the 40 tests via tsx
 npm run build       # tsc + copies the dashboard assets into dist/
 ```
 

@@ -27,6 +27,9 @@ docs/agent-questions.md →  问答板、阻塞判定、前端回答
 ```bash
 npm install -g mpt-workflow
 
+# 0. 想先看效果：在 $TMPDIR 建一个一次性工作区，不碰任何现有目录
+mpt-workflow demo
+
 # 1. 在工作流根目录（伞仓）初始化，采用已有 PLAN/TODO/questions，不覆盖任何文件
 mpt-workflow init --root /path/to/workspace --adopt
 
@@ -38,8 +41,7 @@ mpt-workflow web --root /path/to/workspace --port 7788
 #    → http://127.0.0.1:7788
 ```
 
-想先看效果（需要源码 checkout）：`./scripts/demo.sh` 会在 `$TMPDIR` 里建一个一次性工作区，
-走一遍 init → status → doctor → 消息，不碰任何现有目录。
+源码 checkout 也可以用 `./scripts/demo.sh` 走同样的流程。
 
 `init` 会做这些事（全部幂等，已存在的文件不覆盖）：
 

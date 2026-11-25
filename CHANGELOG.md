@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Dashboard: review the file list, stat and unified diff before approving a
+  commit; message filters (未读 / blocking / 全部); copyable
+  `WF_ROLE=… WF_REPO=… claude` session command for each next action; visible
+  version and last-updated time; error banner with retry; onboarding empty
+  states.
+- Auto-refresh now pauses while you type or review a milestone, preserves
+  question drafts and the open milestone detail, and skips hidden tabs.
+- `mpt-workflow demo` creates a disposable workspace under `$TMPDIR`;
+  `mpt-workflow --version` prints the package version.
+- `init` writes `npx`-stable MCP/hook commands when it runs from the npx cache,
+  instead of baking an evictable cache path into `.mcp.json` or git hooks.
+
 ## [0.4.0] - 2026-11-25
 
 ### Changed
