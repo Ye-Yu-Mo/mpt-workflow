@@ -45,6 +45,12 @@ feature surface.
 - [x] Release `0.7.0`.
 - [x] Release `0.7.1` (operational leftovers).
 
+## 0.8 — umbrella commits
+
+- [x] `root` sentinel commit approvals for umbrella docs: `main`/`user` only,
+      allowlisted paths, no component/gitlink/runtime content.
+- [x] Release `0.8.0`.
+
 ## Decided
 
 - [x] **Language**: Chinese-first for the 0.x line. English README for discovery;
