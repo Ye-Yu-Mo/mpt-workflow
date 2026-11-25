@@ -91,14 +91,31 @@ export function acquireLock(root: string, name: string, staleMs = 30_000): LockH
   };
 }
 
-export function withLock<T>(root: string, name: string, fn: () => T): T {
-  const lock = acquireLock(root, name);
-  if (!lock) throw new Error(`无法获取锁 ${name}；可能有另一个进程正在写状态`);
+export function withLock<T>(
+  root: string,
+  name: string,
+  fn: () => T,
+  opts: { timeoutMs?: number } = {},
+): T {
+  const deadline = Date.now() + (opts.timeoutMs ?? 3_000);
+  let lock = acquireLock(root, name);
+  while (!lock) {
+    if (Date.now() >= deadline) {
+      throw new Error(`无法获取锁 ${name}；可能有另一个进程正在写状态`);
+    }
+    sleepSync(50);
+    lock = acquireLock(root, name);
+  }
   try {
     return fn();
   } finally {
     lock.release();
   }
+}
+
+/** Synchronous sleep without busy-spinning the event loop. */
+function sleepSync(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
 /* ------------------------------- approvals ------------------------------ */

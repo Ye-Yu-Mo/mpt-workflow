@@ -7,7 +7,7 @@ import { Workflow } from '../core/workflow.js';
 import { readEvents } from '../core/state.js';
 import { diffStat, diffUnified, recentLog } from '../core/git.js';
 import { logEvent } from '../core/state.js';
-import { readText, exists } from '../core/fsutil.js';
+import { readText, exists, within } from '../core/fsutil.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 // Prefer the build output (dist/web/public); fall back to the source tree when
@@ -17,11 +17,33 @@ const PUBLIC_DIR = [
   path.resolve(here, '..', '..', 'src', 'web', 'public'),
 ].find((p) => exists(p)) || path.resolve(here, 'public');
 
+const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]', '::1']);
+
+/** Host header without the port, for loopback-only enforcement. */
+function hostName(req: http.IncomingMessage): string {
+  return (req.headers.host || '').replace(/:\d+$/, '');
+}
+
+/**
+ * Browsers attach Origin to cross-origin writes. Rejecting them closes the
+ * CSRF hole without adding tokens to a localhost-only dashboard.
+ */
+function isCrossOrigin(req: http.IncomingMessage): boolean {
+  const origin = req.headers.origin;
+  if (!origin) return false;
+  try {
+    return !LOCAL_HOSTS.has(new URL(origin).hostname);
+  } catch {
+    return true;
+  }
+}
+
 function json(res: http.ServerResponse, data: unknown, code = 200) {
   const body = JSON.stringify(data, null, 2);
   res.writeHead(code, {
     'content-type': 'application/json; charset=utf-8',
     'cache-control': 'no-store',
+    'x-content-type-options': 'nosniff',
   });
   res.end(body);
 }
@@ -48,7 +70,7 @@ function readBody(req: http.IncomingMessage): Promise<Record<string, unknown>> {
 function serveStatic(res: http.ServerResponse, rel: string) {
   const cleaned = rel.replace(/^\/+/, '') || 'index.html';
   const abs = path.resolve(PUBLIC_DIR, cleaned);
-  if (!abs.startsWith(PUBLIC_DIR) || !exists(abs) || fs.statSync(abs).isDirectory()) {
+  if (!within(PUBLIC_DIR, abs) || !exists(abs) || fs.statSync(abs).isDirectory()) {
     res.writeHead(404).end('not found');
     return;
   }
@@ -60,7 +82,10 @@ function serveStatic(res: http.ServerResponse, rel: string) {
     '.svg': 'image/svg+xml',
     '.json': 'application/json; charset=utf-8',
   };
-  res.writeHead(200, { 'content-type': types[ext] || 'application/octet-stream' });
+  res.writeHead(200, {
+    'content-type': types[ext] || 'application/octet-stream',
+    'x-content-type-options': 'nosniff',
+  });
   fs.createReadStream(abs).pipe(res);
 }
 
@@ -74,6 +99,18 @@ export function startWebServer(wf: Workflow, port: number): Promise<WebHandle> {
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url || '/', `http://127.0.0.1:${port}`);
     const p = url.pathname;
+    const method = req.method || 'GET';
+
+    // Loopback-only + same-origin writes. The server has no authentication, so
+    // DNS rebinding and cross-site form posts must be refused here.
+    if (!LOCAL_HOSTS.has(hostName(req))) {
+      res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' }).end('forbidden');
+      return;
+    }
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(method) && isCrossOrigin(req)) {
+      res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8' }).end('cross-origin request rejected');
+      return;
+    }
 
     try {
       if (p.startsWith('/api/')) {
@@ -190,8 +227,15 @@ export function startWebServer(wf: Workflow, port: number): Promise<WebHandle> {
           if (!repo || !rel) return json(res, { error: 'repo and path required' }, 400);
           const ref = wf.repoRef(repo);
           const abs = path.resolve(ref.abs, rel);
-          if (!abs.startsWith(ref.abs)) return json(res, { error: 'outside repo' }, 400);
-          return json(res, { path: rel, content: readText(abs) });
+          if (!within(ref.abs, abs)) return json(res, { error: 'outside repo' }, 400);
+          const relPosix = path.relative(ref.abs, abs).split(path.sep).join('/');
+          const allowed =
+            relPosix === 'PLAN.md' ||
+            /^TODO-M\d+\.md$/.test(relPosix) ||
+            relPosix.startsWith('docs/') ||
+            /^MS-[^/]+\//.test(relPosix);
+          if (!allowed) return json(res, { error: 'path not readable via the dashboard' }, 403);
+          return json(res, { path: relPosix, content: readText(abs) });
         }
         return json(res, { error: 'not found' }, 404);
       }

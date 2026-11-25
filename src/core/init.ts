@@ -40,6 +40,14 @@ export function init(options: InitOptions): InitResult {
   const existing: string[] = [];
   const warnings: string[] = [];
 
+  // Running through `npm run dev` (tsx) means there is no dist/cli.js yet; the
+  // generated .mcp.json and hooks would point at a file that does not exist.
+  if (!exists(resolveCliPath())) {
+    warnings.push(
+      'dist/cli.js 不存在（可能通过 npm run dev 运行）；.mcp.json 和 hooks 会指向缺失文件，先运行 npm run build',
+    );
+  }
+
   const wf = workflowDir(root);
   ensureDir(wf);
   ensureDir(runtimeDir(root));
@@ -205,7 +213,7 @@ function excludeFromGit(repoAbs: string, patterns: string[]): void {
   const missing = patterns.filter((p) => !lines.includes(p));
   if (!missing.length) return;
   const prefix = current && !current.endsWith('\n') ? '\n' : '';
-  const block = `# workflow-mcp (machine-specific, not shared)\n${missing.join('\n')}\n`;
+  const block = `# mpt-workflow (machine-specific, not shared)\n${missing.join('\n')}\n`;
   fs.appendFileSync(excludePath, prefix + block);
 }
 
@@ -243,6 +251,11 @@ export function installHooks(
   const created: string[] = [];
   const existing: string[] = [];
   const warnings: string[] = [];
+
+  if (!exists(resolveCliPath())) {
+    warnings.push('跳过 hook 安装：dist/cli.js 不存在，先运行 npm run build');
+    return { created, existing, warnings };
+  }
 
   const targets = [root, ...cfg.repos.map((r) => path.join(root, r.path))];
   for (const dir of targets) {
@@ -298,7 +311,7 @@ export function installHooks(
 
 function preCommitScript(): string {
   return `#!/usr/bin/env bash
-# Installed by workflow-mcp. Scope check only; approval gating lives in the MCP commit tool.
+# Installed by mpt-workflow. Scope check only; approval gating lives in the MCP commit tool.
 set -euo pipefail
 if [ "\${WF_ALLOW_COMMIT:-0}" = "1" ]; then exit 0; fi
 ${JSON.stringify(process.execPath)} ${JSON.stringify(resolveCliPath())} hook pre-commit || exit $?
@@ -332,7 +345,7 @@ export function formatInitResult(r: InitResult): string {
   lines.push(`  1. 在 Claude Code 里确认 MCP server "workflow" 已加载（.mcp.json 已写入）；`);
   lines.push(`  2. 会话开始先调用 bootstrap 声明角色，例如 bootstrap(role="plan", repo="<repo>")；`);
   lines.push(`  3. 或用环境变量固定：WF_ROLE=plan WF_REPO=<repo> claude`);
-  lines.push(`  4. 看板: workflow-mcp web --root ${r.root}`);
+  lines.push(`  4. 看板: mpt-workflow web --root ${r.root}`);
   return lines.join('\n');
 }
 

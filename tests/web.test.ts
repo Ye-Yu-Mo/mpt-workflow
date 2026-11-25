@@ -83,14 +83,15 @@ test('dashboard renders from a live API', async () => {
   });
 
   try {
-    await new Promise((r) => setTimeout(r, 1500));
-
     const doc = dom.window.document;
-    assert.equal(
-      errors.length,
-      0,
-      'no runtime errors: ' + errors.map((e) => e.message).join('; '),
-    );
+    // Wait for the first render instead of sleeping a fixed 1.5s: the suite runs
+    // test files in parallel, and a loaded runner can miss a fixed deadline.
+    const deadline = Date.now() + 10_000;
+    while (Date.now() < deadline) {
+      const hero = doc.querySelector('#hero-num')?.textContent;
+      if (hero && hero !== '–') break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
 
     const hero = doc.querySelector('#hero-num')?.textContent;
     assert.ok(hero && hero !== '–', 'hero number rendered');
@@ -123,6 +124,26 @@ test('dashboard renders from a live API', async () => {
     const after = fs.readFileSync(qfile, 'utf8');
     assert.match(after, /\[answered\]/);
     assert.match(after, /- answer:\s*A/);
+
+    // Cross-site writes are refused (the dashboard has no auth token).
+    const cross = await fetch(`${base}/api/activate`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: 'http://evil.example' },
+      body: JSON.stringify({ repo: 'repo-a' }),
+    });
+    assert.equal(cross.status, 403);
+
+    // The file API is restricted to workflow documents, not source or secrets.
+    const source = await fetch(`${base}/api/files?repo=repo-a&path=src/lib.rs`);
+    assert.equal(source.status, 403);
+    const todo = await fetch(`${base}/api/files?repo=repo-a&path=TODO-M1.md`);
+    assert.equal(todo.status, 200);
+
+    assert.equal(
+      errors.length,
+      0,
+      'no runtime errors: ' + errors.map((e) => e.message).join('; '),
+    );
   } finally {
     dom.window.close();
     await server.close();
