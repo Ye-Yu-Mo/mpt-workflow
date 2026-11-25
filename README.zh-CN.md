@@ -211,6 +211,19 @@ agent: commit(approval="ap-xxx")
 
 唯一写操作：回答问题、关闭问题、批准提交、切换 active repo。
 
+## 运维
+
+```bash
+mpt-workflow doctor                          # 运行时体积 + 失效 CLI 路径
+mpt-workflow gc                              # dry-run，只报告
+mpt-workflow gc --apply                      # 删除 30 天前已处理的消息/审批，以及过期 presence/lock
+mpt-workflow gc --apply --evidence-days 90   # 同时删除 90 天前的完整证据日志
+```
+
+`gc` 默认不删除，`--apply` 才执行。未读消息和待批准审批永远不会被删除；
+证据默认保留，只有显式 `--evidence-days` 才清理（TODO 里仍有截断副本）。
+`--older-than N` 可以改已处理状态的阈值。
+
 ## 与现有文档系统的关系
 
 - **保留**：伞仓 `docs/` 的调研事实、契约文档、MS-N 快照、`milestone/SKILL.md`。
@@ -245,7 +258,7 @@ agent: commit(approval="ap-xxx")
 
 ```bash
 npm run typecheck
-npm test          # 30 个测试（含 MCP stdio 与看板端到端）
+npm test          # 44 个测试（含 MCP stdio 与看板端到端）
 npm run build
 ```
 

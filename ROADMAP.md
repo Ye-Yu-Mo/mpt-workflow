@@ -24,9 +24,16 @@ feature surface.
 - Quickstart, troubleshooting and 2–3 real examples (`minimal`, `multi-repo`,
   `rust`).
 - Biome lint + formatter.
-- Message/evidence retention (`archive` / `gc`) and a runtime-size doctor check.
-- `doctor` checks for stale hook/CLI paths.
 - More MCP clients in the docs (Cursor, Codex CLI, VS Code).
+
+## 0.6 — operations
+
+- [x] `mpt-workflow gc`: dry-run by default; `--apply` removes processed
+  messages/used approvals older than 30 days plus stale presence/locks;
+  `--evidence-days` for old full evidence logs.
+- [x] `doctor` reports `runtime/` size and stale CLI paths in `.mcp.json` /
+  hooks.
+- [ ] Release `0.6.0`.
 
 ## 1.0 — stable contract
 

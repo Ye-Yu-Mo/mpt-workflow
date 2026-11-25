@@ -188,6 +188,11 @@ ever justifies it.
 All writes are atomic (temp file + rename). Writes that must not interleave
 (program config, approvals) take a directory lock with a stale timeout.
 
+`gc` (dry-run by default) removes processed messages and used approvals older
+than 30 days, stale presence records and stale lock directories. Evidence logs
+are only removed with `--evidence-days`. `doctor` reports the `runtime/` size
+and stale absolute CLI paths in `.mcp.json` / hooks.
+
 `.mcp.json` and `.claude/settings.json` written by `init` are added to
 `.git/info/exclude`: they contain machine-specific absolute paths and should not
 appear in the user's diff.
