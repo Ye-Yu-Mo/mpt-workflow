@@ -3,6 +3,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { init, formatInitResult } from './core/init.js';
 import { createDemoWorkspace } from './core/demo.js';
+import { runGc, formatGcReport } from './core/gc.js';
 import { Workflow } from './core/workflow.js';
 import { VERSION } from './version.js';
 import { findRoot } from './core/config.js';
@@ -23,6 +24,7 @@ function usage(): string {
   mpt-workflow demo
   mpt-workflow --version
   mpt-workflow status [--root DIR] [--json]
+  mpt-workflow gc [--root DIR] [--older-than DAYS] [--evidence-days DAYS] [--apply] [--json]
   mpt-workflow next [--root DIR]
   mpt-workflow doctor [--root DIR]
   mpt-workflow questions [--root DIR] [--json] [--all]
@@ -214,6 +216,24 @@ async function main() {
           if (f.hint) console.log(`      → ${f.hint}`);
         }
         process.exitCode = findings.some((f) => f.level === 'FAIL') ? 1 : 0;
+        return;
+      }
+
+      case 'gc': {
+        const wf = resolveWorkflow(flags);
+        const numberFlag = (name: string, fallback: number): number => {
+          if (typeof flags[name] !== 'string') return fallback;
+          const n = Number(flags[name]);
+          if (!Number.isFinite(n) || n < 0) throw new Error(`--${name} 必须是非负数字`);
+          return n;
+        };
+        const report = runGc(wf.root, {
+          olderThanDays: numberFlag('older-than', 30),
+          evidenceDays: numberFlag('evidence-days', 0),
+          apply: Boolean(flags.apply),
+        });
+        if (flags.json) console.log(JSON.stringify(report, null, 2));
+        else console.log(formatGcReport(report));
         return;
       }
 

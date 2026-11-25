@@ -30,3 +30,10 @@ test('CLI demo runs end-to-end', { skip: !fs.existsSync(CLI) }, () => {
   assert.match(out, /todo_ready/);
   assert.match(out, /mpt-workflow web --root/);
 });
+
+test('CLI gc is a dry run by default', { skip: !fs.existsSync(CLI) }, () => {
+  const { root } = createDemoWorkspace();
+  const out = execFileSync(process.execPath, [CLI, 'gc', '--root', root], { encoding: 'utf8' });
+  assert.match(out, /dry-run/);
+  assert.match(out, /未删除任何文件/);
+});
