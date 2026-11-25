@@ -32,6 +32,17 @@ feature surface.
   `multi-repo`, `rust`).
 - [x] Release `0.6.0`.
 
+## 0.7 — QA hardening
+
+- [x] Permission boundary: MCP role/repo binding, fail-closed hooks,
+  enforcement-plane ACL, approval/message ID validation, exact-origin CSRF,
+  symlink containment, init repair.
+- [ ] Trust chain: latest evidence, commit/scope milestone, diff/approval
+  binding, rename parsing, concurrency locks.
+- [ ] Dashboard: focus retention and visible write errors.
+- [ ] Release: idempotent publish, prerelease tags, stronger gates, npm docs
+  links.
+
 ## Decided
 
 - [x] **Language**: Chinese-first for the 0.x line. English README for discovery;

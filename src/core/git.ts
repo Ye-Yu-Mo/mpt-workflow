@@ -50,12 +50,15 @@ export function gitInfo(repoAbs: string): GitInfo {
   const entries = status.out.split('\0').filter(Boolean);
   const changed: string[] = [];
   const untracked: string[] = [];
-  for (const e of entries) {
+  for (let i = 0; i < entries.length; i++) {
+    const e = entries[i];
     const code = e.slice(0, 2);
     const file = e.slice(3);
     if (!file) continue;
     if (code === '??') untracked.push(file);
     else changed.push(file);
+    // With -z, rename/copy entries are two records: new path, then old path.
+    if ((code[0] === 'R' || code[0] === 'C') && i + 1 < entries.length) i++;
   }
   return {
     available: head.ok,
@@ -76,7 +79,9 @@ export function allChangedFiles(repoAbs: string): string[] {
 }
 
 export function stagedFiles(repoAbs: string): string[] {
-  const r = git(repoAbs, ['diff', '--cached', '--name-only', '-z']);
+  // --no-renames reports both the deleted old path and the added new path, so
+  // the pre-commit ACL/scope check sees the source of a rename too.
+  const r = git(repoAbs, ['diff', '--cached', '--name-only', '-z', '--no-renames']);
   return r.out.split('\0').filter(Boolean);
 }
 

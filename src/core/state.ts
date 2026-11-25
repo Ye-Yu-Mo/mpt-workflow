@@ -141,6 +141,8 @@ export interface Approval {
   reason?: string;
 }
 
+const APPROVAL_ID_RE = /^ap-[A-Za-z0-9-]+$/;
+
 export function createApproval(root: string, a: Omit<Approval, 'id' | 'created_at'>): Approval {
   const id = `ap-${slugDate()}-${Math.random().toString(36).slice(2, 6)}`;
   const rec: Approval = { ...a, id, created_at: isoNow() };
@@ -151,16 +153,20 @@ export function createApproval(root: string, a: Omit<Approval, 'id' | 'created_a
 }
 
 export function readApproval(root: string, id: string): Approval | null {
+  if (!APPROVAL_ID_RE.test(id)) return null;
   const p = path.join(approvalsDir(root), `${id}.json`);
   if (!exists(p)) return null;
   try {
-    return JSON.parse(readText(p)) as Approval;
+    const rec = JSON.parse(readText(p)) as Approval;
+    if (!rec || rec.id !== id || !APPROVAL_ID_RE.test(rec.id)) return null;
+    return rec;
   } catch {
     return null;
   }
 }
 
 export function writeApproval(root: string, a: Approval): void {
+  if (!APPROVAL_ID_RE.test(a.id)) throw new Error(`非法审批 id: ${a.id}`);
   const p = path.join(approvalsDir(root), `${a.id}.json`);
   writeAtomic(p, JSON.stringify(a, null, 2));
 }

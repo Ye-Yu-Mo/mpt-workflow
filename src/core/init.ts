@@ -106,6 +106,7 @@ export function init(options: InitOptions): InitResult {
 
   // Adopt: fill in missing scaffolding, never overwrite.
   if (options.adopt !== false) {
+    const cfgSnapshot = JSON.stringify(cfg);
     for (const r of cfg.repos) {
       const abs = path.join(root, r.path);
       if (!exists(abs)) {
@@ -146,7 +147,9 @@ export function init(options: InitOptions): InitResult {
       excludeFromGit(abs, ['.mcp.json', '.claude/settings.json']);
     }
     if (!cfg.active_repo) cfg.active_repo = cfg.repos[0]?.id ?? null;
-    saveConfig(root, cfg);
+    // Only rewrite when something actually changed; a no-op init must not drop
+    // hand-written YAML comments or unknown keys.
+    if (JSON.stringify(cfg) !== cfgSnapshot) saveConfig(root, cfg);
   }
 
   if (options.installHooks) {
@@ -177,7 +180,8 @@ export function init(options: InitOptions): InitResult {
       created.push(path.relative(root, p));
     }
     conf.mcpServers = conf.mcpServers || {};
-    if (!conf.mcpServers.workflow) {
+    const existingEntry = conf.mcpServers.workflow;
+    if (!existingEntry || entryHasMissingCli(existingEntry)) {
       const launch = mcpLaunch(root);
       conf.mcpServers.workflow = { command: launch.command, args: launch.args };
       writeAtomic(p, JSON.stringify(conf, null, 2) + '\n');
@@ -215,6 +219,23 @@ function mcpLaunch(root: string): { command: string; args: string[] } {
     };
   }
   return { command: process.execPath, args: [cli, 'mcp', '--root', root] };
+}
+
+/** An existing MCP entry points at a cli.js that no longer exists. */
+function entryHasMissingCli(entry: unknown): boolean {
+  if (!entry || typeof entry !== 'object') return false;
+  const args = (entry as { args?: unknown }).args;
+  if (!Array.isArray(args)) return false;
+  return args.some((a) => typeof a === 'string' && a.endsWith('cli.js') && !exists(a));
+}
+
+/** A generated hook entry points at a cli.js that no longer exists. */
+function hookEntryStale(entry: unknown): boolean {
+  const text = JSON.stringify(entry);
+  if (!text.includes('hook pretool') && !text.includes('hook session-start')) return false;
+  // The path is inside a JSON-encoded shell string, so quotes are escaped.
+  const paths = [...text.matchAll(/(\/[^"\\\s]+?cli\.js)/g)].map((m) => m[1]);
+  return paths.some((p) => !exists(p));
 }
 
 /** Append patterns to a repo's .git/info/exclude (local, never committed). */
@@ -301,8 +322,8 @@ export function installHooks(
       created.push(path.relative(root, settingsPath));
     }
     const hooks = (settings.hooks || {}) as Record<string, unknown>;
-    const pre = (hooks.PreToolUse || []) as unknown[];
-    const session = (hooks.SessionStart || []) as unknown[];
+    const pre = ((hooks.PreToolUse || []) as unknown[]).filter((e) => !hookEntryStale(e));
+    const session = ((hooks.SessionStart || []) as unknown[]).filter((e) => !hookEntryStale(e));
     const hasPre = JSON.stringify(pre).includes('hook pretool');
     const hasSession = JSON.stringify(session).includes('hook session-start');
     if (!hasPre) pre.push(PRETOOL_HOOK());
@@ -324,8 +345,22 @@ export function installHooks(
       const dir = path.isAbsolute(hooksPath) ? hooksPath : path.join(abs, hooksPath);
       ensureDir(dir);
       const file = path.join(dir, 'pre-commit');
-      if (!writeIfMissing(file, preCommitScript())) existing.push(path.relative(root, file));
-      else created.push(path.relative(root, file));
+      const script = preCommitScript();
+      if (!exists(file)) {
+        writeIfMissing(file, script);
+        created.push(path.relative(root, file));
+      } else {
+        const current = fs.readFileSync(file, 'utf8');
+        const stale =
+          current.includes('hook pre-commit') &&
+          [...current.matchAll(/(\/[^"\\\s]+?cli\.js)/g)].some((m) => !exists(m[1]));
+        if (stale) {
+          fs.writeFileSync(file, script, 'utf8');
+          warnings.push(`${r.id}: 已修复 stale pre-commit hook 路径`);
+        } else {
+          existing.push(path.relative(root, file));
+        }
+      }
       fs.chmodSync(file, 0o755);
     } catch (e) {
       warnings.push(`${r.id}: 安装 git hook 失败: ${(e as Error).message}`);

@@ -65,7 +65,14 @@ The ACL is enforced by hooks, and the role is self-declared:
 - `pre-commit scope 检查未通过`: the git hook repeats the TODO/ACL check. The
   user can bypass with `WF_ALLOW_COMMIT=1` or `--no-verify`, but that is an
   explicit escape hatch.
-- `git push` is always blocked for agents. The human pushes manually.
+- Bash `git commit` / `git push` is refused for `main`/`plan`/`todo` sessions.
+  Use the MCP `commit` tool after approval; the human pushes.
+- `mpt-workflow approve` / `mpt-workflow commit` are user actions too; the hook
+  blocks them from agent Bash.
+- Role/repo binding: `plan` and `todo` can only act on their bound repo. Use
+  `main` for cross-repo work.
+- `WF_ROLE` is case-sensitive (`main`, `plan`, `todo`, `user`); an invalid role
+  or a missing `WF_REPO` makes the hook fail closed (exit 2).
 
 ## `evidence_run` fails or times out
 

@@ -15,7 +15,7 @@ import {
 import { formatInitResult, init } from './core/init.js';
 import { formatMessage, type MessageKind } from './core/messages.js';
 import { updateQuestion } from './core/questions.js';
-import type { Role } from './core/types.js';
+import { isRole, type Role } from './core/types.js';
 import { Workflow } from './core/workflow.js';
 import { runMcpServer } from './mcp/server.js';
 import { VERSION } from './version.js';
@@ -499,7 +499,10 @@ async function main() {
       }
 
       case 'acl': {
-        const role = (positional[1] || 'todo') as Role;
+        const role = positional[1] || 'todo';
+        if (!isRole(role)) {
+          throw new Error('用法: mpt-workflow acl <main|plan|todo|user>');
+        }
         console.log(describeAcl(role));
         return;
       }

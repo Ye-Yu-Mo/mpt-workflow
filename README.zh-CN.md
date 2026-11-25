@@ -164,7 +164,8 @@ agent: commit(approval="ap-xxx")
    → 只做本地 git commit，永不 push
 ```
 
-- `git push` 一律由用户手工执行；agent 调 Bash 会被 hook 拒绝。
+- Bash 的 `git commit` / `git push` 以及 `mpt-workflow approve|commit` 都会被 hook 拒绝；
+  agent 只能走 MCP `commit`，push 由用户手工执行。
 - 审批是**防误操作**，不是防恶意：同机同用户，agent 理论上能绕过。
   真正的护栏是 hook + 你 review diff 的习惯。
 
@@ -274,7 +275,7 @@ mpt-workflow gc --apply --evidence-days 90   # 同时删除 90 天前的完整�
 npm run typecheck
 npm run lint      # Biome：格式 + lint
 npm run format    # Biome：写入安全修复
-npm test          # 45 个测试（含示例、MCP stdio 与看板端到端）
+npm test          # 58 个测试（含示例、MCP stdio 与看板端到端）
 npm run build
 ```
 

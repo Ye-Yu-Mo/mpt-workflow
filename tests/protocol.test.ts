@@ -80,3 +80,81 @@ test('MCP stdio protocol: tool discovery and a call', async (t) => {
     await transport.close();
   }
 });
+
+type TextResult = { content: { type: string; text: string }[]; isError?: boolean };
+
+function callText(res: TextResult): string {
+  return res.content.map((c) => c.text).join('\n');
+}
+
+test('MCP uses WF_ROLE/WF_REPO when --role is absent', async (t) => {
+  if (!fs.existsSync(CLI)) {
+    t.skip('dist/cli.js missing; run npm run build');
+    return;
+  }
+  const { root } = fixture();
+  const env = { ...process.env, WF_ROLE: 'todo', WF_REPO: 'repo-a' } as Record<string, string>;
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [CLI, 'mcp', '--root', root],
+    env,
+    stderr: 'ignore',
+  });
+  const client = new Client({ name: 'protocol-env', version: '1' }, { capabilities: {} });
+  try {
+    await client.connect(transport);
+    const status = (await client.callTool({ name: 'status', arguments: {} })) as TextResult;
+    assert.match(callText(status), /本会话角色: todo/);
+    const claim = (await client.callTool({
+      name: 'milestone_claim',
+      arguments: { milestone: 'M1' },
+    })) as TextResult;
+    assert.ok(!claim.isError, callText(claim));
+    assert.match(callText(claim), /implementing/);
+  } finally {
+    await client.close();
+    await transport.close();
+  }
+});
+
+test('MCP without a role refuses state changes until bootstrap', async (t) => {
+  if (!fs.existsSync(CLI)) {
+    t.skip('dist/cli.js missing; run npm run build');
+    return;
+  }
+  const { root } = fixture();
+  const env = { ...process.env } as Record<string, string>;
+  delete env.WF_ROLE;
+  delete env.WF_REPO;
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [CLI, 'mcp', '--root', root],
+    env,
+    stderr: 'ignore',
+  });
+  const client = new Client({ name: 'protocol-undeclared', version: '1' }, { capabilities: {} });
+  try {
+    await client.connect(transport);
+    const denied = (await client.callTool({
+      name: 'milestone_claim',
+      arguments: { milestone: 'M1' },
+    })) as TextResult;
+    assert.equal(denied.isError, true);
+    assert.match(callText(denied), /bootstrap/);
+
+    const boot = (await client.callTool({
+      name: 'bootstrap',
+      arguments: { role: 'todo', repo: 'repo-a' },
+    })) as TextResult;
+    assert.ok(!boot.isError, callText(boot));
+
+    const claim = (await client.callTool({
+      name: 'milestone_claim',
+      arguments: { milestone: 'M1' },
+    })) as TextResult;
+    assert.ok(!claim.isError, callText(claim));
+  } finally {
+    await client.close();
+    await transport.close();
+  }
+});

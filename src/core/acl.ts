@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { relTo, within } from './fsutil.js';
+import { realPath, relTo, within } from './fsutil.js';
 import { matchGlob } from './glob.js';
 import type { Role } from './types.js';
 
@@ -43,6 +43,16 @@ export const ACL: Record<Role, RoleAcl> = {
       { base: 'repo', glob: 'Cargo.lock' },
       { base: 'repo', glob: 'rust-toolchain.toml' },
       { base: 'repo', glob: '.cargo/**' },
+      // The enforcement plane is for the tools and the user, not agents.
+      { base: 'root', glob: '.claude/**' },
+      { base: 'root', glob: '.mcp.json' },
+      { base: 'root', glob: '.git/**' },
+      { base: 'root', glob: '.workflow/runtime/**' },
+      { base: 'repo', glob: '.claude/**' },
+      { base: 'repo', glob: '.mcp.json' },
+      { base: 'repo', glob: '.git/**' },
+      { base: 'repo', glob: '.workflow/**' },
+      { base: 'repo', glob: 'docs/agent-questions.md' },
     ],
   },
 
@@ -61,6 +71,11 @@ export const ACL: Record<Role, RoleAcl> = {
       { base: 'repo', glob: 'rust-toolchain.toml' },
       { base: 'repo', glob: 'config/**' },
       { base: 'root', glob: '**' },
+      { base: 'repo', glob: '.claude/**' },
+      { base: 'repo', glob: '.mcp.json' },
+      { base: 'repo', glob: '.git/**' },
+      { base: 'repo', glob: '.workflow/**' },
+      { base: 'repo', glob: 'docs/agent-questions.md' },
     ],
   },
 
@@ -70,6 +85,11 @@ export const ACL: Record<Role, RoleAcl> = {
       { base: 'repo', glob: 'PLAN.md' },
       { base: 'repo', glob: 'TODO-*.md' },
       { base: 'root', glob: '**' },
+      { base: 'repo', glob: '.claude/**' },
+      { base: 'repo', glob: '.mcp.json' },
+      { base: 'repo', glob: '.git/**' },
+      { base: 'repo', glob: '.workflow/**' },
+      { base: 'repo', glob: 'docs/agent-questions.md' },
     ],
   },
 };
@@ -101,18 +121,21 @@ export function resolveScope(
   repoAbs: string,
   allRepos: { id: string; abs: string }[],
 ): { scope: AclDecision['scope']; normalized: string; ownerRepo?: string } {
-  if (within(repoAbs, absPath)) {
-    return { scope: 'repo', normalized: relTo(repoAbs, absPath), ownerRepo: repoId };
+  const real = realPath(absPath);
+  const realRepo = realPath(repoAbs);
+  if (within(realRepo, real)) {
+    return { scope: 'repo', normalized: relTo(realRepo, real), ownerRepo: repoId };
   }
   for (const r of allRepos) {
-    if (r.id !== repoId && within(r.abs, absPath)) {
-      return { scope: 'repo', normalized: relTo(r.abs, absPath), ownerRepo: r.id };
+    if (r.id !== repoId && within(realPath(r.abs), real)) {
+      return { scope: 'repo', normalized: relTo(realPath(r.abs), real), ownerRepo: r.id };
     }
   }
-  if (within(root, absPath)) {
-    return { scope: 'root', normalized: relTo(root, absPath) };
+  const realRoot = realPath(root);
+  if (within(realRoot, real)) {
+    return { scope: 'root', normalized: relTo(realRoot, real) };
   }
-  return { scope: 'outside', normalized: toPosix(absPath) };
+  return { scope: 'outside', normalized: toPosix(real) };
 }
 
 export function checkAcl(

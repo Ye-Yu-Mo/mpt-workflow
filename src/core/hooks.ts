@@ -3,9 +3,10 @@ import path from 'node:path';
 import { checkAcl } from './acl.js';
 import { runtimeDir } from './config.js';
 import { parseTodo } from './docs.js';
-import { exists, readText, within, writeAtomic } from './fsutil.js';
-import { gitInfo, stagedFiles, workingTreeHash } from './git.js';
-import type { Role } from './types.js';
+import { exists, readText, writeAtomic } from './fsutil.js';
+import { stagedFiles } from './git.js';
+import { matchGlob } from './glob.js';
+import { isRole, type Role } from './types.js';
 import { isMachineManagedFile, Workflow } from './workflow.js';
 
 export interface HookInput {
@@ -17,12 +18,12 @@ export interface HookInput {
 }
 
 export function readHookInput(): HookInput {
+  const raw = fs.readFileSync(0, 'utf8');
+  if (!raw.trim()) return {};
   try {
-    const raw = fs.readFileSync(0, 'utf8');
-    if (!raw.trim()) return {};
     return JSON.parse(raw) as HookInput;
-  } catch {
-    return {};
+  } catch (e) {
+    throw new Error(`hook input 不是合法 JSON: ${(e as Error).message}`);
   }
 }
 
@@ -62,9 +63,37 @@ function repoFor(wf: Workflow, abs: string, lease: RoleLease | null): string | n
   return lease?.repo || wf.cfg.repos[0]?.id || null;
 }
 
+function leaseBoundRepo(wf: Workflow, lease: RoleLease): { id: string; abs: string } | null {
+  if (lease.role !== 'plan' && lease.role !== 'todo') return null;
+  if (!lease.repo) return null;
+  return wf.repoRefs().find((r) => r.id === lease.repo) ?? null;
+}
+
+function leaseError(wf: Workflow, lease: RoleLease): string | null {
+  if (!isRole(lease.role)) return `无效角色 ${String(lease.role)}；允许 main/plan/todo/user`;
+  if (lease.role === 'plan' || lease.role === 'todo') {
+    if (!lease.repo) return `角色 ${lease.role} 没有绑定仓库（WF_REPO）`;
+    if (!wf.repoRefs().some((r) => r.id === lease.repo)) {
+      return `角色 ${lease.role} 绑定的仓库 ${lease.repo} 不存在`;
+    }
+  }
+  return null;
+}
+
 /* ------------------------------- pretool -------------------------------- */
 
 export function runPretool(): number {
+  try {
+    return runPretoolInner();
+  } catch (e) {
+    process.stderr.write(
+      `[workflow] hook 出错，按 fail-closed 拒绝本次调用：${(e as Error).message}\n`,
+    );
+    return 2;
+  }
+}
+
+function runPretoolInner(): number {
   const input = readHookInput();
   const cwd = input.cwd || process.cwd();
   const wf = Workflow.discover(cwd);
@@ -75,8 +104,14 @@ export function runPretool(): number {
     // No role declared: only guard the most dangerous action.
     return guardPush(input) ? 2 : 0;
   }
+  const bad = leaseError(wf, lease);
+  if (bad) {
+    process.stderr.write(`[workflow] 拒绝执行：${bad}\n`);
+    return 2;
+  }
 
   const repos = wf.repoRefs().map((r) => ({ id: r.id, abs: r.abs }));
+  const bound = leaseBoundRepo(wf, lease);
   const tool = input.tool_name || '';
   const ti = input.tool_input || {};
 
@@ -84,10 +119,13 @@ export function runPretool(): number {
     const file = String(ti.file_path || ti.notebook_path || '');
     if (!file) return 0;
     const abs = path.isAbsolute(file) ? file : path.resolve(cwd, file);
-    const repoId = repoFor(wf, abs, lease);
-    if (!repoId) return 0;
-    const ref = wf.repoRef(repoId);
-    const d = checkAcl(lease.role, abs, wf.root, repoId, ref.abs, repos);
+    const repoId = bound ? bound.id : repoFor(wf, abs, lease);
+    const repoAbs = bound
+      ? bound.abs
+      : repoId
+        ? wf.repoRef(repoId).abs
+        : path.join(wf.root, '.no-such-repo');
+    const d = checkAcl(lease.role, abs, wf.root, repoId ?? '', repoAbs, repos);
     if (!d.allowed) {
       process.stderr.write(
         `[workflow] 拒绝写入：${d.reason}\n` +
@@ -113,11 +151,42 @@ export function runPretool(): number {
 
 function guardPush(input: HookInput): boolean {
   const cmd = String(input.tool_input?.command || '');
-  if (/\bgit\s+push\b/.test(cmd)) {
+  if (gitMutation(cmd) === 'push') {
     process.stderr.write('[workflow] push 必须由用户手动执行：agent 只做本地 commit。\n');
     return true;
   }
   return false;
+}
+
+/**
+ * Best-effort detection of `git commit` / `git push`, including global options
+ * such as `-C`, `-c` and `--git-dir`. Aliases are not resolved.
+ */
+function gitMutation(cmd: string): 'commit' | 'push' | null {
+  const tokens = cmd.match(/(?:[^\s"'`;&|()]+|"[^"]*"|'[^']*')/g) ?? [];
+  const takesValue = new Set([
+    '-C',
+    '-c',
+    '--git-dir',
+    '--work-tree',
+    '--namespace',
+    '--config-env',
+    '--super-prefix',
+  ]);
+  for (let i = 0; i < tokens.length; i++) {
+    if (tokens[i] !== 'git' && !tokens[i].endsWith('/git')) continue;
+    let j = i + 1;
+    while (j < tokens.length) {
+      const tok = tokens[j];
+      if (tok.startsWith('-')) {
+        j += takesValue.has(tok) ? 2 : 1;
+        continue;
+      }
+      if (tok === 'commit' || tok === 'push') return tok;
+      break;
+    }
+  }
+  return null;
 }
 
 function guardBash(
@@ -127,8 +196,17 @@ function guardBash(
   cwd: string,
   repos: { id: string; abs: string }[],
 ): string | null {
-  if (/\bgit\s+push\b/.test(cmd)) {
-    return '[workflow] push 必须由用户手动执行；agent 只做本地 commit 且需用户批准。\n';
+  const mutation = gitMutation(cmd);
+  if (mutation && lease.role !== 'user') {
+    return mutation === 'push'
+      ? '[workflow] push 必须由用户手动执行；agent 只做本地 commit。\n'
+      : '[workflow] 不要用 Bash 执行 git commit；请走 MCP commit 工具（需要用户批准）。\n';
+  }
+  if (
+    lease.role !== 'user' &&
+    /\b(?:mpt-workflow|mpt|workflow-mcp)\s+(?:approve|commit)\b/.test(cmd)
+  ) {
+    return '[workflow] approve/commit 是用户操作；agent 不能自己批准或提交。\n';
   }
 
   // Outstanding blocking questions stop implementation.
@@ -138,7 +216,9 @@ function guardBash(
       (q) =>
         q.blocking &&
         q.status === 'open' &&
-        (lease.role === 'todo' ? q.to === 'PLAN' : q.to === 'main'),
+        (lease.role === 'todo'
+          ? String(q.to).toLowerCase() === 'plan'
+          : String(q.to).toLowerCase() === 'main'),
     );
   if (blocking.length && lease.role === 'todo') {
     return (
@@ -147,33 +227,19 @@ function guardBash(
     );
   }
 
-  if (/\bgit\s+commit\b/.test(cmd)) {
-    const repoId =
-      lease.repo || wf.cfg.repos.find((r) => within(path.join(wf.root, r.path), cwd))?.id;
-    if (!repoId) return null;
-    const ref = wf.repoRef(repoId);
-    const hash = workingTreeHash(ref.abs);
-    const ok = wf
-      .approvals()
-      .find((a) => a.repo === repoId && a.approved_at && !a.used_at && a.tree_hash === hash);
-    if (!ok) {
-      return (
-        `[workflow] 拒绝提交：没有与当前工作区匹配的用户批准。\n` +
-        `正确流程: commit_request → 用户执行 mpt-workflow approve <id> → commit\n` +
-        `（当前工作区 hash: ${hash}）\n`
-      );
-    }
-  }
-
   // Best-effort redirect target check.
+  const bound = leaseBoundRepo(wf, lease);
   const redirects = [...cmd.matchAll(/(?:^|[^0-9&])>{1,2}\s*([^\s;|&]+)/g)].map((m) => m[1]);
   for (const target of redirects) {
     if (!target || target.startsWith('/dev/') || target.startsWith('&')) continue;
     const abs = path.isAbsolute(target) ? target : path.resolve(cwd, target);
-    const repoId = repoFor(wf, abs, lease);
-    if (!repoId) continue;
-    const ref = wf.repoRef(repoId);
-    const d = checkAcl(lease.role, abs, wf.root, repoId, ref.abs, repos);
+    const repoId = bound ? bound.id : repoFor(wf, abs, lease);
+    const repoAbs = bound
+      ? bound.abs
+      : repoId
+        ? wf.repoRef(repoId).abs
+        : path.join(wf.root, '.no-such-repo');
+    const d = checkAcl(lease.role, abs, wf.root, repoId ?? '', repoAbs, repos);
     if (!d.allowed) return `[workflow] 拒绝写入 ${target}：${d.reason}\n`;
   }
   return null;
@@ -269,17 +335,34 @@ export function runPreCommit(): number {
   if (!owned) return 0; // umbrella commits are the user's own docs
 
   const lease = readRoleLease(wf.root);
+  const roleRaw = lease?.role ?? 'user';
+  if (!isRole(roleRaw)) {
+    process.stderr.write(`[workflow] 无效角色 ${String(roleRaw)}；拒绝提交\n`);
+    return 1;
+  }
+  const role: Role = roleRaw;
+  const bound = lease ? leaseBoundRepo(wf, lease) : null;
+  if ((role === 'plan' || role === 'todo') && !bound) {
+    process.stderr.write(`[workflow] 角色 ${role} 没有有效的绑定仓库；拒绝提交\n`);
+    return 1;
+  }
+  if (bound && owned.id !== bound.id) {
+    process.stderr.write(`[workflow] 角色 ${role} 绑定在 ${bound.id}，不能在 ${owned.id} 提交\n`);
+    return 1;
+  }
+
   const files = stagedFiles(owned.abs);
   if (files.length === 0) return 0;
 
   const repos = wf.repoRefs().map((r) => ({ id: r.id, abs: r.abs }));
-  const role: Role = lease?.role || 'user';
+  const aclRepoId = bound ? bound.id : owned.id;
+  const aclRepoAbs = bound ? bound.abs : owned.abs;
   const violations: string[] = [];
 
   for (const f of files) {
     if (isMachineManagedFile(f)) continue; // tools update these themselves
     const abs = path.join(owned.abs, f);
-    const d = checkAcl(role, abs, wf.root, owned.id, owned.abs, repos);
+    const d = checkAcl(role, abs, wf.root, aclRepoId, aclRepoAbs, repos);
     if (!d.allowed) violations.push(`${f}: ${d.reason}`);
   }
 
@@ -292,7 +375,7 @@ export function runPreCommit(): number {
     if (todoDoc?.allowedFiles.length) {
       for (const f of files) {
         if (isMachineManagedFile(f)) continue;
-        if (!todoDoc.allowedFiles.some((a) => matchPath(f, a))) {
+        if (!todoDoc.allowedFiles.some((a) => matchGlob(f, a.replace(/^\.\//, '')))) {
           violations.push(`${f}: 不在 ${m.id} 的「影响文件」清单内`);
         }
       }
@@ -308,9 +391,8 @@ export function runPreCommit(): number {
     return 1;
   }
 
-  const gi = gitInfo(owned.abs);
   process.stderr.write(
-    `[workflow] scope 检查通过：${files.length} 个文件 (${gi.branch}@${gi.shortHead})\n`,
+    `[workflow] scope 检查通过：${files.length} 个文件 (${st.git.branch}@${st.git.shortHead})\n`,
   );
   return 0;
 }
@@ -321,15 +403,4 @@ function parseTodoSafe(p: string) {
   } catch {
     return null;
   }
-}
-
-function matchPath(file: string, pattern: string): boolean {
-  const p = pattern.replace(/^\.\//, '');
-  if (p === file) return true;
-  const esc = p
-    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-    .replace(/\*\*/g, '')
-    .replace(/\*/g, '[^/]*')
-    .replace(//g, '.*');
-  return new RegExp('^' + esc + '$').test(file);
 }
