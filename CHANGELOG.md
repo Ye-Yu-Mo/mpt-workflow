@@ -41,6 +41,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `dist/cli.js` does not exist, instead of writing hooks that point at a
   missing file.
 
+### Added
+
+- Coverage gate (`npm run test:coverage`, 70% lines/functions/statements, 60%
+  branches) and a CI artifact.
+- CodeQL analysis and a tag-driven release workflow with npm provenance.
+- [docs/platform-support.md](docs/platform-support.md) (macOS / Linux / WSL2)
+  and [docs/releasing.md](docs/releasing.md).
+
 ## [0.3.0] - 2026-11-25
 
 ### Added

@@ -71,6 +71,8 @@ Three principles:
 
 - Node.js **22+** (Node 20 reached end-of-life in April 2026)
 - git
+- macOS, Linux, or WSL2. Native Windows is not supported yet — see
+  [docs/platform-support.md](docs/platform-support.md).
 - [Claude Code](https://claude.com/claude-code) (for the MCP server and hooks;
   the CLI and dashboard work without it)
 
