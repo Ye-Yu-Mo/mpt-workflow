@@ -6,10 +6,11 @@ PLAN → TODO → implement → accept → commit workflow into an enforceable s
 [中文](README.zh-CN.md)
 
 [![CI](https://github.com/Ye-Yu-Mo/mpt-workflow/actions/workflows/ci.yml/badge.svg)](https://github.com/Ye-Yu-Mo/mpt-workflow/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/mpt-workflow.svg)](https://www.npmjs.com/package/mpt-workflow)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D22-brightgreen.svg)](package.json)
 
-> Status: pre-1.0. 0.4.0 is prepared; see [ROADMAP.md](ROADMAP.md).
+> Status: pre-1.0. **0.4.0 is published**; see [ROADMAP.md](ROADMAP.md).
 
 ---
 
@@ -80,7 +81,18 @@ Three principles:
 
 ## Install
 
-Source install (the package is not published to npm yet):
+```bash
+npm install -g mpt-workflow
+mpt-workflow --help
+
+# or run it without a global install
+npx mpt-workflow --help
+```
+
+The npm package name is **`mpt-workflow`**. `workflow-mcp` is already taken by
+an unrelated package, so do not install or run that name.
+
+Source install (for development):
 
 ```bash
 git clone git@github.com:Ye-Yu-Mo/mpt-workflow.git
@@ -90,37 +102,30 @@ npm run build
 node dist/cli.js --help
 ```
 
-Optionally put it on your `PATH`:
-
-```bash
-npm link          # provides `mpt-workflow` and `mpt`
-```
-
-The npm package name is **`mpt-workflow`**. `workflow-mcp` is already taken by
-an unrelated package, so do not install or run that name.
+`npm link` puts the `mpt-workflow` and `mpt` binaries on your `PATH`.
 
 ## Quick start
 
 ```bash
 # Adopt an existing multi-repo workspace (idempotent; never overwrites files)
-node dist/cli.js init --root /path/to/workspace
+mpt-workflow init --root /path/to/workspace
 
 # Add the enforcement hooks (recommended)
-node dist/cli.js init --root /path/to/workspace --install-hooks
+mpt-workflow init --root /path/to/workspace --install-hooks
 
 # See where things stand
-node dist/cli.js status --root /path/to/workspace
-node dist/cli.js next
+mpt-workflow status --root /path/to/workspace
+mpt-workflow next
 
 # Open the dashboard
-node dist/cli.js web --root /path/to/workspace --port 7788
+mpt-workflow web --root /path/to/workspace --port 7788
 ```
 
-After the first npm release the same commands work as
-`npx mpt-workflow <command>`.
+Every command also works as `npx mpt-workflow <command>`.
 
-Want to see it work first? `./scripts/demo.sh` builds a throwaway workspace,
-adopts it, prints status and sends a message. Nothing outside `$TMPDIR` is touched.
+Want to see it work first? From a source checkout, `./scripts/demo.sh` builds a
+throwaway workspace, adopts it, prints status and sends a message. Nothing
+outside `$TMPDIR` is touched.
 
 `init` writes:
 

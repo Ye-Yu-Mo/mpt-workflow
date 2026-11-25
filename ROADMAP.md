@@ -11,8 +11,8 @@ feature surface.
 - [x] Coverage gate, CodeQL, macOS CI and a pack/install smoke job.
 - [x] Tag-driven release workflow with npm provenance.
 - [x] Merge the hardening PRs (#5, #6).
-- [ ] Publish `0.4.0` and create the first GitHub release.
-- [ ] Verify `npx mpt-workflow init` on a clean machine.
+- [x] Publish `0.4.0` and create the first GitHub release.
+- [x] Verify `npx mpt-workflow init` on a clean machine.
 
 ## 0.5 — adoption
 
