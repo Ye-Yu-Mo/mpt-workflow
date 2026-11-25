@@ -1,6 +1,6 @@
 {
   "name": "workflow-mcp",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "A local MCP server, CLI and dashboard that turn a multi-agent, multi-repo PLAN/TODO/accept/commit workflow into an enforceable state machine.",
   "type": "module",
