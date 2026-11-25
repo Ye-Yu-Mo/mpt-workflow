@@ -130,7 +130,10 @@ export function parseTodo(fileAbs: string): TodoDoc | null {
 
   const shaFromFm = fm.data.sha ? String(fm.data.sha) : undefined;
   // Prefer an explicit hex SHA anywhere on a "受验" line over placeholder text.
-  const shaCandidates = [...body.matchAll(/受验[^\n]*?`([0-9a-f]{7,40})`/g)].map((m) => m[1]);
+  const shaCandidates = [
+    ...[...body.matchAll(/受验[^\n]*?`([0-9a-f]{7,40})`/g)].map((m) => m[1]),
+    ...[...body.matchAll(/受验\s*SHA[：:]\s*([0-9a-f]{7,40})\b/gi)].map((m) => m[1]),
+  ];
   const sha = shaFromFm || shaCandidates[shaCandidates.length - 1];
 
   const planRef =
@@ -144,9 +147,9 @@ export function parseTodo(fileAbs: string): TodoDoc | null {
   const allowed = new Set<string>();
   for (const f of collectFilesUnder(body, /\*\*影响文件\*\*/)) allowed.add(f);
   for (const f of collectFilesUnder(body, /\*\*允许的既有文件改动\*\*/)) allowed.add(f);
-  for (const f of collectFilesUnder(body, /\*\*改什么\*\*/)) {
+  for (const c of collectFilesUnder(body, /\*\*改什么\*\*/)) {
     // "改什么" often lists plain prose; only keep path-looking inline code.
-    for (const c of f) if (c.includes('/') || /\.[a-z]{2,4}$/.test(c)) allowed.add(c);
+    if (c.includes('/') || /\.[a-z]{2,4}$/.test(c)) allowed.add(c);
   }
   if (Array.isArray(fm.data.files)) {
     for (const f of fm.data.files as unknown[]) if (typeof f === 'string') allowed.add(f);
@@ -278,7 +281,7 @@ export function setTodoStatus(text: string, status: MilestoneStatus): string {
     return body;
   }
   if (/状态[：:]/.test(text)) {
-    return text.replace(/(状态[：:]\s*)([^\s　|]+)/, `$1${label}`);
+    return text.replace(/(状态[：:]\s*)([^\n　|]+)/, `$1${label}`);
   }
   // No marker: add one right after the title.
   return text.replace(/^(#\s+TODO-M\d+[^\n]*\n)/, `$1\n> 状态：${label}\n`);
@@ -286,7 +289,7 @@ export function setTodoStatus(text: string, status: MilestoneStatus): string {
 
 export function setTodoSha(text: string, sha: string): string {
   if (/受验\s*SHA[：:]/.test(text)) {
-    return text.replace(/(受验\s*SHA[：:]\s*)([^\s　|]+)/, `$1${sha}`);
+    return text.replace(/(受验\s*SHA[：:]\s*)([^\n　|]+)/, `$1${sha}`);
   }
   if (/^---$/m.test(text)) {
     return text.replace(/^---\n/, `---\nsha: ${sha}\n`);

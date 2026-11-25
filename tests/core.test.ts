@@ -6,7 +6,8 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { checkAcl } from '../src/core/acl.js';
 import { parseTodo, setTodoStatus } from '../src/core/docs.js';
-import { workingTreeHash } from '../src/core/git.js';
+import { gitInfo, workingTreeHash } from '../src/core/git.js';
+import { matchGlob } from '../src/core/glob.js';
 import { init } from '../src/core/init.js';
 import {
   appendQuestion,
@@ -206,7 +207,7 @@ test('failing evidence forces a reject and a rework loop', async () => {
   });
   assert.equal(bad.exitCode, 3);
   wf.complete('repo-a', 'M1', 'todo');
-  assert.throws(() => wf.accept('repo-a', 'M1', 'plan'), /没有成功的证据/);
+  assert.throws(() => wf.accept('repo-a', 'M1', 'plan'), /最新证据|没有成功的证据/);
   const m = wf.reject('repo-a', 'M1', 'plan', '测试失败，先修');
   assert.equal(m.status, 'rejected');
   assert.throws(() => wf.reject('repo-a', 'M1', 'plan', ''), /必须写原因/);
@@ -291,7 +292,8 @@ test('scope check flags files outside TODO list and ACL', () => {
   fs.writeFileSync(path.join(repoAbs, 'src/extra.rs'), 'fn g() {}\n');
 
   const s = wf.scopeCheck('repo-a', 'M1', 'todo');
-  assert.equal(s.pass, true, 'ACL allows src/**, so no hard violations');
+  assert.equal(s.pass, false, 'todo out-of-scope files block the commit gate');
+  assert.equal(s.violations.length, 0, 'ACL allows src/**, so no ACL violation');
   assert.ok(s.warnings.some((w) => w.includes('src/extra.rs')));
 
   // plan role may not touch src at all — only when ACL enforcement is requested
@@ -392,4 +394,110 @@ test('acl resolves symlinks before scope checks', () => {
     { id: 'repo-a', abs: repo },
   ]);
   assert.equal(d.allowed, false);
+});
+
+test('accept requires the latest evidence to pass', async () => {
+  const { wf } = setup();
+  wf.claim('repo-a', 'M1', 'todo');
+  await wf.runEvidence({ repoId: 'repo-a', milestone: 'M1', command: 'exit 0', role: 'todo' });
+  await wf.runEvidence({ repoId: 'repo-a', milestone: 'M1', command: 'exit 7', role: 'todo' });
+  wf.complete('repo-a', 'M1', 'todo');
+  assert.throws(() => wf.accept('repo-a', 'M1', 'plan'), /最新证据/);
+  await wf.runEvidence({ repoId: 'repo-a', milestone: 'M1', command: 'exit 0', role: 'todo' });
+  assert.equal(wf.accept('repo-a', 'M1', 'plan').status, 'accepted');
+});
+
+test('commit scope uses the accepted milestone, not the next one', async () => {
+  const { wf } = setup();
+  const repoAbs = path.join(wf.root, 'repo-a');
+  fs.writeFileSync(
+    path.join(repoAbs, 'TODO-M2.md'),
+    '# TODO-M2: second\n\n> 状态：待实现\n\n- **影响文件**：\n  - `src/other.rs`\n',
+  );
+  wf.claim('repo-a', 'M1', 'todo');
+  await wf.runEvidence({ repoId: 'repo-a', milestone: 'M1', command: 'echo ok', role: 'todo' });
+  wf.complete('repo-a', 'M1', 'todo');
+  wf.accept('repo-a', 'M1', 'plan');
+  fs.writeFileSync(path.join(repoAbs, 'src/lib.rs'), 'fn f() { 2 }\n');
+
+  // M2 is the current milestone, but M1 is the accepted one being committed.
+  const req = wf.requestCommit({ repoId: 'repo-a', message: 'feat(M1): ok', role: 'todo' });
+  assert.equal(req.approval.milestone, 'M1');
+
+  fs.writeFileSync(path.join(repoAbs, 'src/evil.rs'), 'fn evil() {}\n');
+  assert.throws(
+    () => wf.requestCommit({ repoId: 'repo-a', message: 'feat: evil', role: 'todo' }),
+    /影响文件/,
+  );
+});
+
+test('approving a stale worktree is refused', () => {
+  const { wf } = setup();
+  const repoAbs = path.join(wf.root, 'repo-a');
+  fs.writeFileSync(path.join(repoAbs, 'src/lib.rs'), 'fn f() { 1 }\n');
+  const req = wf.requestCommit({ repoId: 'repo-a', message: 'feat: x', role: 'todo' });
+  fs.writeFileSync(path.join(repoAbs, 'src/lib.rs'), 'fn f() { 2 }\n');
+  assert.throws(() => wf.approve(req.approval.id), /工作区内容已变化/);
+});
+
+test('next asks the user to commit after acceptance', async () => {
+  const { wf } = setup();
+  wf.claim('repo-a', 'M1', 'todo');
+  await wf.runEvidence({ repoId: 'repo-a', milestone: 'M1', command: 'echo ok', role: 'todo' });
+  wf.complete('repo-a', 'M1', 'todo');
+  wf.accept('repo-a', 'M1', 'plan');
+  const next = wf.programStatus().next;
+  assert.ok(next.some((n) => n.actor === 'user' && /commit/i.test(n.action)));
+});
+
+test('gitInfo parses rename entries without a phantom path', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wf-rename-'));
+  const repo = path.join(root, 'repo');
+  fs.mkdirSync(path.join(repo, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(repo, 'src/lib.rs'), 'fn f() {}\n');
+  for (const args of [
+    ['init', '-q'],
+    ['config', 'user.email', 't@example.com'],
+    ['config', 'user.name', 't'],
+    ['add', '-A'],
+    ['commit', '-qm', 'init'],
+  ]) {
+    sh(repo, 'git', args);
+  }
+  sh(repo, 'git', ['mv', 'src/lib.rs', 'src/renamed.rs']);
+  const info = gitInfo(repo);
+  assert.deepEqual(info.changed, ['src/renamed.rs']);
+});
+
+test('parseTodo reads a bare 受验 SHA and 改什么 paths', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wf-doc2-'));
+  const f = path.join(dir, 'TODO-M1.md');
+  fs.writeFileSync(
+    f,
+    `# TODO-M1: x\n\n> 状态：待实现　受验 SHA：${'a'.repeat(40)}\n\n- **改什么**：\n  - \`src/foo.rs\`\n`,
+  );
+  const d = parseTodo(f);
+  assert.equal(d?.sha, 'a'.repeat(40));
+  assert.ok(d?.allowedFiles.includes('src/foo.rs'));
+  assert.ok(!d?.allowedFiles.includes('/'));
+});
+
+test('scope globs match zero directories and single-character segments', () => {
+  assert.equal(matchGlob('src/lib.rs', 'src/**/*.rs'), true);
+  assert.equal(matchGlob('src/sub/lib.rs', 'src/**/*.rs'), true);
+  assert.equal(matchGlob('src/a.rs', 'src/?.rs'), true);
+  assert.equal(matchGlob('src/ab.rs', 'src/?.rs'), false);
+});
+
+test('re-claim after a reject notifies plan again', async () => {
+  const { wf } = setup();
+  wf.claim('repo-a', 'M1', 'todo');
+  await wf.runEvidence({ repoId: 'repo-a', milestone: 'M1', command: 'echo ok', role: 'todo' });
+  wf.complete('repo-a', 'M1', 'todo');
+  wf.reject('repo-a', 'M1', 'plan', 'rework');
+  wf.claim('repo-a', 'M1', 'todo');
+  const notes = wf.msgs
+    .forActor({ role: 'plan', repo: 'repo-a' }, { includeAcked: true })
+    .filter((m) => m.subject.includes('开始实现'));
+  assert.equal(notes.length, 2);
 });

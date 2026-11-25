@@ -104,6 +104,16 @@ export function workingTreeHash(repoAbs: string): string {
   return h.digest('hex').slice(0, 16);
 }
 
+/** Content hash of the staged tree (base HEAD + binary diff). */
+export function stagedTreeHash(repoAbs: string): string {
+  const h = crypto.createHash('sha256');
+  const head = git(repoAbs, ['rev-parse', 'HEAD']);
+  h.update(`head:${head.out.trim()}\nstaged:\n`);
+  const diff = git(repoAbs, ['diff', '--cached', '--binary']);
+  h.update(diff.ok ? diff.out : '');
+  return h.digest('hex').slice(0, 16);
+}
+
 /** Tree oid of the working tree (tracked changes), or empty string when clean. */
 export function workingTreeOid(repoAbs: string): string {
   const stash = git(repoAbs, ['stash', 'create', 'wf-evidence']);
