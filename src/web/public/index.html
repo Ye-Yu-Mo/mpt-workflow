@@ -1035,8 +1035,9 @@ async function openDiff(a) {
     const d = await get(`/api/diff?repo=${encodeURIComponent(a.repo)}`);
     const files = (a.files || []).map(f => `<li><code>${esc(f)}</code></li>`).join('');
     const log = (d.log || []).map(x => `<div class="repo-meta">${esc(x)}</div>`).join('');
+    const repoLabel = a.repo === 'root' ? 'root（伞仓文档）' : a.repo;
     $('#modal-body').innerHTML = `
-      <div class="repo-meta">${esc(a.repo)} · ${esc(a.message)}</div>
+      <div class="repo-meta">${esc(repoLabel)} · ${esc(a.message)}</div>
       <div class="repo-meta">tree <code>${esc(a.tree_hash)}</code> · ${(a.files || []).length} 个文件</div>
       <div class="modal-actions">
         ${a.stale ? '<span class="tag bad">工作区已变化</span>' : a.approved_at ? '<span class="tag ok">已批准</span>' : '<button class="btn primary" id="modal-approve">批准这个提交</button>'}
@@ -1068,10 +1069,11 @@ function renderApprovals() {
   if (!list.length) { box.appendChild(el('div', 'empty', '没有待批准的提交。')); return; }
   for (const a of list) {
     const files = (a.files || []).map(f => `<li><code>${esc(f)}</code></li>`).join('');
+    const repoLabel = a.repo === 'root' ? 'root（伞仓文档）' : a.repo;
     const r = el('div', 'row-item');
     r.innerHTML = `
       <div class="v" style="flex:1">
-        <div><code>${esc(a.id)}</code> · ${esc(a.repo)} ${a.stale ? '<span class="tag bad">工作区已变化</span>' : a.approved_at ? '<span class="tag ok">已批准</span>' : '<span class="tag">待批准</span>'}</div>
+        <div><code>${esc(a.id)}</code> · ${esc(repoLabel)} ${a.stale ? '<span class="tag bad">工作区已变化</span>' : a.approved_at ? '<span class="tag ok">已批准</span>' : '<span class="tag">待批准</span>'}</div>
         <div style="color:var(--ink-2)">${esc(a.message)}</div>
         <div class="repo-meta">${(a.files || []).length} 个文件 · tree ${esc(a.tree_hash)}</div>
         ${a.stale ? '<div class="repo-meta" style="color:var(--critical)">工作区已变化，请重新 commit_request</div>' : ''}

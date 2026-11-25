@@ -169,7 +169,7 @@ test('pretool blocks cross-repo writes and enforcement-plane files', {
 });
 
 test('pretool blocks git global options and self-approval', { skip: !fs.existsSync(CLI) }, () => {
-  const { a, b } = twoRepoFixture();
+  const { root, a, b } = twoRepoFixture();
   for (const command of [
     `git -C ${b} push`,
     'git -c user.name=x commit -m x',
@@ -184,6 +184,13 @@ test('pretool blocks git global options and self-approval', { skip: !fs.existsSy
     hookStatus('todo', 'repo-a', a, 'Bash', { command: 'git status --short' }).status,
     0,
   );
+  // Root/umbrella commits go through the MCP approval tool too; the hook still
+  // refuses a main session's Bash git commit at the umbrella root.
+  const rootCommit = hookStatus('main', null, root, 'Bash', {
+    command: 'git commit -m "docs: umbrella"',
+  });
+  assert.equal(rootCommit.status, 2);
+  assert.match(rootCommit.stderr, /MCP/);
 });
 
 test('pretool fails closed on invalid role, malformed config and malformed input', {

@@ -1,7 +1,14 @@
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { checkAcl } from './acl.js';
-import { evidenceDir, findRoot, loadConfig, runtimeDir, saveConfig } from './config.js';
+import {
+  evidenceDir,
+  findRoot,
+  loadConfig,
+  ROOT_REPO_ID,
+  runtimeDir,
+  saveConfig,
+} from './config.js';
 import {
   appendEvidenceSection,
   listTodoFiles,
@@ -28,6 +35,7 @@ import {
   diffStat,
   commit as gitCommit,
   gitInfo,
+  gitlinkPaths,
   stageAll,
   stagedTreeHash,
   workingTreeHash,
@@ -147,6 +155,7 @@ export class Workflow {
   }
 
   repoRef(id: string): RepoRef {
+    if (id === ROOT_REPO_ID) return { id, abs: this.root };
     const r = this.repoRefs().find((x) => x.id === id);
     if (!r)
       throw new Error(`未知仓库 ${id}；已配置: ${this.cfg.repos.map((x) => x.id).join(', ')}`);
@@ -931,11 +940,76 @@ export class Workflow {
     return st.currentMilestone;
   }
 
+  private assertRootCommitFiles(files: string[]): void {
+    const gi = gitInfo(this.root);
+    if (!gi.available) throw new Error(`伞仓不是 git 仓库: ${this.root}`);
+    if (files.length === 0) throw new Error('伞仓没有可提交的改动');
+    const bad = files.filter((f) => !isRootCommitAllowed(f));
+    if (bad.length) {
+      throw new Error(
+        '伞仓提交包含不允许的路径（只允许 CLAUDE.md、docs/**、milestone/**、\n' +
+          '.workflow/program.yaml、.workflow/.gitignore）:\n' +
+          bad.map((f) => `- ${f}`).join('\n'),
+      );
+    }
+    const links = gitlinkPaths(this.root);
+    // Untracked nested repositories are not gitlinks yet; `git add` would turn
+    // them into one (or refuse), so reject the directory by its `.git` entry.
+    const nested = files.filter((f) => exists(path.join(this.root, f, '.git')));
+    if (links.length || nested.length) {
+      const bad = [...new Set([...links, ...nested])];
+      throw new Error(
+        `伞仓包含 gitlink/嵌套仓库，拒绝提交:\n${bad.map((f) => `- ${f}`).join('\n')}`,
+      );
+    }
+  }
+
   requestCommit(input: { repoId: string; message: string; role: Role; milestone?: string }): {
     approval: Approval;
     diffStat: string;
     files: string[];
   } {
+    if (input.repoId === ROOT_REPO_ID) {
+      if (input.role !== 'main' && input.role !== 'user') {
+        throw new Error(`只有 main/user 能提交伞仓；当前角色 ${input.role}`);
+      }
+      const gi = gitInfo(this.root);
+      if (!gi.available) throw new Error(`伞仓不是 git 仓库: ${this.root}`);
+      const files = allChangedFiles(this.root);
+      if (files.length === 0) throw new Error('伞仓没有可提交的改动');
+      this.assertRootCommitFiles(files);
+      const stage = stageAll(this.root);
+      if (!stage.ok) throw new Error(`git add 失败: ${stage.err}`);
+      // Re-check after staging: an untracked nested repository only becomes a
+      // gitlink in the index at this point.
+      this.assertRootCommitFiles(allChangedFiles(this.root));
+      const a = createApproval(this.root, {
+        repo: ROOT_REPO_ID,
+        tree_hash: workingTreeHash(this.root),
+        staged_hash: stagedTreeHash(this.root),
+        message: input.message,
+        files,
+      });
+      logEvent(this.root, {
+        role: input.role,
+        tool: 'commit_request',
+        repo: ROOT_REPO_ID,
+        ok: true,
+        detail: { approval: a.id, files: files.length, root: true },
+      });
+      this.notifyEvent({
+        from: input.role,
+        repo: ROOT_REPO_ID,
+        to: [{ role: 'user' }],
+        kind: 'approval_request',
+        subject: `root（伞仓文档）请求提交：${input.message}`,
+        body: `${files.length} 个文件\n${diffStat(this.root)}`,
+        refs: { repo: ROOT_REPO_ID, approval_id: a.id, files },
+        key: `${ROOT_REPO_ID}:commit-request:${a.id}`,
+      });
+      return { approval: a, diffStat: diffStat(this.root), files };
+    }
+
     const ref = this.repoRef(input.repoId);
     const files = allChangedFiles(ref.abs);
     if (files.length === 0) throw new Error('没有可提交的改动');
@@ -1023,21 +1097,32 @@ export class Workflow {
       );
     }
 
-    const scope = this.scopeCheck(
-      input.repoId,
-      a.milestone ?? this.milestoneForCommit(input.repoId)?.id,
-      input.role,
-      { enforceAcl: false },
-    );
-    assertCommitScope(scope, input.role);
-
-    const files = allChangedFiles(ref.abs);
+    let files: string[];
+    if (input.repoId === ROOT_REPO_ID) {
+      if (input.role !== 'main' && input.role !== 'user') {
+        throw new Error(`只有 main/user 能提交伞仓；当前角色 ${input.role}`);
+      }
+      files = allChangedFiles(this.root);
+      this.assertRootCommitFiles(files);
+    } else {
+      const scope = this.scopeCheck(
+        input.repoId,
+        a.milestone ?? this.milestoneForCommit(input.repoId)?.id,
+        input.role,
+        { enforceAcl: false },
+      );
+      assertCommitScope(scope, input.role);
+      files = allChangedFiles(ref.abs);
+    }
     if (input.dryRun) {
       return { dryRun: true, files, message: a.message, tree_hash: hash };
     }
 
     const stage = stageAll(ref.abs);
     if (!stage.ok) throw new Error(`git add 失败: ${stage.err}`);
+    if (input.repoId === ROOT_REPO_ID) {
+      this.assertRootCommitFiles(allChangedFiles(this.root));
+    }
     if (a.staged_hash) {
       const staged = stagedTreeHash(ref.abs);
       if (staged !== a.staged_hash) {
@@ -1261,6 +1346,18 @@ export class Workflow {
 }
 
 /* ------------------------------ helpers ------------------------------ */
+
+export const ROOT_COMMIT_ALLOW = [
+  'CLAUDE.md',
+  'docs/**',
+  'milestone/**',
+  '.workflow/program.yaml',
+  '.workflow/.gitignore',
+];
+
+export function isRootCommitAllowed(file: string): boolean {
+  return ROOT_COMMIT_ALLOW.some((g) => matchGlob(file, g));
+}
 
 /**
  * Files the workflow tools themselves maintain. They are excluded from scope
