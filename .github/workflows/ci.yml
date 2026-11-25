@@ -33,6 +33,17 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - run: npm test
+        if: matrix.os != 'ubuntu-latest' || matrix.node != 22
+      - name: coverage
+        if: matrix.os == 'ubuntu-latest' && matrix.node == 22
+        run: npm run test:coverage
+      - name: upload coverage
+        if: matrix.os == 'ubuntu-latest' && matrix.node == 22
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-lcov
+          path: coverage/lcov.info
+          if-no-files-found: error
 
   smoke:
     name: smoke (cli + dashboard)

@@ -220,4 +220,6 @@ appear in the user's diff.
 - One active repo at a time; true parallel implementation across repos is not
   supported by design.
 - Single machine, single user. No multi-tenant isolation, no remote state.
+- Native Windows is not supported: `evidence_run` and the installed hooks use
+  bash. See [platform-support.md](platform-support.md).
 - MS generation, push automation and desktop notifications are out of scope.
