@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-11-26
+
 ### Fixed
 
 - `milestone_complete` now records the verified SHA at implementation completion
@@ -473,7 +475,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   timeline.
 - 16 tests.
 
-[Unreleased]: https://github.com/Ye-Yu-Mo/mpt-workflow/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/Ye-Yu-Mo/mpt-workflow/compare/v1.3.1...HEAD
+[1.3.1]: https://github.com/Ye-Yu-Mo/mpt-workflow/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/Ye-Yu-Mo/mpt-workflow/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/Ye-Yu-Mo/mpt-workflow/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/Ye-Yu-Mo/mpt-workflow/compare/v1.1.0...v1.1.1

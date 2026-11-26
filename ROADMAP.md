@@ -79,6 +79,7 @@ feature surface.
 
 - [x] Tracked evidence JSONL, short approval ids/prefixes, manual cancel.
 - [x] Release `1.3.0`.
+- [x] Release `1.3.1` (verified SHA at completion, todo sha dedupe).
 
 ## 1.2 — shared-worktree commits
 
