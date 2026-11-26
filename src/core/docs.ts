@@ -1,7 +1,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { exists, readText } from './fsutil.js';
-import { appendToSection, inlineCode, section, splitFrontMatter } from './markdown.js';
+import {
+  appendToSection,
+  fenceEnd,
+  fenceStart,
+  inlineCode,
+  outsideFences,
+  section,
+  splitFrontMatter,
+} from './markdown.js';
 import type { MilestoneStatus, TodoDoc } from './types.js';
 
 const STATUS_MAP: Record<string, MilestoneStatus> = {
@@ -241,17 +249,36 @@ export interface EvidenceEntry {
 export function parseEvidence(todo: TodoDoc): EvidenceEntry[] {
   const text = section(todo.body, /证据记录/);
   if (!text) return [];
+  const lines = text.split('\n');
+  const outside = outsideFences(text);
+  const blocks: string[][] = [];
+  let current: string[] | null = null;
+  for (let i = 0; i < lines.length; i++) {
+    if (outside[i] && /^###\s+/.test(lines[i])) {
+      if (current) blocks.push(current);
+      current = [lines[i]];
+    } else if (current) {
+      current.push(lines[i]);
+    }
+  }
+  if (current) blocks.push(current);
+
   const out: EvidenceEntry[] = [];
-  const blocks = text.split(/^###\s+/m).slice(1);
-  for (const b of blocks) {
-    const id = /^(E\d+)/.exec(b)?.[1] || '';
-    const at = /—\s*([0-9T:.\-Z]+)/.exec(b)?.[1] || '';
-    const cmd = /command[：:]\s*`([^`]*)`/.exec(b)?.[1] || '';
-    const exit = Number(/exit[：:]\s*(-?\d+)/.exec(b)?.[1] ?? NaN);
-    const head = /head[：:]\s*`?([0-9a-f]{7,40})`?/.exec(b)?.[1] || '';
-    const tree = /tree[：:]\s*`?([0-9a-f]{7,40})`?/.exec(b)?.[1] || '';
-    const dirty = /dirty[：:]\s*(true|false)/.exec(b)?.[1] === 'true';
-    const outMatch = /```(?:text)?\n([\s\S]*?)```/.exec(b);
+  for (const block of blocks) {
+    // Metadata lives before the fenced output; never parse the log itself for
+    // `command`/`exit`/`head` — a test printing those strings must not count
+    // as evidence.
+    let fenceAt = block.findIndex((line) => fenceStart(line) !== null);
+    if (fenceAt === -1) fenceAt = block.length;
+    const header = block.slice(0, fenceAt).join('\n');
+    const title = block[0].replace(/^###\s+/, '');
+    const id = /^(E\d+)/.exec(title)?.[1] || '';
+    const at = /—\s*([0-9T:.\-Z]+)/.exec(title)?.[1] || '';
+    const cmd = /command[：:]\s*`([^`]*)`/.exec(header)?.[1] || '';
+    const exit = Number(/exit[：:]\s*(-?\d+)/.exec(header)?.[1] ?? NaN);
+    const head = /head[：:]\s*`?([0-9a-f]{7,40})`?/.exec(header)?.[1] || '';
+    const tree = /tree[：:]\s*`?([0-9a-f]{7,40})`?/.exec(header)?.[1] || '';
+    const dirty = /dirty[：:]\s*(true|false)/.exec(header)?.[1] === 'true';
     out.push({
       id,
       at,
@@ -260,10 +287,23 @@ export function parseEvidence(todo: TodoDoc): EvidenceEntry[] {
       head,
       tree,
       dirty,
-      outputTail: outMatch?.[1]?.trim() || '',
+      outputTail: fencedBody(block, fenceAt),
     });
   }
   return out;
+}
+
+/** Body of the first fenced block starting at `at`, without the delimiters. */
+function fencedBody(lines: string[], at: number): string {
+  if (at >= lines.length) return '';
+  const fence = fenceStart(lines[at]);
+  if (!fence) return '';
+  const body: string[] = [];
+  for (let i = at + 1; i < lines.length; i++) {
+    if (fenceEnd(lines[i], fence)) break;
+    body.push(lines[i]);
+  }
+  return body.join('\n').trim();
 }
 
 /** Rewrite the status marker in a TODO doc, preserving the existing style. */
@@ -311,6 +351,15 @@ export function appendEvidenceSection(
   },
 ): string {
   const header = '## 证据记录';
+  const output = entry.output.trim() || '(no output)';
+  // A fence longer than any backtick run in the output keeps logs that contain
+  // fenced Markdown (or `###` headings) from closing the block early.
+  let longest = 0;
+  for (const line of output.split('\n')) {
+    const m = /^\s*(`{3,})/.exec(line);
+    if (m) longest = Math.max(longest, m[1].length);
+  }
+  const fence = '`'.repeat(Math.max(3, longest + 1));
   const block = [
     `### ${entry.id} — ${entry.at}`,
     `- command: \`${entry.command.replace(/`/g, "'")}\``,
@@ -319,9 +368,9 @@ export function appendEvidenceSection(
     `- tree: \`${entry.tree}\``,
     `- dirty: ${entry.dirty}`,
     '',
-    '```text',
-    entry.output.trim() || '(no output)',
-    '```',
+    `${fence}text`,
+    output,
+    fence,
     '',
   ].join('\n');
 

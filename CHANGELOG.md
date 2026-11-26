@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Evidence integrity.** Evidence output is wrapped in a fence longer than any
+  fence it contains, and only metadata outside code fences is parsed. A test
+  that prints `### E2`, `exit: 0` or `## 验收记录` can no longer forge an entry
+  or truncate the evidence section; `section`/`appendToSection` now ignore
+  headings inside fences.
+- **Lock reclaim.** A stale advisory lock is reclaimed with an atomic rename, so
+  two waiters can no longer delete each other's fresh lock.
+- **Config comments.** `init` and every config mutation update only the keys
+  that changed, preserving hand-written comments and unknown keys; the
+  machine-specific `root:` field is no longer written to `program.yaml`.
+- **Diff review.** Dashboard diffs include untracked/new files, and the API
+  marks a truncated preview instead of silently cutting it.
+- **Umbrella hint.** `status`/`next` suggest committing allowlisted umbrella
+  docs when the root has pending changes.
+
 ## [0.8.0] - 2026-11-25
 
 ### Added

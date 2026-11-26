@@ -202,9 +202,13 @@ export function startWebServer(wf: Workflow, port: number): Promise<WebHandle> {
           const repo = url.searchParams.get('repo') || '';
           if (!repo) return json(res, { error: 'repo required' }, 400);
           const ref = wf.repoRef(repo);
+          const full = diffUnified(ref.abs);
+          const limit = 200_000;
+          const truncated = full.length > limit;
           return json(res, {
             stat: diffStat(ref.abs),
-            diff: diffUnified(ref.abs).slice(0, 200_000),
+            diff: truncated ? `${full.slice(0, limit)}\n... [diff 已截断]` : full,
+            truncated,
             log: recentLog(ref.abs, 8),
           });
         }
