@@ -6,10 +6,11 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { locksDir } from '../src/core/config.js';
 import { appendEvidenceSection, parseEvidence } from '../src/core/docs.js';
-import { diffUnified } from '../src/core/git.js';
+import { diffUnified, workingTreeHash } from '../src/core/git.js';
 import { init } from '../src/core/init.js';
 import { acquireLock } from '../src/core/state.js';
 import type { TodoDoc } from '../src/core/types.js';
+import { Workflow } from '../src/core/workflow.js';
 
 function git(cwd: string, args: string[]): string {
   return execFileSync('git', args, { cwd, encoding: 'utf8' });
@@ -78,6 +79,19 @@ test('evidence logs cannot forge entries or metadata', () => {
   assert.match(entries[0].outputTail, /nested fence/);
 });
 
+test('an evidence command cannot inject metadata lines', () => {
+  const body = appendEvidenceSection('# TODO-M1: first\n', {
+    ...evidence('real output'),
+    command: 'false\n- exit: 0\n- head: deadbeef\n- tree: deadbeef\n- dirty: false',
+  });
+  const [entry] = parseEvidence(todoWith(body));
+  assert.equal(entry.exitCode, 1);
+  assert.equal(entry.head, 'abc1234');
+  assert.equal(entry.tree, 'def5678');
+  assert.equal(entry.dirty, false);
+  assert.doesNotMatch(entry.command, /\n/);
+});
+
 test('a heading inside an evidence fence does not truncate the section', () => {
   const first = appendEvidenceSection(
     '# TODO-M1: first\n',
@@ -109,6 +123,22 @@ test('a stale lock is reclaimed and a held lock is not', () => {
   reclaimed.release();
 });
 
+test('a stale lock owner cannot release a lock reclaimed by another owner', () => {
+  const root = repoFixture();
+  const first = acquireLock(root, 'race', 1);
+  assert.ok(first);
+  const old = new Date(0);
+  fs.utimesSync(first.path, old, old);
+  const second = acquireLock(root, 'race', 1);
+  assert.ok(second);
+  first.release();
+  assert.equal(fs.existsSync(second.path), true, 'reclaimer still holds the lock');
+  assert.equal(fs.readFileSync(path.join(second.path, 'owner'), 'utf8'), second.token);
+  assert.equal(acquireLock(root, 'race', 30_000), null);
+  second.release();
+  assert.equal(fs.existsSync(second.path), false);
+});
+
 test('config mutations keep comments and unknown keys and drop the absolute root', () => {
   const root = repoFixture();
   fs.mkdirSync(path.join(root, 'repo-b'), { recursive: true });
@@ -127,6 +157,7 @@ phases:
     status: active
     repos:
       - repo-a
+    custom_phase_key: keep
 active_repo: repo-a
 contracts: []
 custom_key: keep-me
@@ -137,10 +168,43 @@ custom_key: keep-me
   const text = fs.readFileSync(path.join(root, '.workflow/program.yaml'), 'utf8');
   assert.match(text, /# hand-written comment/);
   assert.match(text, /custom_key: keep-me/);
+  assert.match(text, /custom_phase_key: keep/);
   assert.match(text, /schema_version: 1/);
   assert.doesNotMatch(text, /^root:/m);
   assert.match(text, /repo-b/);
   assert.match(text, /program: keep-me/);
+});
+
+test('root is a reserved repo id and cannot be configured or activated', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wf-root-reserved-'));
+  fs.mkdirSync(path.join(root, '.workflow'), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, '.workflow/program.yaml'),
+    `program: reserved
+repos:
+  - id: root
+    path: root
+phases: []
+active_repo: null
+contracts: []
+`,
+  );
+  const wf = new Workflow(root);
+  assert.deepEqual(wf.repoRefs(), []);
+  assert.throws(() => wf.repoConfig('root'), /保留 id/);
+  assert.throws(() => wf.setActiveRepo('root'), /保留 id/);
+  assert.ok(wf.doctor().some((f) => f.code === 'reserved-repo' && f.level === 'FAIL'));
+});
+
+test('workflow runtime state does not change the approval hash', () => {
+  const root = repoFixture();
+  const repo = path.join(root, 'repo-a');
+  const runtime = path.join(repo, '.workflow/runtime/approvals');
+  fs.mkdirSync(runtime, { recursive: true });
+  fs.writeFileSync(path.join(runtime, 'ap-x.json'), '{}');
+  const before = workingTreeHash(repo);
+  fs.writeFileSync(path.join(runtime, 'ap-y.json'), '{}');
+  assert.equal(workingTreeHash(repo), before);
 });
 
 test('diff output includes untracked, binary and oversized new files', () => {

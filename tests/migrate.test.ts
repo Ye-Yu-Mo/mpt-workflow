@@ -65,11 +65,22 @@ test('migrate refuses invalid YAML and a newer schema version', () => {
   const broken = legacyRoot('program: [unclosed\n');
   assert.throws(() => previewConfigMigration(broken), /不是合法 YAML/);
 
+  const sequence = legacyRoot('- a\n- b\n');
+  assert.throws(() => previewConfigMigration(sequence), /顶层必须是映射/);
+
+  const nullVersion = legacyRoot('program: p\nschema_version: null\nrepos: []\nphases: []\n');
+  assert.ok(previewConfigMigration(nullVersion).changes.some((c) => c.includes('schema_version')));
+
   const future = legacyRoot('program: p\nschema_version: 2\nrepos: []\nphases: []\n');
   assert.throws(() => previewConfigMigration(future), /高于当前支持/);
   const cfg = loadConfig(future);
   assert.ok(cfg);
   assert.throws(() => saveConfig(future, cfg), /高于当前支持/);
+  assert.throws(
+    () => saveConfig(future, { ...cfg, schema_version: 1 }),
+    /高于当前支持/,
+    'the on-disk document wins over a stale in-memory config',
+  );
 });
 
 test('CLI migrate is a preview unless --apply is passed', { skip: !fs.existsSync(CLI) }, () => {

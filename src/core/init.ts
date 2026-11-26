@@ -6,6 +6,7 @@ import {
   configPath,
   detectRepos,
   loadConfig,
+  ROOT_REPO_ID,
   runtimeDir,
   saveConfig,
   workflowDir,
@@ -73,6 +74,9 @@ export function init(options: InitOptions): InitResult {
     const detected = options.repos?.length
       ? options.repos.map((id) => ({ id, path: id }))
       : detectRepos(root);
+    if (detected.some((r) => r.id === ROOT_REPO_ID)) {
+      throw new Error(`'${ROOT_REPO_ID}' 是伞仓保留 id，不能作为组件仓库名`);
+    }
     if (detected.length === 0) {
       warnings.push('没有发现含 .git 的子目录；请用 --repo <name> 显式指定');
     }

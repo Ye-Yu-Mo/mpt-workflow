@@ -1,6 +1,7 @@
 import YAML from 'yaml';
 import { configPath, SCHEMA_VERSION } from './config.js';
 import { exists, readText, writeAtomic } from './fsutil.js';
+import { withLock } from './state.js';
 
 export { SCHEMA_VERSION };
 
@@ -22,6 +23,9 @@ export function previewConfigMigration(root: string): ConfigMigration {
   if (doc.errors.length > 0) {
     throw new Error(`program.yaml 不是合法 YAML: ${doc.errors[0].message}`);
   }
+  if (!doc.contents || !YAML.isMap(doc.contents)) {
+    throw new Error('program.yaml 顶层必须是映射（key: value），无法迁移');
+  }
   const data = (doc.toJS() ?? {}) as Record<string, unknown>;
   const raw = data.schema_version;
   const version = Number(raw ?? SCHEMA_VERSION);
@@ -32,8 +36,9 @@ export function previewConfigMigration(root: string): ConfigMigration {
   }
 
   const changes: string[] = [];
-  if (raw === undefined) changes.push(`添加 schema_version: ${SCHEMA_VERSION}`);
-  else if (!Number.isFinite(version) || version < 1) {
+  if (raw === undefined || raw === null) {
+    changes.push(`添加 schema_version: ${SCHEMA_VERSION}`);
+  } else if (!Number.isFinite(version) || version < 1) {
     changes.push(`修正非法 schema_version=${String(raw)} → ${SCHEMA_VERSION}`);
   }
   if ('root' in data) changes.push('删除机器相关的 root 字段');
@@ -49,8 +54,13 @@ export function migrateConfig(
   root: string,
   apply: boolean,
 ): ConfigMigration & { applied: boolean } {
-  const preview = previewConfigMigration(root);
-  const applied = apply && preview.changes.length > 0;
-  if (applied) writeAtomic(configPath(root), preview.after);
-  return { ...preview, applied };
+  if (!apply) return { ...previewConfigMigration(root), applied: false };
+  // Re-read and write under the config lock so a concurrent activate/updatePhase
+  // cannot be overwritten by a stale preview.
+  return withLock(root, 'program', () => {
+    const preview = previewConfigMigration(root);
+    const applied = preview.changes.length > 0;
+    if (applied) writeAtomic(configPath(root), preview.after);
+    return { ...preview, applied };
+  });
 }

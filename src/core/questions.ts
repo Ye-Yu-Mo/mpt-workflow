@@ -7,7 +7,7 @@ const FIELD_RE = /^-\s+([A-Za-z_]+)\s*[:：]\s*(.*)$/;
 
 /** Shared agent-facing explanation of the question lifecycle. */
 export const QUESTION_STATUS_HELP =
-  '问题状态：open=待回答；answered=已回答（提问方必须应用结论并 close）；applied/closed=已处理；canceled=作废。只 answer 不 close，问题会一直未闭合。';
+  '问题状态：open=待回答；answered=已回答（提问方必须应用结论并 close）；closed=已关闭；canceled=作废；applied 仅用于旧/手写文件（有 resolution 但没有显式状态）。只 answer 不 close，问题会一直未闭合。';
 
 export function questionsFile(repoAbs: string): string {
   return path.join(repoAbs, 'docs', 'agent-questions.md');

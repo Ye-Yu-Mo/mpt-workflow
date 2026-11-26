@@ -1,9 +1,8 @@
 # 1.0 compatibility contract (design)
 
-> Status: proposal for the 1.0 line, written after v0.9.0.
-> This document is a design; it does not change the current behavior.
-> Scope: what 1.0 promises to keep stable, how it evolves, and how users
-> migrate.
+> Status: current surface as of v0.10.2; the remaining 1.0 items are tracked in
+> §6. The document describes the contract the 1.0 line promises to keep stable,
+> plus how it evolves and how users migrate.
 
 ## 1. Why 1.0
 
@@ -101,8 +100,8 @@ contracts?:                # optional
 
 Status labels: `草稿`/`planned` → `待实现`/`todo_ready` → `实现中`/`implementing`
 → `待验收`/`review` → `已验收`/`accepted` → `已提交`/`committed`;
-`已打回`/`rejected` is the rework branch. `committed` is derived from a clean
-working tree, not only from the status line.
+`已打回`/`rejected` is the rework branch. `committed` is derived from an
+unchanged TODO record plus the commit, not solely from the status line.
 
 The parser stays forgiving: emphasis, parenthetical notes, front-matter and
 English labels continue to work. New aliases are additive; removing a label is
@@ -112,18 +111,23 @@ a breaking change.
 
 Commands, positional arguments and flags are frozen:
 
-`init`, `status`, `next`, `doctor`, `gc`, `questions`, `answer`, `inbox`,
-`read`, `ack`, `send`, `wait`, `watch`, `escalate`, `presence`, `approve`,
-`commit`, `activate`, `role`, `acl`, `web`, `mcp`, `hook`, `demo`, `version`.
+`init`, `status`, `next`, `doctor`, `migrate`, `gc`, `questions`, `answer`,
+`inbox`, `read`, `ack`, `send`, `wait`, `watch`, `escalate`, `presence`,
+`approve`, `commit`, `activate`, `role`, `acl`, `web`, `mcp`, `hook`, `demo`,
+`version`, `help`.
 
-Exit codes: `0` success, non-zero failure; hooks use `2` to block. Help text
-and human output are not frozen. New flags are additive; boolean flags accept
-`--flag`, `--flag=false` and `--flag false`.
+Exit codes: `0` success, non-zero failure. `hook pretool` and
+`hook session-start` use `2` to block; the git `pre-commit` hook uses `1` (git's
+hook failure convention). Help text and human output are not frozen. New flags
+are additive; boolean flags accept `--flag`, `--flag=false` and `--flag false`.
 
 ### 2.5 Integration points
 
-- Environment: `WF_ROLE`, `WF_REPO`; hook subcommands `hook pretool` and
-  `hook session-start` (stdin JSON, exit 0 allow / 2 block).
+- Environment: `WF_ROLE`, `WF_REPO`; `WF_ALLOW_COMMIT=1` is the explicit
+  pre-commit escape hatch.
+- Hook subcommands: `hook pretool` and `hook session-start` (stdin JSON, exit
+  0 allow / 2 block), and `hook pre-commit` (installed as the git hook; exit 0
+  allow / 1 block).
 - On-disk: `<root>/.workflow/program.yaml` and `<root>/.workflow/runtime/` (the
   runtime layout is internal and may change; only the directory boundary is
   promised).
@@ -158,8 +162,8 @@ possible, accept the old spelling as an alias for the whole 1.x line.
 - Status labels and document headings keep their 0.x aliases.
 - If a future 1.x adds a required field, `doctor` reports it and
   `mpt-workflow migrate` applies idempotent, preview-first edits.
-- The upgrade guide lives in [upgrade-1.0.md](upgrade-1.0.md); a
-  dedicated deprecation ledger is added before the release.
+- The upgrade guide lives in [upgrade-1.0.md](upgrade-1.0.md); deprecations are
+  tracked in [deprecation.md](deprecation.md).
 
 ## 5. Contract tests
 
@@ -185,7 +189,8 @@ Before 1.0, freeze the surface mechanically:
 - [x] `doctor` warns when `schema_version` is newer than supported.
 - [x] `migrate` is preview-first and idempotent.
 - [x] Upgrade guide exists.
-- [x] At least three release trains (0.7 → 0.9 already exercised) pass.
+- [x] Deprecation ledger exists (`docs/deprecation.md`).
+- [x] At least three release trains (0.7 → 0.10) pass.
 - [ ] No open P1 correctness/security findings.
 - [ ] `CHANGELOG` has no unreleased breaking changes.
 

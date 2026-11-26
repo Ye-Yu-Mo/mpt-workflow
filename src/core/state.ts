@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { approvalsDir, eventsPath, locksDir } from './config.js';
@@ -55,7 +56,14 @@ export function readEvents(root: string, limit = 500): EventRecord[] {
 
 export interface LockHandle {
   path: string;
+  /** Unique owner token; release only removes the lock if it still owns it. */
+  token: string;
   release: () => void;
+}
+
+function writeLockOwner(p: string, token: string): void {
+  fs.writeFileSync(path.join(p, 'pid'), String(process.pid));
+  fs.writeFileSync(path.join(p, 'owner'), token);
 }
 
 /**
@@ -67,9 +75,10 @@ export function acquireLock(root: string, name: string, staleMs = 30_000): LockH
   ensureDir(dir);
   const p = path.join(dir, `${name}.lock`);
   const now = Date.now();
+  const token = `${process.pid}-${crypto.randomBytes(6).toString('hex')}`;
   try {
     fs.mkdirSync(p);
-    fs.writeFileSync(path.join(p, 'pid'), String(process.pid));
+    writeLockOwner(p, token);
   } catch {
     try {
       const st = fs.statSync(p);
@@ -88,7 +97,7 @@ export function acquireLock(root: string, name: string, staleMs = 30_000): LockH
           /* best-effort cleanup of the renamed directory */
         }
         fs.mkdirSync(p);
-        fs.writeFileSync(path.join(p, 'pid'), String(process.pid));
+        writeLockOwner(p, token);
       } else {
         return null;
       }
@@ -99,10 +108,15 @@ export function acquireLock(root: string, name: string, staleMs = 30_000): LockH
   let released = false;
   return {
     path: p,
+    token,
     release: () => {
       if (released) return;
       released = true;
       try {
+        // A stale lock may have been reclaimed by another process. Never delete
+        // a lock directory that now belongs to a different owner token.
+        const owner = path.join(p, 'owner');
+        if (exists(owner) && readText(owner).trim() !== token) return;
         fs.rmSync(p, { recursive: true, force: true });
       } catch {
         /* ignore */
@@ -152,6 +166,9 @@ export interface Approval {
   approved_at?: string;
   approved_by?: string;
   used_at?: string;
+  /** Set when a newer commit_request replaced this pending approval. */
+  superseded_at?: string;
+  superseded_by?: string;
   reason?: string;
 }
 
@@ -183,6 +200,23 @@ export function writeApproval(root: string, a: Approval): void {
   if (!APPROVAL_ID_RE.test(a.id)) throw new Error(`非法审批 id: ${a.id}`);
   const p = path.join(approvalsDir(root), `${a.id}.json`);
   writeAtomic(p, JSON.stringify(a, null, 2));
+}
+
+/**
+ * Retire older pending approvals for a repo when a new commit_request is made.
+ * Without this an old request that was never committed keeps resurfacing as a
+ * stale "pending" row.
+ */
+export function supersedeApprovals(root: string, repo: string, keepId: string): number {
+  let n = 0;
+  for (const old of listApprovals(root)) {
+    if (old.id === keepId || old.repo !== repo || old.used_at || old.superseded_at) continue;
+    old.superseded_at = isoNow();
+    old.superseded_by = keepId;
+    writeApproval(root, old);
+    n++;
+  }
+  return n;
 }
 
 export function listApprovals(root: string): Approval[] {

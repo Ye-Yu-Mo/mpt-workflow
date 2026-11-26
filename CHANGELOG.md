@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Evidence metadata injection.** `evidence_run` commands are collapsed to one
+  line before being written, and metadata parsing is anchored to the generated
+  `- exit:`/`- head:`/`- tree:`/`- dirty:` lines. A command containing newlines
+  can no longer forge a passing exit code.
+- **Approval lifecycle.** A new `commit_request` supersedes older pending
+  approvals for the same repo; the dashboard hides stale approvals behind
+  “显示已失效” and counts only actionable ones; runtime state
+  (`.workflow/runtime/**`) is excluded from the approval hash even when it is
+  not gitignored. Approved-but-stale requests no longer keep resurfacing as
+  pending work.
+- **Closing an unanswered question** now clears the blocking message on both
+  sides, so the addressee is not gated by a question that no longer exists.
+- **Lock release** checks the owner token before deleting, so an old holder
+  cannot remove a lock another process reclaimed.
+- **`saveConfig`** trusts the on-disk `schema_version` and refuses to downgrade a
+  newer file even when the caller holds a stale in-memory config; `migrate
+  --apply` re-reads under the config lock.
+- **`migrate`** handles `schema_version: null` and rejects a non-mapping YAML
+  root with a clear error.
+- **`next` question labels** such as `TODO@repo` / `plan@repo` map to the role
+  instead of silently becoming `main`.
+- **Relay prompts** mark message content as data, quote/indent every line, cap
+  per-message/total size, and the relay API no longer promotes or expires
+  another actor's messages on a polled GET. Dashboard relay errors are visible
+  and its buttons keep focus across auto-refresh.
+
+### Changed
+
+- Unknown keys inside `phases[]` are preserved on config mutation.
+- `root` is enforced as a reserved repo id: it cannot be configured, activated
+  or marked active, and `doctor` reports it.
+- 1.0 contract docs list `migrate`, `help`, `hook pre-commit` and
+  `WF_ALLOW_COMMIT`; the deprecation ledger is in `docs/deprecation.md`.
+
 ## [0.10.2] - 2026-11-26
 
 ### Added
