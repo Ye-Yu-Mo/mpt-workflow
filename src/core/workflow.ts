@@ -824,7 +824,13 @@ export class Workflow {
     if (evidence.length === 0) {
       throw new Error(`${milestone} 没有任何证据；先调用 evidence_run 运行测试/构建`);
     }
-    writeAtomic(abs, setTodoStatus(readTextRequired(abs), 'review'));
+    const latest = evidence[evidence.length - 1];
+    let text = readTextRequired(abs);
+    text = setTodoStatus(text, 'review');
+    // Record the SHA that was actually verified now, not only at accept time.
+    const verifiedSha = latest?.head || gitInfo(this.repoRef(repoId).abs).head;
+    if (verifiedSha) text = setTodoSha(text, verifiedSha);
+    writeAtomic(abs, text);
     logEvent(this.root, { role, tool: 'milestone_complete', repo: repoId, milestone, ok: true });
     this.notifyEvent({
       from: role,

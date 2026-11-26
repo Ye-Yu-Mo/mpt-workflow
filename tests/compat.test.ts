@@ -124,6 +124,11 @@ test('0.x workspace runs the full plan → todo → evidence → accept → comm
 
   wf.complete('repo-a', 'M1', 'todo');
   assert.equal(wf.milestone('repo-a', 'M1').status, 'review');
+  assert.match(
+    fs.readFileSync(path.join(abs, 'TODO-M1.md'), 'utf8'),
+    /sha:\s*[0-9a-f]{7,}/,
+    'verified SHA is recorded when implementation completes',
+  );
 
   wf.accept('repo-a', 'M1', 'plan', { note: 'ok' });
   assert.equal(wf.milestone('repo-a', 'M1').status, 'accepted');

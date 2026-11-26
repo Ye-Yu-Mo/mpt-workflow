@@ -184,7 +184,7 @@ function buildTools(_opts: ServerOptions): ToolSpec[] {
           '',
           unread
             ? `未读 ${unread} 条${blocking.length ? `（blocking ${blocking.length}）` : ''}：`
-            : '没有未读消息。',
+            : `没有未读消息（截至 ${new Date().toLocaleTimeString()}；之后到达的用 inbox 查看）。`,
           ...blocking.map((m) => `  [blocking] ${m.id} ${m.subject}`),
           ...(unread ? recent.map((m) => `  ${m.id} [${m.status}] ${m.subject}`) : []),
           '',
