@@ -79,9 +79,10 @@ feature surface.
 
 Design: [docs/design-1.0-contract.md](docs/design-1.0-contract.md).
 
-- Freeze tool names/schemas and the `program.yaml` schema, with migrations.
-- Prove the release train across at least three releases.
-- Explicit deprecation policy and upgrade guide.
+- [x] Freeze tool names/schemas and the `program.yaml` schema, with migrations.
+- [x] Prove the release train across at least three releases.
+- [x] Explicit deprecation policy and upgrade guide.
+- [x] Release `1.0.0`.
 - Revisit native Windows only if demand and CI feasibility justify it.
 
 ## Not planned
