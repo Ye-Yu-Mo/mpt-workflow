@@ -13,7 +13,12 @@ import {
   formatMessage,
   type MessageKind,
 } from '../core/messages.js';
-import { appendQuestion, nextQuestionId, questionsFile } from '../core/questions.js';
+import {
+  appendQuestion,
+  nextQuestionId,
+  QUESTION_STATUS_HELP,
+  questionsFile,
+} from '../core/questions.js';
 import { logEvent, withLock } from '../core/state.js';
 import type { Role } from '../core/types.js';
 import { isRole } from '../core/types.js';
@@ -106,6 +111,9 @@ function statusText(wf: Workflow, role: Role | null, repo: string | null): strin
         `  ${q.id} [${q.status}]${q.blocking ? ' [blocking]' : ''} ${q.from} → ${q.to}: ${q.context.split('\n')[0].slice(0, 100)}`,
       );
     }
+    if (open.some((q) => q.status === 'answered')) {
+      lines.push(`  提示：${QUESTION_STATUS_HELP}`);
+    }
   }
   if (st.next.length) {
     lines.push('');
@@ -170,6 +178,7 @@ function buildTools(_opts: ServerOptions): ToolSpec[] {
           ...(unread ? recent.map((m) => `  ${m.id} [${m.status}] ${m.subject}`) : []),
           '',
           '下一步：status 看全局，next 看该做什么，inbox 看消息。',
+          `问题协议：${QUESTION_STATUS_HELP}`,
         ].join('\n');
       },
     },
@@ -273,7 +282,7 @@ function buildTools(_opts: ServerOptions): ToolSpec[] {
         if (args.blocking !== undefined) qs = qs.filter((q) => q.blocking === args.blocking);
         if (!args.all) qs = qs.filter((q) => q.status !== 'closed' && q.status !== 'canceled');
         if (!qs.length) return '没有匹配的问题。';
-        return qs
+        const body = qs
           .map((q) => {
             const head = `${q.id} [${q.status}]${q.blocking ? ' [blocking]' : ''} ${q.from} → ${q.to}  (${q.repo ?? 'root'})`;
             const opts = q.options.length
@@ -284,6 +293,9 @@ function buildTools(_opts: ServerOptions): ToolSpec[] {
             return `${head}\n  背景: ${q.context.split('\n')[0].slice(0, 200)}${opts}${rec}${ans}`;
           })
           .join('\n\n');
+        return qs.some((q) => q.status === 'answered')
+          ? `${body}\n\n提示：${QUESTION_STATUS_HELP}`
+          : body;
       },
     },
     {
@@ -371,6 +383,7 @@ function buildTools(_opts: ServerOptions): ToolSpec[] {
             `已创建 ${id} → ${to}（${path.relative(ctx.wf.root, file)}），已通知 ${actorKey(toActor)}（${message.id}）。`,
             args.blocking ? 'blocking: yes —— 现在停下等待回答，不要继续实现。' : '',
             '用户可以在看板里直接回答，或转发给对方 agent。',
+            `收到回答后：先把结论回写到 PLAN/TODO/decisions，再 close(${id}, resolution=...)。`,
           ]
             .filter(Boolean)
             .join('\n');
@@ -428,7 +441,8 @@ function buildTools(_opts: ServerOptions): ToolSpec[] {
     },
     {
       name: 'close',
-      description: '关闭问题（提问方或用户），要求已写 resolution。',
+      description:
+        '关闭问题（提问方或用户）：先应用回答并回写 PLAN/TODO/decisions，再写入 resolution 并 close，否则问题一直未闭合。',
       roles: READ_ROLES,
       schema: {
         id: z.string(),
@@ -958,6 +972,7 @@ export async function runMcpServer(opts: ServerOptions): Promise<void> {
         'bootstrap(role="main" | "plan" | "todo" | "user", repo="<仓库 id>")。',
         '然后调用 status 看全局、next 看下一步。',
         '规则：不要手改 PLAN.md / TODO-*.md 里的状态（由工具维护）；有歧义用 ask 提问；',
+        '问题状态：open → answered（提问方应用结论并回写 PLAN/TODO/decisions）→ closed；只 answer 不 close 会一直未闭合。',
         '实现完成必须用 evidence_run 记录证据；验收用 milestone_accept；提交必须先 commit_request，',
         '等用户批准后再 commit；永远不要 push。',
         '写文件仍用原生 Edit/Write，但会被角色 ACL 和 git pre-commit 检查。',
