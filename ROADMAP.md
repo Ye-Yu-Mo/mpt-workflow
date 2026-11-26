@@ -72,6 +72,7 @@ feature surface.
 - [x] Contract snapshot tests and a 0.x-format compatibility lifecycle fixture.
 - [x] Release `0.10.0`.
 - [x] Release `0.10.1` (schema write guard, question lifecycle).
+- [x] Release `0.10.2` (dashboard relay station).
 
 ## 1.0 — stable contract
 
