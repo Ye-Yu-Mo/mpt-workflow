@@ -75,6 +75,11 @@ feature surface.
 - [x] Release `0.10.2` (dashboard relay station).
 - [x] Release `0.10.3` (pre-1.0 audit fixes, approval lifecycle).
 
+## 1.3 — evidence and approval lifecycle
+
+- [x] Tracked evidence JSONL, short approval ids/prefixes, manual cancel.
+- [x] Release `1.3.0`.
+
 ## 1.2 — shared-worktree commits
 
 - [x] Partial `commit_request(files=[...])` via an isolated temporary index.
