@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Approval commits exactly what was reviewed.** `commit_request` now records
+  the exact index tree oid and per-file index hashes. `approve` ignores
+  worktree-only edits made after the request, and `commit` records that staged
+  snapshot **without re-running `git add`**; later worktree edits stay
+  uncommitted. Stale errors list the modified/added/removed staged files instead
+  of two opaque hashes. The dashboard reviews the staged diff and warns when
+  the worktree has extra unstaged changes. Legacy approvals keep the old
+  worktree/staged-hash behavior.
+- **Commit scope follows the requester.** Approvals store `requested_by`; the
+  commit scope check uses that role, so an approval requested by `main` is not
+  re-judged under a `todo` committer's stricter file list.
+
 ## [1.1.0] - 2026-11-26
 
 ### Added

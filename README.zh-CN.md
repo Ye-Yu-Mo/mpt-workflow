@@ -201,6 +201,10 @@ agent: commit(approval="ap-xxx")
 
 - Bash 的 `git commit` / `git push` 以及 `mpt-workflow approve|commit` 都会被 hook 拒绝；
   agent 只能走 MCP `commit`，push 由用户手工执行。
+- `commit_request` 会暂存并绑定**精确的 index tree oid**（外加每个文件的 hash）。
+  看板 review 的是暂存快照，`commit` 直接提交这份快照，不会再次 `git add`；
+  请求之后的工作区改动不会进入本次提交。只有**暂存区**变化才会让审批失效，
+  错误信息会列出变化的文件。
 - 审批是**防误操作**，不是防恶意：同机同用户，agent 理论上能绕过。
   真正的护栏是 hook + 你 review diff 的习惯。
 

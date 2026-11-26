@@ -160,8 +160,14 @@ export interface Approval {
   milestone?: string;
   tree_hash: string;
   staged_hash?: string;
+  /** Exact index tree oid at request time (new approvals). */
+  staged_tree?: string;
+  /** Index path -> "mode oid" at request time, for stale diagnostics. */
+  file_hashes?: Record<string, string>;
   message: string;
   files: string[];
+  /** Role that created the request; commit scope is judged against this role. */
+  requested_by?: Role;
   created_at: string;
   approved_at?: string;
   approved_by?: string;

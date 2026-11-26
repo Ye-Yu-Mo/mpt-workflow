@@ -1102,17 +1102,20 @@ function diffLines(diff) {
 async function openDiff(a) {
   openModal(`提交 ${a.id}`, '<div class="empty">正在加载 diff…</div>');
   try {
-    const d = await get(`/api/diff?repo=${encodeURIComponent(a.repo)}`);
+    const d = await get(`/api/diff?repo=${encodeURIComponent(a.repo)}${a.staged_tree ? '&staged=1' : ''}`);
     const files = (a.files || []).map(f => `<li><code>${esc(f)}</code></li>`).join('');
     const log = (d.log || []).map(x => `<div class="repo-meta">${esc(x)}</div>`).join('');
     const repoLabel = a.repo === 'root' ? 'root（伞仓文档）' : a.repo;
+    const snapshotLabel = a.staged_tree ? 'staged tree' : 'tree';
+    const staleLabel = a.approved_at ? '已批准但已失效' : a.staged_tree ? '暂存快照已变化' : '工作区已变化';
     $('#modal-body').innerHTML = `
       <div class="repo-meta">${esc(repoLabel)} · ${esc(a.message)}</div>
-      <div class="repo-meta">tree <code>${esc(a.tree_hash)}</code> · ${(a.files || []).length} 个文件</div>
+      <div class="repo-meta">${snapshotLabel} <code>${esc(a.staged_tree || a.tree_hash)}</code> · ${(a.files || []).length} 个文件</div>
       <div class="modal-actions">
-        ${a.stale ? '<span class="tag bad">工作区已变化</span>' : a.approved_at ? '<span class="tag ok">已批准</span>' : '<button class="btn primary" id="modal-approve">批准这个提交</button>'}
-        <span class="repo-meta">${a.stale ? '当前 diff 不是审批快照；请重新 commit_request。' : '批准绑定当前工作区 hash；批准后 agent 才能 commit。'}</span>
+        ${a.stale ? `<span class="tag bad">${staleLabel}</span>` : a.approved_at ? '<span class="tag ok">已批准</span>' : '<button class="btn primary" id="modal-approve">批准这个提交</button>'}
+        <span class="repo-meta">${a.stale ? '当前 diff 不是审批快照；请重新 commit_request。' : a.staged_tree ? '批准绑定暂存快照；批准后工作区的新改动不会进入本次提交。' : '批准绑定当前工作区 hash；批准后 agent 才能 commit。'}</span>
       </div>
+      ${a.worktree_changed && !a.stale ? '<div class="repo-meta" style="color:var(--warning)">工作区还有未暂存改动，不会进入本次提交。</div>' : ''}
       <h3 style="font-size:12px;margin:14px 0 6px">改动文件</h3>
       <ul style="margin:0;padding-left:18px;font-size:12px">${files}</ul>
       <h3 style="font-size:12px;margin:14px 0 6px">diff 摘要</h3>
@@ -1154,14 +1157,14 @@ function renderApprovals() {
   for (const a of list) {
     const files = (a.files || []).map(f => `<li><code>${esc(f)}</code></li>`).join('');
     const repoLabel = a.repo === 'root' ? 'root（伞仓文档）' : a.repo;
-    const staleLabel = a.approved_at ? '已批准但已失效' : '工作区已变化';
+    const staleLabel = a.staged_tree ? '暂存快照已变化' : '工作区已变化';
     const r = el('div', 'row-item');
     r.innerHTML = `
       <div class="v" style="flex:1">
-        <div><code>${esc(a.id)}</code> · ${esc(repoLabel)} ${a.stale ? `<span class="tag bad">${staleLabel}</span>` : a.approved_at ? '<span class="tag ok">已批准</span>' : '<span class="tag">待批准</span>'}</div>
+        <div><code>${esc(a.id)}</code> · ${esc(repoLabel)} ${a.stale ? `<span class="tag bad">${a.approved_at ? '已批准但已失效' : staleLabel}</span>` : a.approved_at ? '<span class="tag ok">已批准</span>' : '<span class="tag">待批准</span>'}</div>
         <div style="color:var(--ink-2)">${esc(a.message)}</div>
-        <div class="repo-meta">${(a.files || []).length} 个文件 · tree ${esc(a.tree_hash)}</div>
-        ${a.stale ? '<div class="repo-meta" style="color:var(--critical)">已失效：工作区在请求/批准后发生变化；请重新 commit_request</div>' : ''}
+        <div class="repo-meta">${(a.files || []).length} 个文件 · ${a.staged_tree ? 'staged tree' : 'tree'} ${esc(a.staged_tree || a.tree_hash)}</div>
+        ${a.stale ? `<div class="repo-meta" style="color:var(--critical)">已失效：${a.staged_tree ? '暂存快照' : '工作区'}在请求/批准后发生变化；请重新 commit_request</div>` : ''}
         <details class="repo-meta" style="margin-top:4px">
           <summary>查看文件列表</summary>
           <ul style="margin:4px 0 0;padding-left:18px">${files}</ul>

@@ -220,14 +220,21 @@ test('dashboard rejects encoded path traversal ids', async () => {
   }
 });
 
-test('approval API marks a changed worktree as stale', async () => {
-  const { root, wf } = fixture();
-  fs.writeFileSync(path.join(root, 'repo-a/src/lib.rs'), 'fn f() { 3 }\n');
+test('approval API tracks the staged snapshot, not worktree noise', async () => {
+  const { abs, wf } = fixture();
+  fs.writeFileSync(path.join(abs, 'src/lib.rs'), 'fn f() { 3 }\n');
   const server = await startWebServer(wf, 0);
   try {
-    const res = await fetch(`${server.url}/api/approvals`);
-    const list = (await res.json()) as { stale?: boolean }[];
-    assert.equal(list[0]?.stale, true);
+    let res = await fetch(`${server.url}/api/approvals`);
+    let list = (await res.json()) as { stale?: boolean; worktree_changed?: boolean }[];
+    assert.equal(list[0]?.stale, false, 'worktree-only edit does not invalidate');
+    assert.equal(list[0]?.worktree_changed, true);
+
+    git(abs, ['add', '-A']);
+    res = await fetch(`${server.url}/api/approvals`);
+    list = (await res.json()) as { stale?: boolean; worktree_changed?: boolean }[];
+    assert.equal(list[0]?.stale, true, 'staged change invalidates');
+    assert.equal(list[0]?.worktree_changed, false);
   } finally {
     await server.close();
   }

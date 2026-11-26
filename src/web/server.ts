@@ -4,7 +4,17 @@ import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { exists, readText, realPath, within } from '../core/fsutil.js';
-import { diffStat, diffUnified, gitInfo, recentLog, workingTreeHash } from '../core/git.js';
+import {
+  diffStat,
+  diffStatStaged,
+  diffUnified,
+  diffUnifiedStaged,
+  gitInfo,
+  hasUnstagedChanges,
+  recentLog,
+  stagedTreeOid,
+  workingTreeHash,
+} from '../core/git.js';
 import { type Actor, relayPrompt } from '../core/messages.js';
 import { logEvent, readEvents } from '../core/state.js';
 import type { Workflow } from '../core/workflow.js';
@@ -156,9 +166,17 @@ export function startWebServer(wf: Workflow, port: number): Promise<WebHandle> {
         if (req.method === 'GET' && p === '/api/approvals') {
           const approvals = wf.approvals().map((a) => {
             try {
-              return { ...a, stale: workingTreeHash(wf.repoRef(a.repo).abs) !== a.tree_hash };
+              const ref = wf.repoRef(a.repo);
+              const current = a.staged_tree ? stagedTreeOid(ref.abs) : workingTreeHash(ref.abs);
+              const expected = a.staged_tree ?? a.tree_hash;
+              return {
+                ...a,
+                stale: !current || current !== expected,
+                // Worktree-only edits are not part of a snapshot approval.
+                worktree_changed: hasUnstagedChanges(ref.abs),
+              };
             } catch {
-              return { ...a, stale: true };
+              return { ...a, stale: true, worktree_changed: true };
             }
           });
           return json(res, approvals);
@@ -258,13 +276,15 @@ export function startWebServer(wf: Workflow, port: number): Promise<WebHandle> {
           const repo = url.searchParams.get('repo') || '';
           if (!repo) return json(res, { error: 'repo required' }, 400);
           const ref = wf.repoRef(repo);
-          const full = diffUnified(ref.abs);
+          const stagedView = url.searchParams.get('staged') === '1';
+          const full = stagedView ? diffUnifiedStaged(ref.abs) : diffUnified(ref.abs);
           const limit = 200_000;
           const truncated = full.length > limit;
           return json(res, {
-            stat: diffStat(ref.abs),
+            stat: stagedView ? diffStatStaged(ref.abs) : diffStat(ref.abs),
             diff: truncated ? `${full.slice(0, limit)}\n... [diff 已截断]` : full,
             truncated,
+            staged: stagedView,
             log: recentLog(ref.abs, 8),
           });
         }
