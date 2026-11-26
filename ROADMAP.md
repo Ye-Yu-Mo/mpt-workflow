@@ -80,6 +80,7 @@ feature surface.
 - [x] Per-session role leases, config hot reload with fail-closed errors.
 - [x] `status` session/config fields; explicit `phase_activate` transitions.
 - [x] Release `1.1.0`.
+- [x] Release `1.1.1` (approval snapshot + requester scope).
 
 ## 1.0 — stable contract
 
