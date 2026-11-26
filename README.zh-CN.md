@@ -130,7 +130,9 @@ MCP 工具：`inbox` / `read_message` / `ack_message` / `wait_message` /
 
 ### 1.6 问题生命周期
 
-问题写在 `docs/agent-questions.md`，但有明确的状态；最后一步由**提问方**完成：
+问题写在 `docs/agent-questions.md`，但有明确的状态；最后一步由**提问方**完成。
+新问题 id 带仓前缀（`Q-repo-a-001`、`Q-root-001`），不同仓各自的编号不会混淆；
+旧的 `Q-001` 仍可解析。状态：
 
 | 状态 | 含义 | 谁处理 |
 |---|---|---|

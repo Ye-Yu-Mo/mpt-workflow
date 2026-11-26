@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- New question ids include the repo scope (`Q-<repo>-001`, `Q-root-001`); legacy
+  `Q-001` ids still parse, and `status`/`next` also print the repo.
+
 ## [1.3.1] - 2026-11-26
 
 ### Fixed

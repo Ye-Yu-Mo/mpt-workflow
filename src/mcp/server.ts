@@ -360,7 +360,7 @@ function buildTools(_opts: ServerOptions): ToolSpec[] {
           return m ? { id: m[1], text: m[2] } : { id: String.fromCharCode(65 + i), text: s };
         });
         const id = withLock(ctx.wf.root, 'questions', () => {
-          const qid = nextQuestionId(ctx.wf.allQuestions());
+          const qid = nextQuestionId(ctx.wf.allQuestions(), repoId ?? 'root');
           appendQuestion(file, {
             id: qid,
             to,

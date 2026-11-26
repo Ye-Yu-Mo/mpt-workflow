@@ -103,10 +103,27 @@ export interface NewQuestion {
   recommendation?: string;
 }
 
-export function nextQuestionId(existing: { id: string }[]): string {
+/**
+ * Next question id. With a scope (repo id / `root`) it is
+ * `Q-<scope>-001`; without one it keeps the legacy global `Q-001`.
+ */
+export function nextQuestionId(existing: { id: string }[], scope?: string): string {
+  const safe = scope
+    ?.trim()
+    .replace(/[^A-Za-z0-9_-]/g, '-')
+    .slice(0, 24);
+  if (safe) {
+    const re = new RegExp(`^Q-${safe.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-(\\d+)$`);
+    let max = 0;
+    for (const q of existing) {
+      const n = Number(re.exec(q.id)?.[1] || 0);
+      if (n > max) max = n;
+    }
+    return `Q-${safe}-${String(max + 1).padStart(3, '0')}`;
+  }
   let max = 0;
   for (const q of existing) {
-    const n = Number(/Q-(\d+)/.exec(q.id)?.[1] || 0);
+    const n = Number(/^Q-(\d+)$/.exec(q.id)?.[1] || 0);
     if (n > max) max = n;
   }
   return `Q-${String(max + 1).padStart(3, '0')}`;
@@ -154,6 +171,7 @@ export function defaultQuestionsHeader(): string {
 > 协议：见 \`CLAUDE.md\` 与伞仓 \`docs/template/AGENT-QUESTIONS.md\`。
 > \`to: main\` 由用户转发主 agent；\`to: PLAN\` 由本仓 PLAN agent 回答后提醒用户转发 TODO agent。
 > 规则：blocking: yes 必须停；回答必须回写 PLAN/TODO/decisions，不能只留在问答文件。
+> 新问题 id 带仓前缀（Q-<repo>-001 / Q-root-001）；旧 Q-001 仍可用。
 > ${QUESTION_STATUS_HELP}
 
 `;

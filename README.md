@@ -292,7 +292,9 @@ like any other commit; a later edit makes it stale. Root commits are local only;
 ## Questions
 
 Questions live in `docs/agent-questions.md`, but they have a status lifecycle.
-The asker owns the last step:
+New ids include the repo scope (`Q-repo-a-001`, `Q-root-001`) so two repos can
+both use their own sequence; legacy `Q-001` ids still parse and resolve. The
+asker owns the last step:
 
 | Status | Meaning | Who acts |
 |---|---|---|
