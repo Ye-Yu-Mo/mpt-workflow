@@ -159,10 +159,13 @@ the tree changed after the latest evidence. It records the acceptor and the
 review note; a `todo`-role session cannot accept.
 
 `commit_request` resolves the milestone being committed (the accepted,
-not-yet-committed one by default), stages the worktree, and records both a
-working-tree hash and a staged-tree hash in the approval. `approve` refuses a
-stale worktree; `commit` re-checks the staged hash before the local commit, so
-the approval always refers to what the user reviewed. The approval is
+not-yet-committed one by default), stages the worktree, and records the exact
+index tree oid plus per-file index hashes. `approve` refuses only when the
+**staged snapshot** changed; worktree edits after the request are allowed and
+are not part of the commit. `commit` re-checks the index tree and commits it
+**without re-running `git add`**, so the approval always refers to what the user
+reviewed. Scope at commit is judged against the **requesting role** stored on the
+approval, not whichever session executes the commit. The approval is
 single-use and local-only; there is no push path. A newer `commit_request`
 supersedes older pending approvals for the same repo (they stay on disk for
 audit), and the dashboard counts only actionable, non-stale approvals.

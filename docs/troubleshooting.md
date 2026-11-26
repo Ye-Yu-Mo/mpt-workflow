@@ -85,9 +85,13 @@ explicit status):
 
 - `审批 ... 尚未由用户批准`: the human must approve the one-shot approval:
   `mpt-workflow approve ap-...` or the dashboard.
-- `工作区内容已变化`: the tree changed after approval. Approving a stale tree is
-  also refused; run `commit_request` again after the final edit.
-- `暂存区内容已变化`: the staged content changed after approval. Re-request and
+- `工作区内容已变化`: a legacy approval (created before 1.1) had its worktree
+  changed. Re-request and approve again. New approvals bind the staged index,
+  so worktree-only edits after the request are fine and are not committed.
+- `暂存快照已变化`: something changed the **index** after approval (a new
+  `git add`, another agent staging files). The error lists modified/added/
+  removed files. Run `commit_request` again after the final `git add`.
+- `暂存区内容已变化`: a legacy staged-hash check failed. Re-request and
   approve again.
 - An approval marked **已批准但已失效** is dead: the worktree changed after the
   request/approval (the agent kept editing, a TODO transition ran, or an older

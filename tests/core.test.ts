@@ -357,15 +357,30 @@ test('commit requires an approved token bound to the exact tree', () => {
     /已在|已使用/,
   );
 
-  // tree changed after approval -> refuse
+  // index changed after approval -> refuse with the changed path
   fs.writeFileSync(path.join(repoAbs, 'src/lib.rs'), 'fn f() { 2.5 }\n');
   const req2 = wf.requestCommit({ repoId: 'repo-a', message: 'feat: y', role: 'todo' });
   wf.approve(req2.approval.id);
   fs.writeFileSync(path.join(repoAbs, 'src/lib.rs'), 'fn f() { 3 }\n');
+  sh(repoAbs, 'git', ['add', 'src/lib.rs']);
   assert.throws(
     () => wf.commitApproved({ repoId: 'repo-a', approvalId: req2.approval.id, role: 'todo' }),
-    /工作区内容已变化/,
+    /暂存快照已变化[\s\S]*src\/lib\.rs/,
   );
+});
+
+test('commit scope follows the requesting role, not the committer', () => {
+  const { wf } = setup();
+  const repoAbs = path.join(wf.root, 'repo-a');
+  fs.writeFileSync(path.join(repoAbs, 'src/lib.rs'), 'fn f() { 1 }\n');
+  fs.writeFileSync(path.join(repoAbs, 'src/extra.rs'), 'fn g() {}\n');
+  const req = wf.requestCommit({ repoId: 'repo-a', message: 'feat: main scope', role: 'main' });
+  assert.equal(req.approval.requested_by, 'main');
+  wf.approve(req.approval.id);
+  // A todo session happens to execute the commit; the approval was requested
+  // by main, so main's scope (not todo's) decides.
+  wf.commitApproved({ repoId: 'repo-a', approvalId: req.approval.id, role: 'todo' });
+  assert.match(sh(repoAbs, 'git', ['show', 'HEAD:src/extra.rs']), /fn g/);
 });
 
 test('commit_request rejects files outside the TODO file list', () => {
@@ -460,13 +475,28 @@ test('commit scope uses the accepted milestone, not the next one', async () => {
   );
 });
 
-test('approving a stale worktree is refused', () => {
+test('approving a changed index snapshot is refused with the file name', () => {
   const { wf } = setup();
   const repoAbs = path.join(wf.root, 'repo-a');
   fs.writeFileSync(path.join(repoAbs, 'src/lib.rs'), 'fn f() { 1 }\n');
   const req = wf.requestCommit({ repoId: 'repo-a', message: 'feat: x', role: 'todo' });
   fs.writeFileSync(path.join(repoAbs, 'src/lib.rs'), 'fn f() { 2 }\n');
-  assert.throws(() => wf.approve(req.approval.id), /工作区内容已变化/);
+  sh(repoAbs, 'git', ['add', 'src/lib.rs']);
+  assert.throws(() => wf.approve(req.approval.id), /暂存快照已变化[\s\S]*src\/lib\.rs/);
+});
+
+test('worktree edits after the request are not part of the commit', () => {
+  const { wf } = setup();
+  const repoAbs = path.join(wf.root, 'repo-a');
+  fs.writeFileSync(path.join(repoAbs, 'src/lib.rs'), 'fn f() { 1 }\n');
+  const req = wf.requestCommit({ repoId: 'repo-a', message: 'feat: snapshot', role: 'todo' });
+  // Later worktree edit, not staged.
+  fs.writeFileSync(path.join(repoAbs, 'src/lib.rs'), 'fn f() { 2 }\n');
+  wf.approve(req.approval.id);
+  wf.commitApproved({ repoId: 'repo-a', approvalId: req.approval.id, role: 'todo' });
+  assert.match(sh(repoAbs, 'git', ['show', 'HEAD:src/lib.rs']), /fn f\(\) \{ 1 \}/);
+  assert.match(fs.readFileSync(path.join(repoAbs, 'src/lib.rs'), 'utf8'), /fn f\(\) \{ 2 \}/);
+  assert.match(sh(repoAbs, 'git', ['status', '--porcelain']), /src\/lib\.rs/);
 });
 
 test('next asks the user to commit after acceptance', async () => {

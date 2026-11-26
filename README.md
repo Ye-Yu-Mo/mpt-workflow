@@ -241,8 +241,11 @@ agent: commit(approval="ap-xxx")   (MCP tool)
 
 The approval is a **guardrail against mistakes**, not an authorization system:
 the server runs as your OS user. It exists so a human sees the diff before it
-lands. `commit_request` stages the tree to bind the approval to exactly that
-content; the MCP `commit` re-checks the staged hash. Agent Bash calls to
+lands. `commit_request` stages the tree and binds the approval to the **exact
+index tree oid** (plus per-file hashes). The dashboard reviews that staged diff,
+and `commit` records that snapshot without re-running `git add`, so later
+worktree edits are simply not part of this commit. Only changes to the staged
+index make the approval stale (the error lists the files). Agent Bash calls to
 `git commit` / `git push` (and `mpt-workflow approve|commit`) are refused by the
 hook; commits go through the MCP tool, and the human pushes.
 

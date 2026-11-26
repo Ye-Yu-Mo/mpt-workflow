@@ -165,12 +165,29 @@ test('a new root commit request supersedes older pending approvals', () => {
   assert.equal(wf.approvals().find((a) => a.id === second.approval.id)?.superseded_by, undefined);
 });
 
-test('root approval is bound to the staged content', () => {
+test('root approval is bound to the staged snapshot', () => {
   const { root, wf } = fixture();
   fs.writeFileSync(path.join(root, 'docs/a.md'), 'a2\n');
   const req = wf.requestCommit({ repoId: 'root', message: 'docs: a', role: 'main' });
   fs.writeFileSync(path.join(root, 'docs/a.md'), 'a3\n');
-  assert.throws(() => wf.approve(req.approval.id), /工作区内容已变化/);
+  git(root, ['add', 'docs/a.md']);
+  assert.throws(() => wf.approve(req.approval.id), /暂存快照已变化[\s\S]*docs\/a\.md/);
+});
+
+test('worktree edits after a root request do not enter the commit', () => {
+  const { root, wf } = fixture();
+  fs.writeFileSync(path.join(root, 'docs/a.md'), 'a2\n');
+  const req = wf.requestCommit({ repoId: 'root', message: 'docs: snapshot', role: 'main' });
+  fs.writeFileSync(path.join(root, 'docs/a.md'), 'a3\n');
+  wf.approve(req.approval.id);
+  wf.commitApproved({ repoId: 'root', approvalId: req.approval.id, role: 'main' });
+  assert.equal(
+    git(root, ['show', 'HEAD:docs/a.md']).trim(),
+    'a2',
+    'commit uses the reviewed staged content',
+  );
+  assert.equal(fs.readFileSync(path.join(root, 'docs/a.md'), 'utf8'), 'a3\n');
+  assert.match(git(root, ['status', '--porcelain']), /docs\/a\.md/);
 });
 
 test('MCP and CLI can complete a root approval', { skip: !fs.existsSync(CLI) }, async () => {

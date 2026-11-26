@@ -85,6 +85,46 @@ export function stagedFiles(repoAbs: string): string[] {
   return r.out.split('\0').filter(Boolean);
 }
 
+/** Exact tree oid of the index, or '' when the index has conflicts. */
+export function stagedTreeOid(repoAbs: string): string {
+  const r = git(repoAbs, ['write-tree']);
+  return r.ok ? r.out.trim() : '';
+}
+
+/** Index entries as path -> "mode oid", for precise stale diagnostics. */
+export function stagedFileHashes(repoAbs: string): Record<string, string> {
+  const r = git(repoAbs, ['ls-files', '-s', '-z']);
+  const out: Record<string, string> = {};
+  for (const entry of r.out.split('\0')) {
+    if (!entry) continue;
+    const tab = entry.indexOf('\t');
+    if (tab === -1) continue;
+    const [mode, oid] = entry.slice(0, tab).split(' ');
+    out[entry.slice(tab + 1)] = `${mode} ${oid}`;
+  }
+  return out;
+}
+
+/** Index paths whose mode is a gitlink (nested repository). */
+export function stagedGitlinkPaths(repoAbs: string): string[] {
+  return Object.entries(stagedFileHashes(repoAbs))
+    .filter(([, value]) => value.startsWith('160000 '))
+    .map(([file]) => file);
+}
+
+/** Diff of exactly what a commit would record (index vs HEAD). */
+export function diffUnifiedStaged(repoAbs: string, file?: string): string {
+  const args = ['diff', '--cached', 'HEAD'];
+  if (file) args.push('--', file);
+  const r = git(repoAbs, args);
+  return r.ok ? r.out : '';
+}
+
+export function diffStatStaged(repoAbs: string): string {
+  const r = git(repoAbs, ['diff', '--cached', 'HEAD', '--stat']);
+  return r.ok ? r.out.trim() : '';
+}
+
 /** Hash of everything the user would see: tracked diff + untracked file contents. */
 export function workingTreeHash(repoAbs: string): string {
   const h = crypto.createHash('sha256');
@@ -118,6 +158,11 @@ export function stagedTreeHash(repoAbs: string): string {
   const diff = git(repoAbs, ['diff', '--cached', '--binary']);
   h.update(diff.ok ? diff.out : '');
   return h.digest('hex').slice(0, 16);
+}
+
+/** True when the worktree differs from the index (edits not in the snapshot). */
+export function hasUnstagedChanges(repoAbs: string): boolean {
+  return !git(repoAbs, ['diff', '--quiet']).ok;
 }
 
 /** Tree oid of the working tree (tracked changes), or empty string when clean. */
