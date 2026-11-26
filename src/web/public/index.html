@@ -652,7 +652,7 @@ function renderTiles(st) {
     { label: '阻塞问题', value: blocking, hint: blocking ? '实现必须先停下回答' : '没有阻塞', sym: blocking ? 'crit' : 'good', ch: blocking ? '!' : '✓' },
     { label: '未读消息', value: messagesData.unread, hint: messagesData.blocking.length ? `${messagesData.blocking.length} 条 blocking` : 'inbox 里没有新消息', sym: messagesData.blocking.length ? 'crit' : messagesData.unread ? 'info' : 'good', ch: messagesData.blocking.length ? '!' : '●' },
     { label: '进行中的 M', value: inProgress, hint: '实现中 + 待验收', sym: 'info', ch: '◐' },
-    { label: '待批准提交', value: (window.__approvals || []).filter(a => !a.used_at && !a.superseded_at && !a.stale).length, hint: '需要用户 review diff', sym: 'warn', ch: '!' },
+    { label: '待批准提交', value: (window.__approvals || []).filter(a => !a.used_at && !a.superseded_at && !a.canceled_at && !a.stale).length, hint: '需要用户 review diff', sym: 'warn', ch: '!' },
     { label: '工作区有改动', value: dirty + ' / ' + st.repos.length, hint: '仓库未提交状态', sym: dirty ? 'warn' : 'good', ch: dirty ? '●' : '✓' },
   ];
   const box = $('#tiles');
@@ -1137,7 +1137,7 @@ async function openDiff(a) {
 
 function renderApprovals() {
   const box = $('#approvals');
-  const all = (window.__approvals || []).filter(a => !a.used_at && !a.superseded_at);
+  const all = (window.__approvals || []).filter(a => !a.used_at && !a.superseded_at && !a.canceled_at);
   const stale = all.filter(a => a.stale);
   const list = showStaleApprovals ? all : all.filter(a => !a.stale);
   const superseded = (window.__approvals || []).filter(a => !a.used_at && a.superseded_at).length;

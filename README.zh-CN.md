@@ -194,6 +194,7 @@ claim/complete/accept/reject。
 agent: commit_request(message="feat: ...")
    → server 校验 scope，返回一次性 approval id
 用户: 看板点“批准” 或 `mpt-workflow approve ap-xxx`
+      （作废用 `mpt-workflow cancel ap-xxx --reason "..."`）
 agent: commit(approval="ap-xxx")
    → 校验「审批时的工作区 hash」== 当前 hash，否则拒绝（防止批准后偷改）
    → 只做本地 git commit，永不 push
@@ -244,7 +245,7 @@ MCP 进程就在伞仓根目录运行时，`repo` 可以省略。只有 `main` /
 **Markdown 是唯一事实源**（可 git diff、可 review）：
 
 - `PLAN.md` —— M 总览表
-- `TODO-Mn.md` —— `状态：` 行 / front-matter；`## 证据记录`；`## 验收记录`。
+- `TODO-Mn.md` —— `状态：` 行 / front-matter；`## 验收记录`（证据在 `docs/evidence/Mn.jsonl`）。
   影响文件可写多处 `**影响文件**`，也支持 front-matter `files: [...]` 或
   `<!-- files: ["a.ts", "b.ts"] -->`（多块合并，后两种更抗手改）。
 - `docs/agent-questions.md` —— 问答
@@ -310,7 +311,7 @@ mpt-workflow gc --apply --evidence-days 90   # 同时删除 90 天前的完整�
 ```
 
 `gc` 默认不删除，`--apply` 才执行。未读消息和待批准审批永远不会被删除；
-证据默认保留，只有显式 `--evidence-days` 才清理（TODO 里仍有截断副本）。
+证据默认保留，只有显式 `--evidence-days` 才清理（`docs/evidence/Mn.jsonl` 里仍有截断副本）。
 `--older-than N` 可以改已处理状态的阈值。
 
 ## 语言与客户端

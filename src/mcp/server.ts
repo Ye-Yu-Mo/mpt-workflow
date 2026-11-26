@@ -114,7 +114,7 @@ function statusText(wf: Workflow, role: Role | null, repo: string | null): strin
     lines.push('未闭合问题:');
     for (const q of open) {
       lines.push(
-        `  ${q.id} [${q.status}]${q.blocking ? ' [blocking]' : ''} ${q.from} → ${q.to}: ${q.context.split('\n')[0].slice(0, 100)}`,
+        `  ${q.id} [${q.status}]${q.blocking ? ' [blocking]' : ''} ${q.from} → ${q.to}  (${q.repo ?? 'root'}) ${q.context.split('\n')[0].slice(0, 100)}`,
       );
     }
     if (open.some((q) => q.status === 'answered')) {
@@ -531,7 +531,10 @@ function buildTools(_opts: ServerOptions): ToolSpec[] {
           repo: (args.to_repo as string) || ctx.repo || undefined,
         });
         ctx.wf.msgs.ping(meActor(ctx));
-        return `${duplicate ? '已存在（幂等命中）' : '已发送'} ${message.id} → ${actorKey(to)} [${message.status}]`;
+        return (
+          `${duplicate ? '已存在（幂等命中）' : '已发送'} ${message.id} → ${actorKey(to)} [${message.status}]` +
+          `（read_message ${message.id} 查询 / ack_message ${message.id} 处理）`
+        );
       },
     },
     {
@@ -717,7 +720,7 @@ function buildTools(_opts: ServerOptions): ToolSpec[] {
     {
       name: 'evidence_run',
       description:
-        '在仓库内执行命令并自动记录证据（退出码、SHA、tree oid、输出），写入 TODO 的「证据记录」。用这个而不是手写证据。',
+        '在仓库内执行命令并自动记录证据（退出码、SHA、tree oid、输出），写入 docs/evidence/<M>.jsonl。用这个而不是手写证据。',
       roles: ['todo', 'plan', 'main'],
       schema: {
         command: z.string().describe('要执行的命令，如 cargo test --workspace --locked'),
@@ -738,7 +741,7 @@ function buildTools(_opts: ServerOptions): ToolSpec[] {
         });
         return [
           `${r.id} exit=${r.exitCode} head=${r.head} tree=${r.tree || '(clean)'} dirty=${r.dirty}`,
-          `已写入 ${r.todoFile}`,
+          `已写入 ${r.evidenceFile}（TODO 不改动）`,
           '',
           r.output ? r.output.slice(-2000) : '(no output)',
         ].join('\n');

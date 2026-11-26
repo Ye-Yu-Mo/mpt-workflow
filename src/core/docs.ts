@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { exists, readText } from './fsutil.js';
+import { ensureDir, exists, readText, writeAtomic } from './fsutil.js';
 import {
   appendToSection,
   fenceEnd,
@@ -265,6 +265,60 @@ export interface EvidenceEntry {
   tree: string;
   dirty: boolean;
   outputTail: string;
+}
+
+/** Tracked evidence log: one JSON object per line. */
+export function evidenceFilePath(repoAbs: string, milestone: string): string {
+  return path.join(repoAbs, 'docs', 'evidence', `${milestone}.jsonl`);
+}
+
+export function parseEvidenceFile(repoAbs: string, milestone: string): EvidenceEntry[] {
+  const file = evidenceFilePath(repoAbs, milestone);
+  if (!exists(file)) return [];
+  const out: EvidenceEntry[] = [];
+  for (const line of readText(file).split('\n')) {
+    if (!line.trim()) continue;
+    try {
+      const r = JSON.parse(line) as Record<string, unknown>;
+      const id = String(r.id ?? '');
+      if (!/^E\d+$/.test(id)) continue;
+      out.push({
+        id,
+        at: String(r.at ?? ''),
+        command: String(r.command ?? ''),
+        exitCode: Number(r.exit ?? r.exitCode ?? -1),
+        head: String(r.head ?? ''),
+        tree: String(r.tree ?? ''),
+        dirty: Boolean(r.dirty),
+        outputTail: String(r.output ?? r.outputTail ?? ''),
+      });
+    } catch {
+      /* ignore a corrupt line */
+    }
+  }
+  return out;
+}
+
+export function appendEvidenceFile(
+  repoAbs: string,
+  milestone: string,
+  entry: EvidenceEntry,
+): string {
+  const file = evidenceFilePath(repoAbs, milestone);
+  ensureDir(path.dirname(file));
+  const prev = exists(file) ? readText(file).replace(/\s*$/, '\n') : '';
+  const line = JSON.stringify({
+    id: entry.id,
+    at: entry.at,
+    command: entry.command,
+    exit: entry.exitCode,
+    head: entry.head,
+    tree: entry.tree,
+    dirty: entry.dirty,
+    output: entry.outputTail,
+  });
+  writeAtomic(file, `${prev}${line}\n`);
+  return file;
 }
 
 export function parseEvidence(todo: TodoDoc): EvidenceEntry[] {

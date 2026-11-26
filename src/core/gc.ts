@@ -142,10 +142,15 @@ export function runGc(root: string, opts: GcOptions = {}): GcReport {
     for (const name of fs.readdirSync(apDir)) {
       if (!name.endsWith('.json')) continue;
       const p = path.join(apDir, name);
-      const a = readJson<{ used_at?: string; superseded_at?: string; created_at?: string }>(p);
+      const a = readJson<{
+        used_at?: string;
+        superseded_at?: string;
+        canceled_at?: string;
+        created_at?: string;
+      }>(p);
       if (!a) continue;
       approvals.total++;
-      const done = a.used_at || a.superseded_at;
+      const done = a.used_at || a.superseded_at || a.canceled_at;
       if (olderThan(done, cutoffMs)) {
         approvals.removable.push(p);
         approvals.bytes += fileSize(p);
