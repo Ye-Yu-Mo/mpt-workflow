@@ -51,6 +51,13 @@ feature surface.
       allowlisted paths, no component/gitlink/runtime content.
 - [x] Release `0.8.0`.
 
+## 0.9 — trust-chain finish
+
+- [x] Fence-aware evidence parsing, atomic stale-lock reclaim,
+      comment-preserving config writes.
+- [x] Diff review includes untracked/new files; umbrella pending-doc hint.
+- [x] Release `0.9.0`.
+
 ## Decided
 
 - [x] **Language**: Chinese-first for the 0.x line. English README for discovery;
