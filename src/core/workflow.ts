@@ -13,10 +13,11 @@ import {
   saveConfig,
 } from './config.js';
 import {
-  appendEvidenceSection,
+  appendEvidenceFile,
   listTodoFiles,
   markAcceptanceDone,
   parseEvidence,
+  parseEvidenceFile,
   parsePlan,
   parseTodo,
   setTodoSha,
@@ -64,7 +65,7 @@ import {
   createApproval,
   listApprovals,
   logEvent,
-  readApproval,
+  resolveApproval,
   supersedeApprovals,
   withLock,
   writeApproval,
@@ -394,7 +395,7 @@ export class Workflow {
       .sort((a, b) => Number(/(\d+)/.exec(a)?.[1]) - Number(/(\d+)/.exec(b)?.[1]))
       .map((mid) => {
         const todo = todos.get(mid);
-        const evidence = todo ? parseEvidence(todo) : [];
+        const evidence = todo ? this.evidenceFor(id, mid, todo) : [];
         let status: MilestoneState['status'] = todo ? todo.status : 'planned';
         // `committed` is derived, never written: an accepted TODO whose record is
         // clean in git means the acceptance itself has landed in history.
@@ -819,7 +820,7 @@ export class Workflow {
     if (doc.status !== 'implementing') {
       throw new Error(`${milestone} 当前状态为 ${doc.statusRaw}，不能 complete（需 实现中）`);
     }
-    const evidence = parseEvidence(doc);
+    const evidence = this.evidenceFor(repoId, milestone, doc);
     if (evidence.length === 0) {
       throw new Error(`${milestone} 没有任何证据；先调用 evidence_run 运行测试/构建`);
     }
@@ -877,7 +878,7 @@ export class Workflow {
         `${milestone} 当前状态为 ${doc.statusRaw}，需先 milestone_complete 进入待验收`,
       );
     }
-    const evidence = parseEvidence(doc);
+    const evidence = this.evidenceFor(repoId, milestone, doc);
     const latest = evidence[evidence.length - 1];
     if (!opts.force) {
       if (!latest) throw new Error(`${milestone} 没有证据；拒绝验收`);
@@ -985,6 +986,13 @@ export class Workflow {
     return this.milestone(repoId, milestone);
   }
 
+  /** Evidence from the tracked JSONL file plus legacy TODO entries. */
+  private evidenceFor(repoId: string, milestone: string, doc: TodoDoc) {
+    const legacy = parseEvidence(doc);
+    const tracked = parseEvidenceFile(this.repoRef(repoId).abs, milestone);
+    return [...legacy, ...tracked].sort((a, b) => a.at.localeCompare(b.at));
+  }
+
   /* ---------------------------- evidence ----------------------------- */
 
   async runEvidence(input: {
@@ -1002,6 +1010,7 @@ export class Workflow {
     dirty: boolean;
     output: string;
     todoFile: string;
+    evidenceFile: string;
   }> {
     const { repoId, milestone, command, role } = input;
     const ref = this.repoRef(repoId);
@@ -1017,8 +1026,9 @@ export class Workflow {
 
     const recorded = withLock(this.root, `todo-${repoId}-${milestone}`, () => {
       const { abs, doc } = this.requireTodo(repoId, milestone);
-      const list = parseEvidence(doc);
-      const id = `E${list.length + 1}`;
+      const list = this.evidenceFor(repoId, milestone, doc);
+      const nextId = Math.max(0, ...list.map((e) => Number(/^E(\d+)$/.exec(e.id)?.[1] ?? 0))) + 1;
+      const id = `E${nextId}`;
       const at = isoNow();
       const fullOutput = [
         `$ ${command}`,
@@ -1038,7 +1048,7 @@ export class Workflow {
       writeAtomic(path.join(dir, `${id}-${Date.now()}.log`), fullOutput);
 
       const tail = truncate([result.stdout, result.stderr].filter(Boolean).join('\n'), 4000);
-      const text = appendEvidenceSection(readTextRequired(abs), {
+      const evidenceFile = appendEvidenceFile(ref.abs, milestone, {
         id,
         at,
         command,
@@ -1046,10 +1056,14 @@ export class Workflow {
         head: gi.shortHead,
         tree,
         dirty: gi.dirty,
-        output: tail,
+        outputTail: tail,
       });
-      writeAtomic(abs, text);
-      return { id, output: tail, todoFile: path.relative(this.root, abs) };
+      return {
+        id,
+        output: tail,
+        todoFile: path.relative(this.root, abs),
+        evidenceFile: path.relative(this.root, evidenceFile),
+      };
     });
 
     logEvent(this.root, {
@@ -1069,6 +1083,7 @@ export class Workflow {
       dirty: gi.dirty,
       output: recorded.output,
       todoFile: recorded.todoFile,
+      evidenceFile: recorded.evidenceFile,
     };
   }
 
@@ -1383,9 +1398,10 @@ export class Workflow {
   }
 
   approve(id: string, by = 'user'): Approval {
-    const a = readApproval(this.root, id);
+    const a = resolveApproval(this.root, id);
     if (!a) throw new Error(`审批 ${id} 不存在`);
     if (a.used_at) throw new Error(`审批 ${id} 已使用`);
+    if (a.canceled_at) throw new Error(`审批 ${id} 已被用户取消`);
     if (a.superseded_at) {
       throw new Error(
         `审批 ${id} 已被 ${a.superseded_by ?? '新的 commit_request'} 取代；请使用新审批`,
@@ -1430,6 +1446,31 @@ export class Workflow {
     return a;
   }
 
+  /** Cancel a pending approval (user action); it can no longer be approved/committed. */
+  cancelApproval(id: string, by = 'user', reason?: string): Approval {
+    const a = resolveApproval(this.root, id);
+    if (!a) throw new Error(`审批 ${id} 不存在`);
+    if (a.used_at) throw new Error(`审批 ${id} 已使用，不能取消`);
+    if (a.canceled_at) return a;
+    a.canceled_at = isoNow();
+    a.canceled_by = by;
+    a.cancel_reason = reason;
+    writeApproval(this.root, a);
+    try {
+      this.msgs.ackByRef({ role: 'user' }, 'approval_id', a.id);
+    } catch {
+      /* best-effort */
+    }
+    logEvent(this.root, {
+      role: 'user',
+      tool: 'approval_cancel',
+      repo: a.repo,
+      ok: true,
+      detail: { approval: a.id, reason },
+    });
+    return a;
+  }
+
   commitApproved(input: {
     repoId: string;
     approvalId: string;
@@ -1440,9 +1481,10 @@ export class Workflow {
     allowReason?: string;
   }) {
     const ref = this.repoRef(input.repoId);
-    const a = readApproval(this.root, input.approvalId);
+    const a = resolveApproval(this.root, input.approvalId);
     if (!a) throw new Error(`审批 ${input.approvalId} 不存在`);
     if (a.repo !== input.repoId) throw new Error(`审批属于 ${a.repo}，不是 ${input.repoId}`);
+    if (a.canceled_at) throw new Error(`审批 ${a.id} 已被用户取消`);
     if (a.superseded_at) {
       throw new Error(
         `审批 ${a.id} 已被 ${a.superseded_by ?? '新的 commit_request'} 取代；请使用新审批`,
@@ -1816,7 +1858,11 @@ export function isRootCommitAllowed(file: string): boolean {
  * questions board change as a normal part of the workflow.
  */
 export function isMachineManagedFile(file: string): boolean {
-  return /^TODO-M\d+\.md$/.test(file) || file === 'docs/agent-questions.md';
+  return (
+    /^TODO-M\d+\.md$/.test(file) ||
+    file === 'docs/agent-questions.md' ||
+    /^docs\/evidence\/M\d+\.jsonl$/.test(file)
+  );
 }
 
 /** Machine-managed files plus the plan itself (derived-scope checks only). */

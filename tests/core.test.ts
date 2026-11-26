@@ -180,7 +180,7 @@ test('milestone transitions and acceptance gates', async () => {
     role: 'todo',
   });
   assert.equal(ev.exitCode, 0);
-  assert.match(ev.todoFile, /TODO-M1\.md/);
+  assert.match(ev.evidenceFile, /docs\/evidence\/M1\.jsonl/);
 
   wf.complete('repo-a', 'M1', 'todo');
   assert.equal(wf.milestone('repo-a', 'M1').status, 'review');
@@ -191,9 +191,11 @@ test('milestone transitions and acceptance gates', async () => {
   const m = wf.accept('repo-a', 'M1', 'plan');
   assert.equal(m.status, 'accepted');
   const text = fs.readFileSync(path.join(wf.root, 'repo-a/TODO-M1.md'), 'utf8');
-  assert.match(text, /## 证据记录/);
   assert.match(text, /## 验收记录/);
   assert.match(text, /通过/);
+  assert.doesNotMatch(text, /## 证据记录/, 'evidence no longer dirties the TODO');
+  const evidenceText = fs.readFileSync(path.join(wf.root, 'repo-a/docs/evidence/M1.jsonl'), 'utf8');
+  assert.match(evidenceText, /echo ok/);
 });
 
 test('failing evidence forces a reject and a rework loop', async () => {
@@ -213,7 +215,7 @@ test('failing evidence forces a reject and a rework loop', async () => {
   assert.throws(() => wf.reject('repo-a', 'M1', 'plan', ''), /必须写原因/);
 });
 
-test('evidence recorded after acceptance stays inside the evidence section', async () => {
+test('evidence is appended to the tracked JSONL file, not the TODO', async () => {
   const { wf } = setup();
   const repoAbs = path.join(wf.root, 'repo-a');
   wf.claim('repo-a', 'M1', 'todo');
@@ -221,18 +223,17 @@ test('evidence recorded after acceptance stays inside the evidence section', asy
   wf.complete('repo-a', 'M1', 'todo');
   wf.accept('repo-a', 'M1', 'plan');
 
-  // Rework after acceptance: the new evidence must not land below
-  // `## 验收记录`, where the parser would never see it again.
   await wf.runEvidence({ repoId: 'repo-a', milestone: 'M1', command: 'echo second', role: 'todo' });
 
   const m = wf.milestone('repo-a', 'M1');
   assert.equal(m.evidence.length, 2);
   assert.ok(m.evidence.some((e) => e.command === 'echo second'));
+  const file = path.join(repoAbs, 'docs/evidence/M1.jsonl');
+  const lines = fs.readFileSync(file, 'utf8').trim().split('\n');
+  assert.equal(lines.length, 2);
+  assert.match(lines[1], /echo second/);
   const text = fs.readFileSync(path.join(repoAbs, 'TODO-M1.md'), 'utf8');
-  assert.ok(
-    text.indexOf('echo second') < text.indexOf('## 验收记录'),
-    'new evidence is inserted above the review section',
-  );
+  assert.doesNotMatch(text, /echo second/);
 });
 
 test('mutations refuse to overwrite an unreadable TODO', {
@@ -366,6 +367,31 @@ test('commit requires an approved token bound to the exact tree', () => {
     () => wf.commitApproved({ repoId: 'repo-a', approvalId: req2.approval.id, role: 'todo' }),
     /分支在请求后已前进/,
   );
+});
+
+test('approval ids are short and support unique prefixes', () => {
+  const { wf } = setup();
+  const repoAbs = path.join(wf.root, 'repo-a');
+  fs.writeFileSync(path.join(repoAbs, 'src/lib.rs'), 'fn f() { 1 }\n');
+  const req = wf.requestCommit({ repoId: 'repo-a', message: 'feat: short', role: 'todo' });
+  assert.ok(req.approval.id.length <= 20, req.approval.id);
+  const prefix = req.approval.id.slice(0, 8);
+  const approved = wf.approve(prefix);
+  assert.equal(approved.id, req.approval.id);
+  const res = wf.commitApproved({ repoId: 'repo-a', approvalId: prefix, role: 'todo' });
+  assert.ok('head' in res && res.head);
+});
+
+test('a canceled approval cannot be approved or committed', () => {
+  const { wf } = setup();
+  const repoAbs = path.join(wf.root, 'repo-a');
+  fs.writeFileSync(path.join(repoAbs, 'src/lib.rs'), 'fn f() { 1 }\n');
+  const req = wf.requestCommit({ repoId: 'repo-a', message: 'feat: cancel', role: 'todo' });
+  wf.cancelApproval(req.approval.id, 'user', 'changed my mind');
+  const stored = wf.approvals().find((a) => a.id === req.approval.id);
+  assert.ok(stored?.canceled_at);
+  assert.equal(stored?.cancel_reason, 'changed my mind');
+  assert.throws(() => wf.approve(req.approval.id), /已.*取消/);
 });
 
 test('commit_request files selects a subset and leaves other changes alone', () => {

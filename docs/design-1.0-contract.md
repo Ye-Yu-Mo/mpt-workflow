@@ -94,7 +94,8 @@ contracts?:                # optional
 | File | Frozen contract |
 |---|---|
 | `<repo>/PLAN.md` | milestone table `| M1 | title | ... |` and/or `### M1 — title` headings; `版本` / `状态` / `程序阶段` lines |
-| `<repo>/TODO-Mn.md` | `# TODO-Mn: title`; status line `> 状态：…` (or front-matter `status:`); `**影响文件**` list (multiple blocks merge; frontmatter `files: [...]` and `<!-- files: [...] -->` also accepted); `## 验收标准`; `## 证据记录`; `## 验收记录` |
+| `<repo>/TODO-Mn.md` | `# TODO-Mn: title`; status line `> 状态：…` (or front-matter `status:`); `**影响文件**` list (multiple blocks merge; frontmatter `files: [...]` and `<!-- files: [...] -->` also accepted); `## 验收标准`; `## 验收记录`; legacy `## 证据记录` still parsed |
+| `<repo>/docs/evidence/Mn.jsonl` | tracked evidence records (one JSON object per line); full logs stay in `.workflow/runtime/evidence/` |
 | `docs/agent-questions.md` | `## Q-n to: role` heading, `- field: value` lines, options, answer/resolution |
 
 Status labels: `草稿`/`planned` → `待实现`/`todo_ready` → `实现中`/`implementing`
@@ -112,8 +113,8 @@ Commands, positional arguments and flags are frozen:
 
 `init`, `status`, `next`, `doctor`, `migrate`, `gc`, `questions`, `answer`,
 `inbox`, `read`, `ack`, `send`, `wait`, `watch`, `escalate`, `presence`,
-`approve`, `commit`, `activate`, `role`, `acl`, `web`, `mcp`, `hook`, `demo`,
-`version`, `help`.
+`approve`, `cancel`, `commit`, `activate`, `role`, `acl`, `web`, `mcp`, `hook`,
+`demo`, `version`, `help`.
 
 Exit codes: `0` success, non-zero failure. `hook pretool` and
 `hook session-start` use `2` to block; the git `pre-commit` hook uses `1` (git's

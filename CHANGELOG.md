@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Tracked evidence file.** `evidence_run` now appends a truncated JSONL record
+  to `<repo>/docs/evidence/<M>.jsonl` (full logs stay under
+  `.workflow/runtime/evidence/`) instead of dirtying the TODO. Legacy
+  `## 证据记录` sections are still parsed; `docs/evidence/**` is treated as
+  machine-managed for scope/ACL.
+- **Short approval ids.** New approvals use `ap-<base36 time>-<hex>`; CLI/MCP
+  accept a unique prefix (`mpt-workflow approve ap-m3k9`).
+- **`mpt-workflow cancel <approval-id>`** cancels a pending approval (with an
+  optional reason); canceled approvals cannot be approved/committed and are
+  hidden from the dashboard.
+- `send_message` / CLI `send` tell you the message id, current delivery status
+  and the `read_message`/`ack_message` commands to query/handle it.
+
+### Fixed
+
+- `status` and `next` include the question's repo, so same-numbered questions in
+  different repos are distinguishable.
+
 ## [1.2.0] - 2026-11-26
 
 ### Added

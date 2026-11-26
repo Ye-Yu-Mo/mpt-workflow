@@ -156,7 +156,9 @@ which is out of scope.
 - captures exit code, stdout/stderr, `HEAD`, and the tree oid of the working
   tree (via `git stash create`, which does not modify the worktree),
 - writes the full log to `.workflow/runtime/evidence/<repo>/<M>/`,
-- appends a truncated copy plus metadata to `## 证据记录` in the TODO.
+- appends a truncated JSONL record to the tracked
+  `<repo>/docs/evidence/<M>.jsonl`; legacy `## 证据记录` sections in TODOs are
+  still parsed, but new evidence does not dirty the TODO.
 
 `accept` refuses without a passing (`exit == 0`) evidence entry and warns when
 the tree changed after the latest evidence. It records the acceptor and the

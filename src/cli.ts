@@ -17,7 +17,7 @@ import { formatMessage, type MessageKind } from './core/messages.js';
 import { migrateConfig, SCHEMA_VERSION } from './core/migrate.js';
 import { updateQuestion } from './core/questions.js';
 import { sessionDisplay } from './core/session.js';
-import { withLock } from './core/state.js';
+import { resolveApproval, withLock } from './core/state.js';
 import { isRole, type Role } from './core/types.js';
 import { nextForRole, Workflow } from './core/workflow.js';
 import { runMcpServer } from './mcp/server.js';
@@ -49,6 +49,7 @@ function usage(): string {
   mpt-workflow escalate <msg-id> --reason TEXT
   mpt-workflow presence [--session NAME]
   mpt-workflow approve <approval-id> [--root DIR]
+  mpt-workflow cancel <approval-id> [--reason TEXT] [--root DIR]
   mpt-workflow activate <repo|-> [--root DIR]
   mpt-workflow role <main|plan|todo|user> [--repo NAME] [--session ID] [--root DIR]
   mpt-workflow commit <approval-id> [--root DIR] [--allow-path PATH]... [--reason TEXT]
@@ -423,7 +424,8 @@ async function main() {
             typeof flags['idempotency-key'] === 'string' ? flags['idempotency-key'] : undefined,
         });
         console.log(
-          `${duplicate ? '已存在' : '已发送'} ${message.id} → ${toRole}${toRepo ? '@' + toRepo : ''} [${message.status}]`,
+          `${duplicate ? '已存在' : '已发送'} ${message.id} → ${toRole}${toRepo ? '@' + toRepo : ''} [${message.status}]` +
+            `（mpt-workflow read ${message.id} 查询 / ack ${message.id} 处理）`,
         );
         return;
       }
@@ -517,6 +519,16 @@ async function main() {
         return;
       }
 
+      case 'cancel': {
+        const wf = resolveWorkflow(flags);
+        const id = positional[1];
+        if (!id) throw new Error('用法: mpt-workflow cancel <approval-id> [--reason TEXT]');
+        const reason = typeof flags.reason === 'string' ? flags.reason : undefined;
+        const a = wf.cancelApproval(id, 'user', reason);
+        console.log(`已取消审批 ${a.id}（${a.repo}）。`);
+        return;
+      }
+
       case 'commit': {
         const wf = resolveWorkflow(flags);
         const id = positional[1];
@@ -524,7 +536,7 @@ async function main() {
           throw new Error(
             '用法: mpt-workflow commit <approval-id> [--allow-path PATH]... [--reason TEXT]',
           );
-        const a = wf.approvals().find((x) => x.id === id);
+        const a = resolveApproval(wf.root, id);
         if (!a) throw new Error(`找不到审批 ${id}`);
         const rawAllow = Array.isArray(flags['allow-path'])
           ? flags['allow-path'].map(String)

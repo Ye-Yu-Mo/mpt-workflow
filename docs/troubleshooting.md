@@ -163,8 +163,9 @@ explicit status):
 - A non-zero exit is recorded and does not pass acceptance. Re-run the command
   after fixing it.
 - A timeout kills the whole process group (no orphan test processes).
-- Evidence is written to `.workflow/runtime/evidence/<repo>/<M>/`; the TODO gets
-  a truncated copy under `## 证据记录`.
+- Evidence is written to `.workflow/runtime/evidence/<repo>/<M>/` (full log) and
+  `<repo>/docs/evidence/<M>.jsonl` (tracked, truncated output). The TODO is not
+  modified; legacy `## 证据记录` sections are still read.
 - Evidence output is fenced and parsed fence-aware: a test printing `### E2`,
   `exit: 0` or `## 验收记录` cannot create a fake entry or cut the section
   short. Only the metadata lines before the fence are treated as evidence.

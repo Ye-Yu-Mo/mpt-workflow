@@ -2,15 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { approvalsDir, eventsPath, locksDir } from './config.js';
-import {
-  appendLine,
-  ensureDir,
-  exists,
-  isoNow,
-  readText,
-  slugDate,
-  writeAtomic,
-} from './fsutil.js';
+import { appendLine, ensureDir, exists, isoNow, readText, writeAtomic } from './fsutil.js';
 import type { Role } from './types.js';
 
 export interface EventRecord {
@@ -177,18 +169,36 @@ export interface Approval {
   /** Set when a newer commit_request replaced this pending approval. */
   superseded_at?: string;
   superseded_by?: string;
+  /** Set when the user explicitly canceled this approval. */
+  canceled_at?: string;
+  canceled_by?: string;
+  cancel_reason?: string;
   reason?: string;
 }
 
 const APPROVAL_ID_RE = /^ap-[A-Za-z0-9-]+$/;
 
 export function createApproval(root: string, a: Omit<Approval, 'id' | 'created_at'>): Approval {
-  const id = `ap-${slugDate()}-${Math.random().toString(36).slice(2, 6)}`;
+  const id = `ap-${Date.now().toString(36)}-${crypto.randomBytes(3).toString('hex')}`;
   const rec: Approval = { ...a, id, created_at: isoNow() };
   const p = path.join(approvalsDir(root), `${id}.json`);
   ensureDir(path.dirname(p));
   writeAtomic(p, JSON.stringify(rec, null, 2));
   return rec;
+}
+
+/** Resolve an exact id or a unique prefix (e.g. `ap-m3k9`). */
+export function resolveApproval(root: string, idOrPrefix: string): Approval | null {
+  const key = idOrPrefix.trim();
+  const exact = readApproval(root, key);
+  if (exact) return exact;
+  if (!key.startsWith('ap-')) return null;
+  const matches = listApprovals(root).filter((a) => a.id.startsWith(key));
+  if (matches.length === 1) return matches[0];
+  if (matches.length > 1) {
+    throw new Error(`审批前缀 ${key} 不唯一：${matches.map((a) => a.id).join(', ')}`);
+  }
+  return null;
 }
 
 export function readApproval(root: string, id: string): Approval | null {

@@ -226,7 +226,9 @@ agent  commit_request → commit    (local only, never pushes)
 ```
 
 Every transition is idempotent and recorded. `next` tells each role what to do
-based on derived state.
+based on derived state. Evidence is written to the tracked
+`<repo>/docs/evidence/Mn.jsonl` (full logs stay gitignored under
+`.workflow/runtime/evidence/`), so it no longer dirties the TODO.
 
 ## Commit safety
 
@@ -234,6 +236,7 @@ based on derived state.
 agent: commit_request(message="feat: ...")
    → scope check, returns a one-shot approval id
 user:  approve in the dashboard, or `mpt-workflow approve ap-xxx`
+       (or `mpt-workflow cancel ap-xxx --reason "..."` to retire it)
 agent: commit(approval="ap-xxx")   (MCP tool)
    → refuses if the working tree changed since approval
    → local git commit only; push is always manual
