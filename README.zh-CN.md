@@ -2,7 +2,7 @@
 
 [English](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/README.md)
 
-> 状态：1.0 稳定版。当前版本与下一步见 [ROADMAP.md](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/ROADMAP.md)。
+> 状态：1.x 稳定版。当前版本与下一步见 [ROADMAP.md](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/ROADMAP.md)。
 
 多 agent、多仓开发的**流程状态机**：一个本地 MCP server + 一个只读看板。
 
