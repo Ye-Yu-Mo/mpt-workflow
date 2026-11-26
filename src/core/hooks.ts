@@ -1,14 +1,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { checkAcl } from './acl.js';
-import { findRoot } from './config.js';
+import { findRoot, ROOT_REPO_ID } from './config.js';
 import { parseTodo } from './docs.js';
-import { stagedFiles } from './git.js';
+import { gitInfo, stagedFiles } from './git.js';
 import { matchGlob } from './glob.js';
 import { QUESTION_STATUS_HELP } from './questions.js';
 import { type RoleLease, readRoleLease, sessionLabel } from './session.js';
+import { readApproval } from './state.js';
 import { isRole, type Role } from './types.js';
-import { isMachineManagedFile, Workflow } from './workflow.js';
+import { isWorkflowManaged, Workflow } from './workflow.js';
 
 export { type RoleLease, readRoleLease, setRoleLease } from './session.js';
 
@@ -342,7 +343,59 @@ export function runPreCommit(): number {
     return 0;
   }
   const owned = wf.repoForPath(cwd);
+
+  // An approved MCP commit runs with WF_APPROVAL_ID and a temporary index.
+  // Validate coverage (exact approved files) instead of the committer's ACL:
+  // whoever executes the commit, the approval is what was reviewed.
+  const approvalId = process.env.WF_APPROVAL_ID;
+  if (approvalId) {
+    const approval = readApproval(wf.root, approvalId);
+    if (approval?.staged_tree) {
+      const repoId = owned?.id ?? ROOT_REPO_ID;
+      const repoAbs = owned?.abs ?? wf.root;
+      if (approval.repo !== repoId) {
+        process.stderr.write(
+          `[workflow] 审批 ${approval.id} 属于 ${approval.repo}，不能在 ${repoId} 提交\n`,
+        );
+        return 1;
+      }
+      if (!approval.approved_at || approval.used_at) {
+        process.stderr.write(`[workflow] 审批 ${approval.id} 未批准或已使用\n`);
+        return 1;
+      }
+      if (approval.base_head && gitInfo(repoAbs).head !== approval.base_head) {
+        process.stderr.write(`[workflow] 审批 ${approval.id} 的基线分支已前进；拒绝提交\n`);
+        return 1;
+      }
+      const actual = stagedFiles(repoAbs).sort();
+      const expected = [...approval.files].sort();
+      const extra = actual.filter((f) => !expected.includes(f));
+      const missing = expected.filter((f) => !actual.includes(f));
+      if (extra.length || missing.length) {
+        process.stderr.write(
+          `[workflow] 审批 ${approval.id} 覆盖的文件与暂存内容不一致:\n` +
+            [
+              ...extra.map((f) => `  + ${f}（未批准）`),
+              ...missing.map((f) => `  - ${f}（缺失）`),
+            ].join('\n') +
+            '\n',
+        );
+        return 1;
+      }
+      process.stderr.write(
+        `[workflow] 已批准提交 ${approval.id}：${actual.length} 个文件（scope/ACL 按审批覆盖）\n`,
+      );
+      return 0;
+    }
+  }
+
   if (!owned) return 0; // umbrella commits are the user's own docs
+
+  // Legacy global bypass; keep it working but discourage it.
+  if (process.env.WF_ALLOW_COMMIT === '1') {
+    process.stderr.write('[workflow] WF_ALLOW_COMMIT=1：跳过 pre-commit 检查（legacy）\n');
+    return 0;
+  }
 
   const lease = readRoleLease(wf.root);
   warnLegacyLease(lease);
@@ -369,23 +422,34 @@ export function runPreCommit(): number {
   const aclRepoId = bound ? bound.id : owned.id;
   const aclRepoAbs = bound ? bound.abs : owned.abs;
   const violations: string[] = [];
+  // Narrow escape hatch: exempt specific paths, not the whole check.
+  const allowPaths = new Set(
+    (process.env.WF_ALLOW_PATHS || '')
+      .split(/[,\n]/)
+      .map((s) => s.trim().replace(/^\.\//, ''))
+      .filter(Boolean),
+  );
+  const allowedPath = (f: string) =>
+    allowPaths.has(f) || [...allowPaths].some((p) => matchGlob(f, p));
+  const skipped = (f: string) => isWorkflowManaged(f) || allowedPath(f);
 
   for (const f of files) {
-    if (isMachineManagedFile(f)) continue; // tools update these themselves
+    if (skipped(f)) continue;
     const abs = path.join(owned.abs, f);
     const d = checkAcl(role, abs, wf.root, aclRepoId, aclRepoAbs, repos);
     if (!d.allowed) violations.push(`${f}: ${d.reason}`);
   }
 
-  // TODO-declared file list, when a current milestone exists
+  // TODO-declared file list only applies to the implementer, matching the MCP
+  // scope check (plan/main may add planning docs).
   const st = wf.repoState(owned.id);
   const m = st.currentMilestone;
-  if (m?.todoFile) {
+  if (role === 'todo' && m?.todoFile) {
     const todo = path.join(wf.root, m.todoFile);
     const todoDoc = parseTodoSafe(todo);
     if (todoDoc?.allowedFiles.length) {
       for (const f of files) {
-        if (isMachineManagedFile(f)) continue;
+        if (skipped(f)) continue;
         if (!todoDoc.allowedFiles.some((a) => matchGlob(f, a.replace(/^\.\//, '')))) {
           violations.push(`${f}: 不在 ${m.id} 的「影响文件」清单内`);
         }
@@ -397,9 +461,17 @@ export function runPreCommit(): number {
     process.stderr.write(
       '[workflow] pre-commit scope 检查未通过:\n' +
         violations.map((v) => `  - ${v}`).join('\n') +
-        '\n（用户可 WF_ALLOW_COMMIT=1 或 --no-verify 绕过）\n',
+        '\n用户可运行: mpt-workflow commit <approval-id>\n' +
+        '或只豁免指定路径: WF_ALLOW_PATHS=path1,path2 WF_ALLOW_REASON="..."\n' +
+        '（--no-verify 仍可整体绕过）\n',
     );
     return 1;
+  }
+  if (allowPaths.size) {
+    process.stderr.write(
+      `[workflow] 已按 WF_ALLOW_PATHS 豁免 ${allowPaths.size} 个路径` +
+        (process.env.WF_ALLOW_REASON ? `：${process.env.WF_ALLOW_REASON}\n` : '\n'),
+    );
   }
 
   process.stderr.write(

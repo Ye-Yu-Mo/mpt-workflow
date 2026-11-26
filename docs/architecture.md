@@ -133,8 +133,12 @@ it:
    and hash checks live in the MCP `commit` tool/`Workflow`, not in the hook).
    Exit code 2 blocks the call and feeds the reason back to the model.
 2. **git `pre-commit` hook**: checks staged files against the current
-   milestone's declared file list. It is a backstop for shell writes the
-   `PreToolUse` hook could not parse.
+   milestone's declared file list (only for the `todo` role) and the ACL. When
+   the MCP commit runs, it sets `WF_APPROVAL_ID` and a temporary index; the hook
+   then validates that the committed files are exactly the approved set and
+   skips the committer's ACL. `WF_ALLOW_PATHS` can exempt individual paths;
+   `WF_ALLOW_COMMIT=1` remains the legacy full bypass. It is a backstop for
+   shell writes the `PreToolUse` hook could not parse.
 
 Both are guardrails. `--no-verify` and `WF_ALLOW_COMMIT=1` bypass them by
 design: the human is the final authority, and the hooks must not be able to lock

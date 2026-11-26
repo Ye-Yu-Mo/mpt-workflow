@@ -357,16 +357,53 @@ test('commit requires an approved token bound to the exact tree', () => {
     /已在|已使用/,
   );
 
-  // index changed after approval -> refuse with the changed path
+  // a branch advance after the request invalidates the base
   fs.writeFileSync(path.join(repoAbs, 'src/lib.rs'), 'fn f() { 2.5 }\n');
   const req2 = wf.requestCommit({ repoId: 'repo-a', message: 'feat: y', role: 'todo' });
   wf.approve(req2.approval.id);
-  fs.writeFileSync(path.join(repoAbs, 'src/lib.rs'), 'fn f() { 3 }\n');
-  sh(repoAbs, 'git', ['add', 'src/lib.rs']);
+  sh(repoAbs, 'git', ['commit', '--allow-empty', '-m', 'advance']);
   assert.throws(
     () => wf.commitApproved({ repoId: 'repo-a', approvalId: req2.approval.id, role: 'todo' }),
-    /暂存快照已变化[\s\S]*src\/lib\.rs/,
+    /分支在请求后已前进/,
   );
+});
+
+test('commit_request files selects a subset and leaves other changes alone', () => {
+  const { wf } = setup();
+  const repoAbs = path.join(wf.root, 'repo-a');
+  fs.writeFileSync(path.join(repoAbs, 'src/lib.rs'), 'fn f() { 1 }\n');
+  fs.appendFileSync(path.join(repoAbs, 'PLAN.md'), '\n> planning note\n');
+  const req = wf.requestCommit({
+    repoId: 'repo-a',
+    message: 'feat: only source',
+    role: 'todo',
+    files: ['src/lib.rs'],
+  });
+  assert.deepEqual(req.files, ['src/lib.rs']);
+  // The real index is untouched by the request.
+  assert.equal(sh(repoAbs, 'git', ['diff', '--cached', '--name-only']).trim(), '');
+
+  wf.approve(req.approval.id);
+  wf.commitApproved({ repoId: 'repo-a', approvalId: req.approval.id, role: 'todo' });
+  assert.match(sh(repoAbs, 'git', ['show', 'HEAD:src/lib.rs']), /fn f\(\) \{ 1 \}/);
+  assert.match(fs.readFileSync(path.join(repoAbs, 'PLAN.md'), 'utf8'), /planning note/);
+  const status = sh(repoAbs, 'git', ['status', '--porcelain']);
+  assert.match(status, /PLAN\.md/);
+  assert.doesNotMatch(status, /src\/lib\.rs/);
+});
+
+test('pre-commit trusts the approved snapshot over the committer ACL', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wf-hook-approval-'));
+  makeRepo(root, 'repo-a', { todos: { 'TODO-M1.md': todoBody('M1', '待实现') } });
+  init({ root, program: 'hook-approval', repos: ['repo-a'], adopt: true, installHooks: true });
+  const wf = new Workflow(root);
+  const repoAbs = path.join(root, 'repo-a');
+  fs.writeFileSync(path.join(repoAbs, 'src/lib.rs'), 'fn f() { 1 }\n');
+  const req = wf.requestCommit({ repoId: 'repo-a', message: 'feat: approved', role: 'todo' });
+  wf.approve(req.approval.id);
+  // main would normally be denied writing source files; the approval covers it.
+  wf.commitApproved({ repoId: 'repo-a', approvalId: req.approval.id, role: 'main' });
+  assert.equal(sh(repoAbs, 'git', ['log', '-1', '--format=%s']).trim(), 'feat: approved');
 });
 
 test('commit scope follows the requesting role, not the committer', () => {
@@ -475,14 +512,19 @@ test('commit scope uses the accepted milestone, not the next one', async () => {
   );
 });
 
-test('approving a changed index snapshot is refused with the file name', () => {
+test('index changes after the request do not change the approved snapshot', () => {
   const { wf } = setup();
   const repoAbs = path.join(wf.root, 'repo-a');
   fs.writeFileSync(path.join(repoAbs, 'src/lib.rs'), 'fn f() { 1 }\n');
   const req = wf.requestCommit({ repoId: 'repo-a', message: 'feat: x', role: 'todo' });
   fs.writeFileSync(path.join(repoAbs, 'src/lib.rs'), 'fn f() { 2 }\n');
   sh(repoAbs, 'git', ['add', 'src/lib.rs']);
-  assert.throws(() => wf.approve(req.approval.id), /暂存快照已变化[\s\S]*src\/lib\.rs/);
+  wf.approve(req.approval.id);
+  wf.commitApproved({ repoId: 'repo-a', approvalId: req.approval.id, role: 'todo' });
+  // The reviewed snapshot (v1) is committed; the later staged v2 stays local.
+  assert.match(sh(repoAbs, 'git', ['show', 'HEAD:src/lib.rs']), /fn f\(\) \{ 1 \}/);
+  assert.match(fs.readFileSync(path.join(repoAbs, 'src/lib.rs'), 'utf8'), /fn f\(\) \{ 2 \}/);
+  assert.match(sh(repoAbs, 'git', ['status', '--porcelain']), /src\/lib\.rs/);
 });
 
 test('worktree edits after the request are not part of the commit', () => {
@@ -539,6 +581,36 @@ test('parseTodo reads a bare 受验 SHA and 改什么 paths', () => {
   assert.equal(d?.sha, 'a'.repeat(40));
   assert.ok(d?.allowedFiles.includes('src/foo.rs'));
   assert.ok(!d?.allowedFiles.includes('/'));
+});
+
+test('parseTodo merges multiple file blocks, frontmatter and <!-- files -->', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wf-doc3-'));
+  const f = path.join(dir, 'TODO-M1.md');
+  fs.writeFileSync(
+    f,
+    `---
+id: M1
+status: todo_ready
+files: [src/front.ts]
+---
+# TODO-M1: x
+
+- **影响文件**：
+  - \`src/a.ts\`
+- **其他**：
+  - 无关内容
+- **影响文件**：
+  - \`src/b.ts\`
+
+<!-- files: ["src/comment.ts"] -->
+`,
+  );
+  const d = parseTodo(f);
+  assert.ok(d);
+  assert.deepEqual(
+    [...d.allowedFiles].sort(),
+    ['src/a.ts', 'src/b.ts', 'src/comment.ts', 'src/front.ts'].sort(),
+  );
 });
 
 test('scope globs match zero directories and single-character segments', () => {

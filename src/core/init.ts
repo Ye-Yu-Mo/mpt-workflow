@@ -365,9 +365,12 @@ export function installHooks(
         const stale =
           current.includes('hook pre-commit') &&
           [...current.matchAll(/(\/[^"\\\s]+?cli\.js)/g)].some((m) => !exists(m[1]));
-        if (stale) {
+        const managedOld =
+          current.includes('Installed by mpt-workflow') &&
+          !current.includes('mpt-workflow-hook v2');
+        if (stale || managedOld) {
           fs.writeFileSync(file, script, 'utf8');
-          warnings.push(`${r.id}: 已修复 stale pre-commit hook 路径`);
+          warnings.push(`${r.id}: 已${stale ? '修复 stale' : '更新 managed'} pre-commit hook`);
         } else {
           existing.push(path.relative(root, file));
         }
@@ -383,9 +386,10 @@ export function installHooks(
 
 function preCommitScript(): string {
   return `#!/usr/bin/env bash
+# mpt-workflow-hook v2
 # Installed by mpt-workflow. Scope check only; approval gating lives in the MCP commit tool.
+# WF_ALLOW_COMMIT / WF_ALLOW_PATHS are handled by the CLI hook so it can report them.
 set -euo pipefail
-if [ "\${WF_ALLOW_COMMIT:-0}" = "1" ]; then exit 0; fi
 ${hookCommand('pre-commit')} || exit $?
 exit 0
 `;

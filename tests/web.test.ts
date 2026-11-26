@@ -233,8 +233,13 @@ test('approval API tracks the staged snapshot, not worktree noise', async () => 
     git(abs, ['add', '-A']);
     res = await fetch(`${server.url}/api/approvals`);
     list = (await res.json()) as { stale?: boolean; worktree_changed?: boolean }[];
-    assert.equal(list[0]?.stale, true, 'staged change invalidates');
+    assert.equal(list[0]?.stale, false, 'staging does not change the snapshot');
     assert.equal(list[0]?.worktree_changed, false);
+
+    git(abs, ['commit', '-qm', 'advance']);
+    res = await fetch(`${server.url}/api/approvals`);
+    list = (await res.json()) as { stale?: boolean; worktree_changed?: boolean }[];
+    assert.equal(list[0]?.stale, true, 'a branch advance invalidates the base');
   } finally {
     await server.close();
   }

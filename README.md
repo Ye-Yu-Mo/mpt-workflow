@@ -241,13 +241,17 @@ agent: commit(approval="ap-xxx")   (MCP tool)
 
 The approval is a **guardrail against mistakes**, not an authorization system:
 the server runs as your OS user. It exists so a human sees the diff before it
-lands. `commit_request` stages the tree and binds the approval to the **exact
-index tree oid** (plus per-file hashes). The dashboard reviews that staged diff,
-and `commit` records that snapshot without re-running `git add`, so later
-worktree edits are simply not part of this commit. Only changes to the staged
-index make the approval stale (the error lists the files). Agent Bash calls to
-`git commit` / `git push` (and `mpt-workflow approve|commit`) are refused by the
-hook; commits go through the MCP tool, and the human pushes.
+lands. `commit_request` builds the review snapshot in a **temporary index** and
+binds the approval to that exact tree oid (plus per-file hashes); the user's real
+index is untouched. Pass `files: ["src/a.ts", ...]` to include only selected
+paths, which lets PLAN and TODO commit their own files from a shared worktree.
+The dashboard reviews the staged snapshot, and `commit` records it through the
+temp index **without re-running `git add`**. The pre-commit hook validates that
+the committed files are exactly the approved set and skips the committer's ACL;
+scope is judged against `requested_by`, not whoever executes the commit. A
+branch advance invalidates the approval; later worktree edits do not.
+Agent Bash calls to `git commit` / `git push` (and `mpt-workflow approve|commit`)
+are refused by the hook; commits go through the MCP tool, and the human pushes.
 
 ### Umbrella (`root`) commits
 
@@ -430,7 +434,10 @@ rewrite:
   (`### M1 — name`), unioned with `TODO-M*.md` files.
 - **Status** from YAML front matter (`status: implementing`) or a Chinese/English
   marker (`状态：已验收`, `**已验收（...）**`).
-- **Allowed files** from the `**影响文件**` list in each TODO.
+- **Allowed files** from every `**影响文件**` block in each TODO, from
+  frontmatter `files: [...]`, or from a `<!-- files: ["a.ts", "b.ts"] -->`
+  comment. Multiple blocks are merged; the comment/frontmatter forms are the
+  most robust if you edit the document often.
 - **Questions** from `## Q-001 [open] to: main` blocks.
 - **Evidence** from a `## 证据记录` section.
 

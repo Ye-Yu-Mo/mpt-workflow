@@ -19,7 +19,7 @@ import { updateQuestion } from './core/questions.js';
 import { sessionDisplay } from './core/session.js';
 import { withLock } from './core/state.js';
 import { isRole, type Role } from './core/types.js';
-import { Workflow } from './core/workflow.js';
+import { nextForRole, Workflow } from './core/workflow.js';
 import { runMcpServer } from './mcp/server.js';
 import { VERSION } from './version.js';
 import { startWebServer } from './web/server.js';
@@ -51,7 +51,7 @@ function usage(): string {
   mpt-workflow approve <approval-id> [--root DIR]
   mpt-workflow activate <repo|-> [--root DIR]
   mpt-workflow role <main|plan|todo|user> [--repo NAME] [--session ID] [--root DIR]
-  mpt-workflow commit <approval-id> [--root DIR]
+  mpt-workflow commit <approval-id> [--root DIR] [--allow-path PATH]... [--reason TEXT]
   mpt-workflow web [--root DIR] [--port 7788]
   mpt-workflow mcp [--root DIR] [--role ROLE] [--repo NAME]
   mpt-workflow hook pretool|session-start|pre-commit
@@ -241,7 +241,9 @@ async function main() {
       case 'next': {
         const wf = resolveWorkflow(flags);
         const st = wf.programStatus();
-        for (const n of st.next) {
+        const lease = readRoleLease(wf.root);
+        const next = lease ? nextForRole(st.next, lease.role, lease.repo) : st.next;
+        for (const n of next) {
           console.log(
             `[${n.actor}] ${n.action}${n.repo ? ` (${n.repo}${n.milestone ? '/' + n.milestone : ''})` : ''}`,
           );
@@ -518,10 +520,32 @@ async function main() {
       case 'commit': {
         const wf = resolveWorkflow(flags);
         const id = positional[1];
-        if (!id) throw new Error('用法: mpt-workflow commit <approval-id>');
+        if (!id)
+          throw new Error(
+            '用法: mpt-workflow commit <approval-id> [--allow-path PATH]... [--reason TEXT]',
+          );
         const a = wf.approvals().find((x) => x.id === id);
         if (!a) throw new Error(`找不到审批 ${id}`);
-        const r = wf.commitApproved({ repoId: a.repo, approvalId: id, role: 'user' });
+        const rawAllow = Array.isArray(flags['allow-path'])
+          ? flags['allow-path'].map(String)
+          : typeof flags['allow-path'] === 'string'
+            ? [flags['allow-path']]
+            : [];
+        const allowPaths = rawAllow
+          .flatMap((p) => p.split(','))
+          .map((p) => p.trim())
+          .filter(Boolean);
+        const allowReason = typeof flags.reason === 'string' ? flags.reason : undefined;
+        if (allowPaths.length && !allowReason) {
+          throw new Error('使用 --allow-path 时必须同时给出 --reason');
+        }
+        const r = wf.commitApproved({
+          repoId: a.repo,
+          approvalId: id,
+          role: 'user',
+          allowPaths,
+          allowReason,
+        });
         console.log(`已提交 ${a.repo} @ ${(r as { head: string }).head}`);
         return;
       }

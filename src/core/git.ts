@@ -11,12 +11,17 @@ export interface GitResult {
   code: number;
 }
 
-export function git(repoAbs: string, args: string[], opts: { input?: string } = {}): GitResult {
+export function git(
+  repoAbs: string,
+  args: string[],
+  opts: { input?: string; env?: NodeJS.ProcessEnv } = {},
+): GitResult {
   try {
     const out = execFileSync('git', ['-C', repoAbs, ...args], {
       encoding: 'utf8',
       stdio: ['pipe', 'pipe', 'pipe'],
       input: opts.input,
+      env: opts.env ? { ...process.env, ...opts.env } : process.env,
       maxBuffer: 32 * 1024 * 1024,
     });
     return { ok: true, out, err: '', code: 0 };
@@ -78,22 +83,22 @@ export function allChangedFiles(repoAbs: string): string[] {
   return [...new Set([...info.changed, ...info.untracked])].sort();
 }
 
-export function stagedFiles(repoAbs: string): string[] {
+export function stagedFiles(repoAbs: string, env?: NodeJS.ProcessEnv): string[] {
   // --no-renames reports both the deleted old path and the added new path, so
   // the pre-commit ACL/scope check sees the source of a rename too.
-  const r = git(repoAbs, ['diff', '--cached', '--name-only', '-z', '--no-renames']);
+  const r = git(repoAbs, ['diff', '--cached', '--name-only', '-z', '--no-renames'], { env });
   return r.out.split('\0').filter(Boolean);
 }
 
 /** Exact tree oid of the index, or '' when the index has conflicts. */
-export function stagedTreeOid(repoAbs: string): string {
-  const r = git(repoAbs, ['write-tree']);
+export function stagedTreeOid(repoAbs: string, env?: NodeJS.ProcessEnv): string {
+  const r = git(repoAbs, ['write-tree'], { env });
   return r.ok ? r.out.trim() : '';
 }
 
 /** Index entries as path -> "mode oid", for precise stale diagnostics. */
-export function stagedFileHashes(repoAbs: string): Record<string, string> {
-  const r = git(repoAbs, ['ls-files', '-s', '-z']);
+export function stagedFileHashes(repoAbs: string, env?: NodeJS.ProcessEnv): Record<string, string> {
+  const r = git(repoAbs, ['ls-files', '-s', '-z'], { env });
   const out: Record<string, string> = {};
   for (const entry of r.out.split('\0')) {
     if (!entry) continue;
@@ -106,23 +111,57 @@ export function stagedFileHashes(repoAbs: string): Record<string, string> {
 }
 
 /** Index paths whose mode is a gitlink (nested repository). */
-export function stagedGitlinkPaths(repoAbs: string): string[] {
-  return Object.entries(stagedFileHashes(repoAbs))
+export function stagedGitlinkPaths(repoAbs: string, env?: NodeJS.ProcessEnv): string[] {
+  return Object.entries(stagedFileHashes(repoAbs, env))
     .filter(([, value]) => value.startsWith('160000 '))
     .map(([file]) => file);
 }
 
 /** Diff of exactly what a commit would record (index vs HEAD). */
-export function diffUnifiedStaged(repoAbs: string, file?: string): string {
+export function diffUnifiedStaged(repoAbs: string, file?: string, env?: NodeJS.ProcessEnv): string {
   const args = ['diff', '--cached', 'HEAD'];
   if (file) args.push('--', file);
-  const r = git(repoAbs, args);
+  const r = git(repoAbs, args, { env });
   return r.ok ? r.out : '';
 }
 
-export function diffStatStaged(repoAbs: string): string {
-  const r = git(repoAbs, ['diff', '--cached', 'HEAD', '--stat']);
+export function diffStatStaged(repoAbs: string, env?: NodeJS.ProcessEnv): string {
+  const r = git(repoAbs, ['diff', '--cached', 'HEAD', '--stat'], { env });
   return r.ok ? r.out.trim() : '';
+}
+
+/** Reset a temp index to a base tree. */
+export function readTreeToIndex(repoAbs: string, tree: string, env: NodeJS.ProcessEnv): GitResult {
+  return git(repoAbs, ['read-tree', tree], { env });
+}
+
+/** Stage selected paths into an index (usually a temp index). */
+export function stagePaths(repoAbs: string, paths: string[], env?: NodeJS.ProcessEnv): GitResult {
+  const spec = paths.length ? paths : ['.'];
+  return git(repoAbs, ['add', '-A', '--', ...spec], { env });
+}
+
+/** Gitlinks present in a tree object. */
+export function treeGitlinkPaths(repoAbs: string, tree: string): string[] {
+  const r = git(repoAbs, ['ls-tree', '-r', '-z', tree]);
+  const out: string[] = [];
+  for (const entry of r.out.split('\0')) {
+    if (!entry) continue;
+    const tab = entry.indexOf('\t');
+    if (tab === -1) continue;
+    const [mode] = entry.slice(0, tab).split(' ');
+    if (mode === '160000') out.push(entry.slice(tab + 1));
+  }
+  return out;
+}
+
+export function treeExists(repoAbs: string, tree: string): boolean {
+  return git(repoAbs, ['cat-file', '-e', `${tree}^{tree}`]).ok;
+}
+
+/** Sync selected paths in the real index to the new HEAD after a snapshot commit. */
+export function resetPaths(repoAbs: string, paths: string[]): GitResult {
+  return git(repoAbs, ['reset', '-q', 'HEAD', '--', ...paths]);
 }
 
 /** Hash of everything the user would see: tracked diff + untracked file contents. */
@@ -194,8 +233,8 @@ export function unstageAll(repoAbs: string): GitResult {
   return git(repoAbs, ['reset']);
 }
 
-export function commit(repoAbs: string, message: string): GitResult {
-  return git(repoAbs, ['commit', '-m', message]);
+export function commit(repoAbs: string, message: string, env?: NodeJS.ProcessEnv): GitResult {
+  return git(repoAbs, ['commit', '-m', message], { env });
 }
 
 export function diffStat(repoAbs: string): string {

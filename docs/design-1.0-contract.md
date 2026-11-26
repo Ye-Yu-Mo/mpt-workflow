@@ -46,7 +46,7 @@ output is human-facing and may be reworded; agents must not parse it.
 | `milestone_accept` | `plan`, `main` | `milestone`, `repo`, `note`, `force` |
 | `milestone_reject` | `plan`, `main` | `milestone`, `reason`, `repo` |
 | `scope_check` | all | `milestone`, `repo`, `as_role` |
-| `commit_request` | all (`root`: `main`/`user`) | `message`, `repo`, `milestone` |
+| `commit_request` | all (`root`: `main`/`user`) | `message`, `repo`, `milestone`, `files` |
 | `commit` | all (`root`: `main`/`user`) | `approval`, `repo`, `dry_run` |
 | `phase_activate` | `main`, `user` | `repo`, `phase`, `accept_previous` |
 
@@ -94,7 +94,7 @@ contracts?:                # optional
 | File | Frozen contract |
 |---|---|
 | `<repo>/PLAN.md` | milestone table `| M1 | title | ... |` and/or `### M1 — title` headings; `版本` / `状态` / `程序阶段` lines |
-| `<repo>/TODO-Mn.md` | `# TODO-Mn: title`; status line `> 状态：…` (or front-matter `status:`); `**影响文件**` list; `## 验收标准`; `## 证据记录`; `## 验收记录` |
+| `<repo>/TODO-Mn.md` | `# TODO-Mn: title`; status line `> 状态：…` (or front-matter `status:`); `**影响文件**` list (multiple blocks merge; frontmatter `files: [...]` and `<!-- files: [...] -->` also accepted); `## 验收标准`; `## 证据记录`; `## 验收记录` |
 | `docs/agent-questions.md` | `## Q-n to: role` heading, `- field: value` lines, options, answer/resolution |
 
 Status labels: `草稿`/`planned` → `待实现`/`todo_ready` → `实现中`/`implementing`

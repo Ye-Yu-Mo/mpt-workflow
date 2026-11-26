@@ -238,6 +238,13 @@
           "milestone": {
             "description": "要提交的里程碑；默认取已验收待提交的 M",
             "type": "string"
+          },
+          "files": {
+            "description": "只包含这些仓库相对路径；省略则提交全部改动",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [

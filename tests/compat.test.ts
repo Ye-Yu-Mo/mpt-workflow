@@ -127,6 +127,11 @@ test('0.x workspace runs the full plan → todo → evidence → accept → comm
 
   wf.accept('repo-a', 'M1', 'plan', { note: 'ok' });
   assert.equal(wf.milestone('repo-a', 'M1').status, 'accepted');
+  assert.match(
+    fs.readFileSync(path.join(abs, 'TODO-M1.md'), 'utf8'),
+    /- \[x\] command exits zero/,
+    'acceptance checkboxes are ticked on accept',
+  );
 
   const req = wf.requestCommit({ repoId: 'repo-a', message: 'feat(M1): compat', role: 'plan' });
   wf.approve(req.approval.id);

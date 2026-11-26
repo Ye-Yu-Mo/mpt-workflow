@@ -15,6 +15,7 @@ import {
 import {
   appendEvidenceSection,
   listTodoFiles,
+  markAcceptanceDone,
   parseEvidence,
   parsePlan,
   parseTodo,
@@ -39,12 +40,17 @@ import {
   commit as gitCommit,
   gitInfo,
   gitlinkPaths,
+  readTreeToIndex,
+  resetPaths,
   stageAll,
   stagedFileHashes,
   stagedFiles,
   stagedGitlinkPaths,
   stagedTreeHash,
   stagedTreeOid,
+  stagePaths,
+  treeExists,
+  treeGitlinkPaths,
   workingTreeHash,
   workingTreeOid,
 } from './git.js';
@@ -891,6 +897,7 @@ export class Workflow {
     let text = readTextRequired(abs);
     text = setTodoStatus(text, 'accepted');
     text = setTodoSha(text, gi.head || 'working-tree');
+    text = markAcceptanceDone(text);
     text = appendReview(text, {
       at: isoNow(),
       action: 'accept',
@@ -1134,32 +1141,82 @@ export class Workflow {
     return st.currentMilestone;
   }
 
-  /** List index changes since the approval snapshot, for actionable errors. */
-  private describeStagedChanges(a: Approval, repoAbs: string): string {
-    if (!a.file_hashes) return '';
-    const now = stagedFileHashes(repoAbs);
-    const modified: string[] = [];
-    const added: string[] = [];
-    const removed: string[] = [];
-    const paths = new Set([...Object.keys(a.file_hashes), ...Object.keys(now)]);
-    for (const f of paths) {
-      const before = a.file_hashes[f];
-      const after = now[f];
-      if (!before) added.push(f);
-      else if (!after) removed.push(f);
-      else if (before !== after) modified.push(f);
+  /**
+   * Commit exactly the approval's tree through a temporary index. The real
+   * index is untouched during the commit; afterwards only the approved paths
+   * are synced to the new HEAD, leaving unrelated staged/worktree changes
+   * alone.
+   */
+  private commitSnapshot(
+    a: Approval,
+    repoAbs: string,
+    files: string[],
+    allow: { allowPaths?: string[]; allowReason?: string } = {},
+  ): string {
+    if (!a.staged_tree) throw new Error(`审批 ${a.id} 没有暂存快照`);
+    const indexPath = this.makeTempIndex();
+    try {
+      const env: NodeJS.ProcessEnv = {
+        GIT_INDEX_FILE: indexPath,
+        WF_APPROVAL_ID: a.id,
+      };
+      if (allow.allowPaths?.length) env.WF_ALLOW_PATHS = allow.allowPaths.join(',');
+      if (allow.allowReason) env.WF_ALLOW_REASON = allow.allowReason;
+      const read = readTreeToIndex(repoAbs, a.staged_tree, env);
+      if (!read.ok) throw new Error(`git read-tree 失败: ${read.err}`);
+      const res = gitCommit(repoAbs, a.message, env);
+      if (!res.ok) throw new Error(`git commit 失败: ${res.err || res.out}`);
+      const head = gitInfo(repoAbs).head;
+      // Keep the user's real index consistent for the committed paths only.
+      const reset = resetPaths(repoAbs, files);
+      if (!reset.ok) {
+        logEvent(this.root, {
+          role: 'system',
+          tool: 'commit_index_sync',
+          repo: a.repo,
+          ok: false,
+          detail: { approval: a.id, error: reset.err || reset.out },
+        });
+      }
+      return head;
+    } finally {
+      this.cleanupTempIndex(indexPath);
     }
-    const fmt = (label: string, list: string[]) =>
-      list.length
-        ? `${label} ${list.slice(0, 20).join(', ')}${list.length > 20 ? ` …（另 ${list.length - 20} 个）` : ''}`
-        : '';
-    const parts = [fmt('修改:', modified), fmt('新增:', added), fmt('移除:', removed)].filter(
-      Boolean,
-    );
-    return parts.length ? `\n${parts.join('\n')}` : '';
   }
 
-  private assertRootCommitFiles(files: string[], opts: { staged?: boolean } = {}): void {
+  /** Temp index so a request/commit never touches the user's real index. */
+  private makeTempIndex(): string {
+    const dir = path.join(runtimeDir(this.root), 'tmp');
+    ensureDir(dir);
+    return path.join(dir, `index-${process.pid}-${crypto.randomBytes(4).toString('hex')}`);
+  }
+
+  private cleanupTempIndex(indexPath: string): void {
+    try {
+      fs.rmSync(indexPath, { force: true });
+    } catch {
+      /* temp index cleanup is best-effort */
+    }
+  }
+
+  private normalizeSelected(files: string[] | undefined): string[] {
+    if (!files?.length) return [];
+    return files.map((raw) => {
+      const f = raw.trim().replace(/\\/g, '/');
+      if (!f) throw new Error('files 不能包含空路径');
+      if (path.isAbsolute(f)) throw new Error(`files 必须是仓库相对路径: ${raw}`);
+      const norm = path.posix.normalize(f);
+      if (norm === '..' || norm.startsWith('../')) {
+        throw new Error(`files 不能逃出仓库: ${raw}`);
+      }
+      return norm;
+    });
+  }
+
+  private assertRootCommitFiles(
+    files: string[],
+    opts: { staged?: boolean; env?: NodeJS.ProcessEnv; tree?: string } = {},
+  ): void {
     const gi = gitInfo(this.root);
     if (!gi.available) throw new Error(`伞仓不是 git 仓库: ${this.root}`);
     if (files.length === 0) throw new Error('伞仓没有可提交的改动');
@@ -1171,7 +1228,11 @@ export class Workflow {
           bad.map((f) => `- ${f}`).join('\n'),
       );
     }
-    const links = opts.staged ? stagedGitlinkPaths(this.root) : gitlinkPaths(this.root);
+    const links = opts.tree
+      ? treeGitlinkPaths(this.root, opts.tree)
+      : opts.staged
+        ? stagedGitlinkPaths(this.root, opts.env)
+        : gitlinkPaths(this.root);
     // Untracked nested repositories are not gitlinks yet; `git add` would turn
     // them into one (or refuse), so reject the directory by its `.git` entry.
     const nested = files.filter((f) => exists(path.join(this.root, f, '.git')));
@@ -1183,7 +1244,14 @@ export class Workflow {
     }
   }
 
-  requestCommit(input: { repoId: string; message: string; role: Role; milestone?: string }): {
+  requestCommit(input: {
+    repoId: string;
+    message: string;
+    role: Role;
+    milestone?: string;
+    /** Optional repo-relative paths to include; omit for all changes. */
+    files?: string[];
+  }): {
     approval: Approval;
     diffStat: string;
     files: string[];
@@ -1196,109 +1264,144 @@ export class Workflow {
       if (!gi.available) throw new Error(`伞仓不是 git 仓库: ${this.root}`);
       const changed = allChangedFiles(this.root);
       if (changed.length === 0) throw new Error('伞仓没有可提交的改动');
-      this.assertRootCommitFiles(changed);
-      const stage = stageAll(this.root);
-      if (!stage.ok) throw new Error(`git add 失败: ${stage.err}`);
-      // Re-check after staging: an untracked nested repository only becomes a
-      // gitlink in the index at this point.
-      const files = stagedFiles(this.root);
-      this.assertRootCommitFiles(files, { staged: true });
-      const stagedTree = stagedTreeOid(this.root);
-      if (!stagedTree) throw new Error('无法读取暂存区 tree（是否有未解决的冲突？）');
-      const a = createApproval(this.root, {
-        repo: ROOT_REPO_ID,
-        tree_hash: workingTreeHash(this.root),
-        staged_hash: stagedTreeHash(this.root),
-        staged_tree: stagedTree,
-        file_hashes: stagedFileHashes(this.root),
-        message: input.message,
-        files,
-        requested_by: input.role,
-      });
-      supersedeApprovals(this.root, ROOT_REPO_ID, a.id);
-      logEvent(this.root, {
-        role: input.role,
-        tool: 'commit_request',
-        repo: ROOT_REPO_ID,
-        ok: true,
-        detail: { approval: a.id, files: files.length, root: true },
-      });
-      this.notifyEvent({
-        from: input.role,
-        repo: ROOT_REPO_ID,
-        to: [{ role: 'user' }],
-        kind: 'approval_request',
-        subject: `root（伞仓文档）请求提交：${input.message}`,
-        body: `${files.length} 个文件\n${diffStatStaged(this.root)}`,
-        refs: { repo: ROOT_REPO_ID, approval_id: a.id, files },
-        key: `${ROOT_REPO_ID}:commit-request:${a.id}`,
-      });
-      return { approval: a, diffStat: diffStatStaged(this.root), files };
+      const selected = this.normalizeSelected(input.files);
+      if (selected.length) {
+        const candidates = changed.filter((f) =>
+          selected.some((p) => f === p || f.startsWith(p.replace(/\/+$/, '') + '/')),
+        );
+        this.assertRootCommitFiles(candidates);
+      } else {
+        this.assertRootCommitFiles(changed);
+      }
+      const indexPath = this.makeTempIndex();
+      try {
+        const env = { GIT_INDEX_FILE: indexPath };
+        const base = gi.head;
+        const read = readTreeToIndex(this.root, base, env);
+        if (!read.ok) throw new Error(`git read-tree 失败: ${read.err}`);
+        const stage = stagePaths(this.root, selected.length ? selected : [], env);
+        if (!stage.ok) throw new Error(`git add 失败: ${stage.err}`);
+        const files = stagedFiles(this.root, env);
+        this.assertRootCommitFiles(files, { staged: true, env });
+        const stagedTree = stagedTreeOid(this.root, env);
+        if (!stagedTree) throw new Error('无法写入暂存快照（是否有未解决的冲突？）');
+        const stat = diffStatStaged(this.root, env);
+        const a = createApproval(this.root, {
+          repo: ROOT_REPO_ID,
+          tree_hash: workingTreeHash(this.root),
+          staged_tree: stagedTree,
+          base_head: base,
+          file_hashes: stagedFileHashes(this.root, env),
+          message: input.message,
+          files,
+          requested_by: input.role,
+        });
+        supersedeApprovals(this.root, ROOT_REPO_ID, a.id);
+        logEvent(this.root, {
+          role: input.role,
+          tool: 'commit_request',
+          repo: ROOT_REPO_ID,
+          ok: true,
+          detail: { approval: a.id, files: files.length, root: true, partial: selected.length > 0 },
+        });
+        this.notifyEvent({
+          from: input.role,
+          repo: ROOT_REPO_ID,
+          to: [{ role: 'user' }],
+          kind: 'approval_request',
+          subject: `root（伞仓文档）请求提交：${input.message}`,
+          body: `${files.length} 个文件\n${stat}`,
+          refs: { repo: ROOT_REPO_ID, approval_id: a.id, files },
+          key: `${ROOT_REPO_ID}:commit-request:${a.id}`,
+        });
+        return { approval: a, diffStat: stat, files };
+      } finally {
+        this.cleanupTempIndex(indexPath);
+      }
     }
 
     const ref = this.repoRef(input.repoId);
     const changed = allChangedFiles(ref.abs);
     if (changed.length === 0) throw new Error('没有可提交的改动');
+    const selected = this.normalizeSelected(input.files);
     const milestone = this.milestoneForCommit(input.repoId, input.milestone);
-    const scope = this.scopeCheck(input.repoId, milestone?.id, input.role, {
-      enforceAcl: false,
-    });
-    assertCommitScope(scope, input.role);
-    const stage = stageAll(ref.abs);
-    if (!stage.ok) throw new Error(`git add 失败: ${stage.err}`);
-    const files = stagedFiles(ref.abs);
-    const stagedTree = stagedTreeOid(ref.abs);
-    if (!stagedTree) throw new Error('无法读取暂存区 tree（是否有未解决的冲突？）');
-    const a = createApproval(this.root, {
-      repo: input.repoId,
-      milestone: milestone?.id,
-      tree_hash: workingTreeHash(ref.abs),
-      staged_hash: stagedTreeHash(ref.abs),
-      staged_tree: stagedTree,
-      file_hashes: stagedFileHashes(ref.abs),
-      message: input.message,
-      files,
-      requested_by: input.role,
-    });
-    supersedeApprovals(this.root, input.repoId, a.id);
-    logEvent(this.root, {
-      role: input.role,
-      tool: 'commit_request',
-      repo: input.repoId,
-      ok: true,
-      detail: { approval: a.id, files: files.length },
-    });
-    this.notifyEvent({
-      from: input.role,
-      repo: input.repoId,
-      to: [{ role: 'user' }],
-      kind: 'approval_request',
-      subject: `${input.repoId} 请求提交：${input.message}`,
-      body: `${files.length} 个文件\n${diffStatStaged(ref.abs)}`,
-      refs: {
-        repo: input.repoId,
-        approval_id: a.id,
+    const base = gitInfo(ref.abs).head;
+    const indexPath = this.makeTempIndex();
+    try {
+      const env = { GIT_INDEX_FILE: indexPath };
+      const read = readTreeToIndex(ref.abs, base, env);
+      if (!read.ok) throw new Error(`git read-tree 失败: ${read.err}`);
+      const stage = stagePaths(ref.abs, selected.length ? selected : [], env);
+      if (!stage.ok) throw new Error(`git add 失败: ${stage.err}`);
+      const files = stagedFiles(ref.abs, env);
+      if (files.length === 0) throw new Error('所选路径没有可提交的改动');
+      const scope = this.scopeCheck(input.repoId, milestone?.id, input.role, {
+        enforceAcl: false,
         files,
-      },
-      key: `${input.repoId}:commit-request:${a.id}`,
-    });
-    return { approval: a, diffStat: diffStatStaged(ref.abs), files };
+      });
+      assertCommitScope(scope, input.role);
+      const stagedTree = stagedTreeOid(ref.abs, env);
+      if (!stagedTree) throw new Error('无法写入暂存快照（是否有未解决的冲突？）');
+      const stat = diffStatStaged(ref.abs, env);
+      const a = createApproval(this.root, {
+        repo: input.repoId,
+        milestone: milestone?.id,
+        tree_hash: workingTreeHash(ref.abs),
+        staged_tree: stagedTree,
+        base_head: base,
+        file_hashes: stagedFileHashes(ref.abs, env),
+        message: input.message,
+        files,
+        requested_by: input.role,
+      });
+      supersedeApprovals(this.root, input.repoId, a.id);
+      logEvent(this.root, {
+        role: input.role,
+        tool: 'commit_request',
+        repo: input.repoId,
+        ok: true,
+        detail: { approval: a.id, files: files.length, partial: selected.length > 0 },
+      });
+      this.notifyEvent({
+        from: input.role,
+        repo: input.repoId,
+        to: [{ role: 'user' }],
+        kind: 'approval_request',
+        subject: `${input.repoId} 请求提交：${input.message}`,
+        body: `${files.length} 个文件\n${stat}`,
+        refs: {
+          repo: input.repoId,
+          approval_id: a.id,
+          files,
+        },
+        key: `${input.repoId}:commit-request:${a.id}`,
+      });
+      return { approval: a, diffStat: stat, files };
+    } finally {
+      this.cleanupTempIndex(indexPath);
+    }
   }
 
   approve(id: string, by = 'user'): Approval {
     const a = readApproval(this.root, id);
     if (!a) throw new Error(`审批 ${id} 不存在`);
     if (a.used_at) throw new Error(`审批 ${id} 已使用`);
+    if (a.superseded_at) {
+      throw new Error(
+        `审批 ${id} 已被 ${a.superseded_by ?? '新的 commit_request'} 取代；请使用新审批`,
+      );
+    }
     const ref = this.repoRef(a.repo);
     if (a.staged_tree) {
-      // New model: the reviewed snapshot is the index. Changes to the working
-      // tree alone do not invalidate it (they are simply not committed).
-      const current = stagedTreeOid(ref.abs);
-      if (!current || current !== a.staged_tree) {
+      // New model: the reviewed snapshot is an immutable tree object. The
+      // real index/worktree may keep changing; only the branch base must match.
+      if (a.base_head && gitInfo(ref.abs).head !== a.base_head) {
         throw new Error(
-          `暂存快照已变化（请求时 ${a.staged_tree.slice(0, 8)}，现在 ${current.slice(0, 8) || '(冲突)'}）；` +
-            `请重新 commit_request${this.describeStagedChanges(a, ref.abs)}`,
+          `分支在请求后已前进（请求 ${a.base_head.slice(0, 8)}）；请重新 commit_request`,
         );
+      }
+      if (!treeExists(ref.abs, a.staged_tree)) {
+        throw new Error(`审批快照 ${a.staged_tree.slice(0, 8)} 不存在；请重新 commit_request`);
       }
     } else {
       const current = workingTreeHash(ref.abs);
@@ -1327,35 +1430,46 @@ export class Workflow {
     return a;
   }
 
-  commitApproved(input: { repoId: string; approvalId: string; role: Role; dryRun?: boolean }) {
+  commitApproved(input: {
+    repoId: string;
+    approvalId: string;
+    role: Role;
+    dryRun?: boolean;
+    /** User-only narrow escape hatch for specific paths. */
+    allowPaths?: string[];
+    allowReason?: string;
+  }) {
     const ref = this.repoRef(input.repoId);
     const a = readApproval(this.root, input.approvalId);
     if (!a) throw new Error(`审批 ${input.approvalId} 不存在`);
     if (a.repo !== input.repoId) throw new Error(`审批属于 ${a.repo}，不是 ${input.repoId}`);
+    if (a.superseded_at) {
+      throw new Error(
+        `审批 ${a.id} 已被 ${a.superseded_by ?? '新的 commit_request'} 取代；请使用新审批`,
+      );
+    }
     if (!a.approved_at)
       throw new Error(`审批 ${a.id} 尚未由用户批准（mpt-workflow approve ${a.id}）`);
     if (a.used_at) throw new Error(`审批 ${a.id} 已在 ${a.used_at} 使用`);
 
-    // New approvals bind the exact index tree; worktree-only edits after the
-    // request are allowed and are simply not committed. Legacy approvals keep
-    // the old worktree-hash + re-stage behavior.
     const snapshot = Boolean(a.staged_tree);
     let files: string[];
     let dryHash: string;
     if (a.staged_tree) {
-      const current = stagedTreeOid(ref.abs);
-      if (!current || current !== a.staged_tree) {
+      if (a.base_head && gitInfo(ref.abs).head !== a.base_head) {
         throw new Error(
-          `暂存快照已变化（请求时 ${a.staged_tree.slice(0, 8)}，现在 ${current.slice(0, 8) || '(冲突)'}）；` +
-            `请重新 commit_request${this.describeStagedChanges(a, ref.abs)}`,
+          `分支在请求后已前进（请求 ${a.base_head.slice(0, 8)}）；请重新 commit_request 并批准`,
         );
       }
-      files = stagedFiles(ref.abs);
+      if (!treeExists(ref.abs, a.staged_tree)) {
+        throw new Error(`审批快照 ${a.staged_tree.slice(0, 8)} 不存在；请重新 commit_request`);
+      }
+      files = a.files;
       if (input.repoId === ROOT_REPO_ID) {
         if (input.role !== 'main' && input.role !== 'user') {
           throw new Error(`只有 main/user 能提交伞仓；当前角色 ${input.role}`);
         }
-        this.assertRootCommitFiles(files, { staged: true });
+        this.assertRootCommitFiles(files, { tree: a.staged_tree });
       } else {
         // Scope follows the role that requested the approval, not whoever
         // happens to execute the commit.
@@ -1366,9 +1480,9 @@ export class Workflow {
           judgeRole,
           { enforceAcl: false, files },
         );
-        assertCommitScope(scope, judgeRole);
+        assertCommitScope(filterAllowedScope(scope, input.allowPaths), judgeRole);
       }
-      dryHash = current;
+      dryHash = a.staged_tree;
     } else {
       const hash = workingTreeHash(ref.abs);
       if (hash !== a.tree_hash) {
@@ -1390,7 +1504,7 @@ export class Workflow {
           judgeRole,
           { enforceAcl: false },
         );
-        assertCommitScope(scope, judgeRole);
+        assertCommitScope(filterAllowedScope(scope, input.allowPaths), judgeRole);
         files = allChangedFiles(ref.abs);
       }
       dryHash = hash;
@@ -1399,7 +1513,10 @@ export class Workflow {
       return { dryRun: true, files, message: a.message, tree_hash: dryHash, snapshot };
     }
 
-    if (!snapshot) {
+    let head: string;
+    if (a.staged_tree) {
+      head = this.commitSnapshot(a, ref.abs, files, input);
+    } else {
       const stage = stageAll(ref.abs);
       if (!stage.ok) throw new Error(`git add 失败: ${stage.err}`);
       if (input.repoId === ROOT_REPO_ID) {
@@ -1413,10 +1530,13 @@ export class Workflow {
           );
         }
       }
+      const env: NodeJS.ProcessEnv = {};
+      if (input.allowPaths?.length) env.WF_ALLOW_PATHS = input.allowPaths.join(',');
+      if (input.allowReason) env.WF_ALLOW_REASON = input.allowReason;
+      const res = gitCommit(ref.abs, a.message, Object.keys(env).length ? env : undefined);
+      if (!res.ok) throw new Error(`git commit 失败: ${res.err || res.out}`);
+      head = gitInfo(ref.abs).head;
     }
-    const res = gitCommit(ref.abs, a.message);
-    if (!res.ok) throw new Error(`git commit 失败: ${res.err || res.out}`);
-    const head = gitInfo(ref.abs).head;
 
     a.used_at = isoNow();
     writeApproval(this.root, a);
@@ -1661,6 +1781,16 @@ export class Workflow {
 
 /* ------------------------------ helpers ------------------------------ */
 
+/** Keep `next` focused for repo-bound roles; blocking items always surface. */
+export function nextForRole(next: NextAction[], role: Role, repo?: string | null): NextAction[] {
+  if (role !== 'plan' && role !== 'todo') return next;
+  return next.filter((n) => {
+    if (n.blocking) return true;
+    if (n.repo) return n.repo === repo;
+    return n.actor === role;
+  });
+}
+
 /** Map a question's from/to label (PLAN, TODO@repo, system, …) to a Role. */
 function nextActor(label: string): Role {
   const [role, repo] = String(label).split('@');
@@ -1712,6 +1842,19 @@ function staleCliPaths(root: string, repoDirs: string[]): string[] {
     }
   }
   return [...missing];
+}
+
+function filterAllowedScope<
+  T extends { violations: { file: string; reason: string }[]; outOfScope: string[] },
+>(scope: T, allowPaths?: string[]): T {
+  if (!allowPaths?.length) return scope;
+  const allowed = (f: string) =>
+    allowPaths.some((p) => f === p || matchGlob(f, p.replace(/^\.\//, '')));
+  return {
+    ...scope,
+    violations: scope.violations.filter((v) => !allowed(v.file)),
+    outOfScope: scope.outOfScope.filter((f) => !allowed(f)),
+  };
 }
 
 function assertCommitScope(
