@@ -16,6 +16,7 @@ import { formatInitResult, init } from './core/init.js';
 import { formatMessage, type MessageKind } from './core/messages.js';
 import { migrateConfig, SCHEMA_VERSION } from './core/migrate.js';
 import { updateQuestion } from './core/questions.js';
+import { sessionDisplay } from './core/session.js';
 import { withLock } from './core/state.js';
 import { isRole, type Role } from './core/types.js';
 import { Workflow } from './core/workflow.js';
@@ -546,7 +547,7 @@ async function main() {
         const session = typeof flags.session === 'string' ? flags.session : undefined;
         const lease = setRoleLease(wf.root, { role, repo, at: new Date().toISOString() }, session);
         console.log(
-          `会话角色 = ${role}${repo ? ` @ ${repo}` : ''}（session ${lease.session?.slice(0, 12) ?? 'env'}）`,
+          `会话角色 = ${role}${repo ? ` @ ${repo}` : ''}（session ${sessionDisplay(lease.session)}）`,
         );
         console.log(describeAcl(role));
         return;

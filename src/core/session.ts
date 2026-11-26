@@ -118,9 +118,14 @@ export function readRoleLease(root: string, explicit?: string): RoleLease | null
   return null;
 }
 
+/** Stable, non-reversible display id for logs/status (never print the raw key). */
+export function sessionDisplay(key?: string): string {
+  if (!key) return 'env';
+  return crypto.createHash('sha256').update(key).digest('hex').slice(0, 8);
+}
+
 /** Human label for status: `plan@repo-a（abcd1234）` or `未声明`. */
-export function sessionLabel(lease: RoleLease | null, width = 8): string {
+export function sessionLabel(lease: RoleLease | null, _width = 8): string {
   if (!lease) return '未声明（bootstrap 或 WF_ROLE）';
-  const id = lease.session ? lease.session.slice(0, width) : 'env';
-  return `${lease.role}${lease.repo ? `@${lease.repo}` : ''}（${id}）`;
+  return `${lease.role}${lease.repo ? `@${lease.repo}` : ''}（${sessionDisplay(lease.session)}）`;
 }

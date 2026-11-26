@@ -6,7 +6,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { configPath, loadConfig, saveConfig } from '../src/core/config.js';
 import { init } from '../src/core/init.js';
-import { readRoleLease, setRoleLease } from '../src/core/session.js';
+import { readRoleLease, sessionDisplay, setRoleLease } from '../src/core/session.js';
 import { Workflow } from '../src/core/workflow.js';
 import { buildTools, invokeTool } from '../src/mcp/server.js';
 
@@ -185,7 +185,7 @@ test('status separates session identity from the global active repo', () => {
     assert.equal(st.activeRepo, 'repo-a');
     assert.equal(st.session?.role, 'plan');
     assert.equal(st.session?.repo, 'repo-a');
-    assert.equal(st.session?.id, 'sess-status');
+    assert.equal(st.session?.id, sessionDisplay('sess-status'));
     assert.equal(st.config.version.length, 12);
     assert.ok(st.config.loaded_at);
     assert.equal(st.config.error, undefined);

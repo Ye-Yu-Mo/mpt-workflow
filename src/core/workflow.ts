@@ -48,7 +48,7 @@ import { matchGlob } from './glob.js';
 import { appendToSection } from './markdown.js';
 import { type Actor, actorFromRole, actorKey, MessageStore } from './messages.js';
 import { parseQuestionsFile, questionsFile, updateQuestion } from './questions.js';
-import { readRoleLease } from './session.js';
+import { readRoleLease, sessionDisplay } from './session.js';
 import {
   type Approval,
   createApproval,
@@ -172,7 +172,7 @@ export class Workflow {
   sessionIdentity(): { role: Role; repo?: string; id?: string } | null {
     const lease = readRoleLease(this.root);
     if (!lease || !isRole(lease.role)) return null;
-    return { role: lease.role, repo: lease.repo, id: lease.session };
+    return { role: lease.role, repo: lease.repo, id: sessionDisplay(lease.session) };
   }
 
   /** Message store for this program (lazy). */
