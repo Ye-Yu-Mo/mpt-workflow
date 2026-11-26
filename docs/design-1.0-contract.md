@@ -48,7 +48,7 @@ output is human-facing and may be reworded; agents must not parse it.
 | `scope_check` | all | `milestone`, `repo`, `as_role` |
 | `commit_request` | all (`root`: `main`/`user`) | `message`, `repo`, `milestone` |
 | `commit` | all (`root`: `main`/`user`) | `approval`, `repo`, `dry_run` |
-| `phase_activate` | `main`, `user` | `repo`, `phase` |
+| `phase_activate` | `main`, `user` | `repo`, `phase`, `accept_previous` |
 
 New optional inputs may be added in a minor release. New tools may be added.
 Renaming or removing a tool/field requires a major release and an alias period.
@@ -122,8 +122,12 @@ are additive; boolean flags accept `--flag`, `--flag=false` and `--flag false`.
 
 ### 2.5 Integration points
 
-- Environment: `WF_ROLE`, `WF_REPO`; `WF_ALLOW_COMMIT=1` is the explicit
-  pre-commit escape hatch.
+- Environment: `WF_ROLE`, `WF_REPO`; `WF_SESSION` optionally pins the session
+  key; `WF_ALLOW_COMMIT=1` is the explicit pre-commit escape hatch.
+- Session identity: each session's role/repo lease is stored under
+  `.workflow/runtime/sessions/` keyed by `WF_SESSION`, Claude Code's
+  `CLAUDE_CODE_SESSION_ID`, or a generated MCP connection key. There is no
+  machine-wide role file.
 - Hook subcommands: `hook pretool` and `hook session-start` (stdin JSON, exit
   0 allow / 2 block), and `hook pre-commit` (installed as the git hook; exit 0
   allow / 1 block).

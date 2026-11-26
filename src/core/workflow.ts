@@ -1,7 +1,10 @@
 import { spawn } from 'node:child_process';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
 import path from 'node:path';
 import { checkAcl } from './acl.js';
 import {
+  configPath,
   evidenceDir,
   findRoot,
   loadConfig,
@@ -45,6 +48,7 @@ import { matchGlob } from './glob.js';
 import { appendToSection } from './markdown.js';
 import { type Actor, actorFromRole, actorKey, MessageStore } from './messages.js';
 import { parseQuestionsFile, questionsFile, updateQuestion } from './questions.js';
+import { readRoleLease } from './session.js';
 import {
   type Approval,
   createApproval,
@@ -66,6 +70,7 @@ import type {
   Role,
   TodoDoc,
 } from './types.js';
+import { isRole } from './types.js';
 
 export interface RepoRef {
   id: string;
@@ -76,12 +81,98 @@ export class Workflow {
   root: string;
   cfg: ProgramConfig;
   private _msgs?: MessageStore;
+  private cfgMtimeMs = 0;
+  private cfgSize = 0;
+  private cfgIno = 0;
+  private cfgVersion = '';
+  private cfgLoadedAt = '';
+  private cfgMtime = '';
+  private cfgError?: string;
 
   constructor(root: string, cfg?: ProgramConfig) {
     this.root = path.resolve(root);
     const loaded = cfg || loadConfig(this.root);
     if (!loaded) throw new Error(`未找到 ${path.join(this.root, '.workflow/program.yaml')}`);
     this.cfg = loaded;
+    this.trackConfigState();
+  }
+
+  /** Record the current file stat/hash without replacing the in-memory config. */
+  private trackConfigState(): void {
+    const p = configPath(this.root);
+    try {
+      const text = fs.readFileSync(p, 'utf8');
+      const st = fs.statSync(p);
+      this.cfgVersion = crypto.createHash('sha256').update(text).digest('hex').slice(0, 12);
+      this.cfgMtimeMs = st.mtimeMs;
+      this.cfgSize = st.size;
+      this.cfgIno = st.ino;
+      this.cfgMtime = new Date(st.mtimeMs).toISOString();
+      this.cfgLoadedAt = isoNow();
+      this.cfgError = undefined;
+    } catch {
+      /* missing/unreadable config: leave the error to refreshConfig */
+    }
+  }
+
+  /**
+   * Reload program.yaml when its mtime/size/inode changed. Every MCP tool call
+   * and status read calls this, so a second agent's config edit is visible
+   * without restarting the process. On a parse error the last good config is
+   * kept and the error is reported in `status.config.error`.
+   */
+  refreshConfig(): { changed: boolean; error?: string } {
+    const p = configPath(this.root);
+    let st: fs.Stats;
+    try {
+      st = fs.statSync(p);
+    } catch {
+      this.cfgError = 'program.yaml 不存在';
+      return { changed: false, error: this.cfgError };
+    }
+    if (st.mtimeMs === this.cfgMtimeMs && st.size === this.cfgSize && st.ino === this.cfgIno) {
+      return { changed: false, error: this.cfgError };
+    }
+    const loaded = loadConfig(this.root);
+    this.cfgMtimeMs = st.mtimeMs;
+    this.cfgSize = st.size;
+    this.cfgIno = st.ino;
+    this.cfgMtime = new Date(st.mtimeMs).toISOString();
+    if (!loaded) {
+      this.cfgError = 'program.yaml 无法解析（保留上次有效配置）';
+      return { changed: false, error: this.cfgError };
+    }
+    this.cfg = loaded;
+    try {
+      this.cfgVersion = crypto
+        .createHash('sha256')
+        .update(fs.readFileSync(p))
+        .digest('hex')
+        .slice(0, 12);
+    } catch {
+      /* the file changed again between load and hash; keep the old version */
+    }
+    this.cfgLoadedAt = isoNow();
+    this.cfgError = undefined;
+    // Program/repo changes invalidate the cached message store.
+    this._msgs = undefined;
+    try {
+      logEvent(this.root, {
+        role: 'system',
+        tool: 'config_reloaded',
+        ok: true,
+        detail: { version: this.cfgVersion, mtime: this.cfgMtime },
+      });
+    } catch {
+      /* the audit log is best-effort */
+    }
+    return { changed: true };
+  }
+
+  sessionIdentity(): { role: Role; repo?: string; id?: string } | null {
+    const lease = readRoleLease(this.root);
+    if (!lease || !isRole(lease.role)) return null;
+    return { role: lease.role, repo: lease.repo, id: lease.session };
   }
 
   /** Message store for this program (lazy). */
@@ -184,6 +275,7 @@ export class Workflow {
 
   save(): void {
     saveConfig(this.root, this.cfg);
+    this.refreshConfig();
   }
 
   /* --------------------------- questions ---------------------------- */
@@ -374,6 +466,7 @@ export class Workflow {
   /* --------------------------- program ------------------------------ */
 
   programStatus(): ProgramStatus {
+    const refresh = this.refreshConfig();
     try {
       this.msgs.expireDue();
     } catch {
@@ -398,6 +491,14 @@ export class Workflow {
       program: this.cfg.program,
       root: this.root,
       activeRepo: this.cfg.active_repo,
+      session: this.sessionIdentity(),
+      config: {
+        path: configPath(this.root),
+        version: this.cfgVersion || '(unknown)',
+        loaded_at: this.cfgLoadedAt,
+        mtime: this.cfgMtime,
+        error: refresh.error ?? this.cfgError,
+      },
       phases: this.cfg.phases,
       repos,
       questions,
@@ -603,18 +704,49 @@ export class Workflow {
     }
   }
 
-  updatePhase(id: string, status: 'planned' | 'active' | 'accepted' | 'done'): void {
-    withLock(this.root, 'program', () => {
+  /** Validate a phase activation without writing (used before the repo lock). */
+  assertPhaseActivation(id: string, acceptPrevious = false): void {
+    const p = this.cfg.phases.find((x) => x.id === id);
+    if (!p) throw new Error(`未知阶段 ${id}`);
+    if (acceptPrevious) return;
+    const previous = this.cfg.phases.filter((q) => q.status === 'active' && q.id !== id);
+    if (previous.length) {
+      throw new Error(
+        `阶段 ${previous.map((q) => q.id).join(', ')} 仍为 active；` +
+          `加 accept_previous=true 明确接受旧阶段，或先单独设置其状态`,
+      );
+    }
+  }
+
+  updatePhase(
+    id: string,
+    status: 'planned' | 'active' | 'accepted' | 'done',
+    opts: { acceptPrevious?: boolean } = {},
+  ): { id: string; from: string; to: string; auto: boolean }[] {
+    return withLock(this.root, 'program', () => {
       const fresh = loadConfig(this.root);
       if (fresh) this.cfg = fresh;
       const p = this.cfg.phases.find((x) => x.id === id);
       if (!p) throw new Error(`未知阶段 ${id}`);
-      // keep only one active phase
+      const changes: { id: string; from: string; to: string; auto: boolean }[] = [];
+      // Activating a phase is explicit: by default it never changes another
+      // phase. The caller must opt in to accepting the previously active one.
       if (status === 'active') {
-        for (const q of this.cfg.phases) if (q.status === 'active') q.status = 'accepted';
+        this.assertPhaseActivation(id, opts.acceptPrevious);
+        const previous = this.cfg.phases.filter((q) => q.status === 'active' && q.id !== id);
+        if (opts.acceptPrevious) {
+          for (const q of previous) {
+            changes.push({ id: q.id, from: q.status, to: 'accepted', auto: true });
+            q.status = 'accepted';
+          }
+        }
+      }
+      if (p.status !== status) {
+        changes.push({ id: p.id, from: p.status, to: status, auto: false });
       }
       p.status = status;
       this.save();
+      return changes;
     });
   }
 
@@ -1246,6 +1378,15 @@ export class Workflow {
         code: 'reserved-repo',
         message: `repos 不能使用保留 id '${ROOT_REPO_ID}'`,
         hint: `把该仓库改名为其他 id；'${ROOT_REPO_ID}' 专指伞仓文档`,
+      });
+    }
+    const legacyLease = path.join(runtimeDir(this.root), 'role.json');
+    if (exists(legacyLease)) {
+      push({
+        level: 'WARN',
+        code: 'legacy-lease',
+        message: '存在旧的全局角色文件 runtime/role.json',
+        hint: '1.0 起角色按会话存储；可删除该文件，改用 bootstrap 或 WF_ROLE/WF_REPO',
       });
     }
 

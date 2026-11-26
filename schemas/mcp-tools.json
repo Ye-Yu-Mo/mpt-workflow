@@ -485,6 +485,10 @@
           },
           "phase": {
             "type": "string"
+          },
+          "accept_previous": {
+            "description": "激活新阶段时把旧 active 阶段显式改为 accepted",
+            "type": "boolean"
           }
         },
         "required": [

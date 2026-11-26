@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Per-session role leases.** Roles are stored under
+  `.workflow/runtime/sessions/<hash>.json`, keyed by `WF_SESSION`, Claude Code's
+  `CLAUDE_CODE_SESSION_ID`, or a generated MCP connection key. `bootstrap` and
+  `mpt-workflow role --session ID` write the session lease; there is no
+  machine-wide `role.json` anymore. `doctor` warns if a legacy file remains.
+- **`program.yaml` hot reload.** Every MCP tool call, `status` and dashboard
+  request checks mtime/size/inode and reloads the config, so another agent's
+  edit is visible without restarting. A parse error keeps the last good config
+  and blocks state-changing tools.
+- **`status` identity fields.** The status output/JSON now separates
+  `session` (current session role/repo/id) from `activeRepo` (global serial
+  lock) and reports the loaded config `path`, `version`, `loaded_at`, `mtime`
+  and parse error.
+- **Explicit phase switches.** `phase_activate(phase=...)` no longer silently
+  changes the previously active phase. Without `accept_previous=true` the call
+  is refused; with it, the old phase moves to `accepted` and the output lists
+  every transition. Transitions are recorded in the `phase_activate` event.
+
+### Fixed
+
+- A broken `program.yaml` now fails closed: the PreToolUse/pre-commit hooks
+  refuse instead of silently bypassing the ACL, and MCP tools other than
+  `status`/`doctor` return an explicit config error.
+- A legacy global `runtime/role.json` is read as a migration fallback with a
+  warning; new leases are per-session.
+
 ## [1.0.0] - 2026-11-26
 
 ### Changed

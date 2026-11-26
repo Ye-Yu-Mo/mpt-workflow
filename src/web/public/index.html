@@ -1248,7 +1248,11 @@ async function load(opts = {}) {
     } else {
       hideError();
     }
-    $('#generated').textContent = '更新于 ' + new Date(st.generatedAt).toLocaleTimeString();
+    $('#generated').textContent = `更新于 ${new Date(st.generatedAt).toLocaleTimeString()} · 配置 ${st.config?.version ?? '?'}` +
+      (st.config?.error ? '（解析失败）' : '');
+    $('#generated').title = st.config
+      ? `${st.config.path}\nmtime=${st.config.mtime}\nloaded_at=${st.config.loaded_at}`
+      : '';
     if (!opts.silent && y > 0) { try { window.scrollTo(0, y); } catch { /* jsdom/no-op */ } }
   } catch (e) {
     showError('加载失败：' + e.message);

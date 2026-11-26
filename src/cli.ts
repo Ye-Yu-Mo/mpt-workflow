@@ -49,7 +49,7 @@ function usage(): string {
   mpt-workflow presence [--session NAME]
   mpt-workflow approve <approval-id> [--root DIR]
   mpt-workflow activate <repo|-> [--root DIR]
-  mpt-workflow role <main|plan|todo|user> [--repo NAME] [--root DIR]
+  mpt-workflow role <main|plan|todo|user> [--repo NAME] [--session ID] [--root DIR]
   mpt-workflow commit <approval-id> [--root DIR]
   mpt-workflow web [--root DIR] [--port 7788]
   mpt-workflow mcp [--root DIR] [--role ROLE] [--repo NAME]
@@ -127,11 +127,14 @@ function printStatus(wf: Workflow, json: boolean) {
     process.stdout.write(JSON.stringify(st, null, 2) + '\n');
     return;
   }
-  const lease = readRoleLease(wf.root);
   console.log(`程序: ${st.program}`);
   console.log(`根目录: ${st.root}`);
   console.log(
-    `active repo: ${st.activeRepo ?? '(none)'}${lease ? `   本会话角色: ${lease.role}${lease.repo ? '@' + lease.repo : ''}` : ''}`,
+    `当前会话: ${st.session ? `${st.session.role}${st.session.repo ? `@${st.session.repo}` : ''}（${st.session.id ? st.session.id.slice(0, 8) : 'env'}）` : '未声明（bootstrap 或 WF_ROLE）'}`,
+  );
+  console.log(`全局 active repo: ${st.activeRepo ?? '(none)'}`);
+  console.log(
+    `配置: ${st.config.version} · ${st.config.path}${st.config.error ? ` · 解析失败: ${st.config.error}` : ` · 加载于 ${st.config.loaded_at}`}`,
   );
   console.log('');
   for (const p of st.phases)
@@ -535,11 +538,16 @@ async function main() {
         const wf = resolveWorkflow(flags);
         const role = (positional[1] || '') as Role;
         if (!['main', 'plan', 'todo', 'user'].includes(role)) {
-          throw new Error('用法: mpt-workflow role <main|plan|todo|user> [--repo NAME]');
+          throw new Error(
+            '用法: mpt-workflow role <main|plan|todo|user> [--repo NAME] [--session ID]',
+          );
         }
         const repo = typeof flags.repo === 'string' ? flags.repo : undefined;
-        setRoleLease(wf.root, { role, repo, at: new Date().toISOString() });
-        console.log(`本机会话角色 = ${role}${repo ? ` @ ${repo}` : ''}`);
+        const session = typeof flags.session === 'string' ? flags.session : undefined;
+        const lease = setRoleLease(wf.root, { role, repo, at: new Date().toISOString() }, session);
+        console.log(
+          `会话角色 = ${role}${repo ? ` @ ${repo}` : ''}（session ${lease.session?.slice(0, 12) ?? 'env'}）`,
+        );
         console.log(describeAcl(role));
         return;
       }

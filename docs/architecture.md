@@ -89,7 +89,10 @@ answered-but-unclosed question stays visible in `next`.
 Delivery is at-least-once: the message is written before any wake-up attempt.
 
 **Program phase**: `planned → active → accepted → done`. Only one repository is
-`active_repo` at a time (a serial lock); `main` changes it.
+`active_repo` at a time (a serial lock); `main` changes it. Activating a phase
+never changes other phases by default: if another phase is `active`, the call
+is refused unless `accept_previous=true`, in which case the old phase moves to
+`accepted` and the output lists every transition.
 
 ## 4. Roles and ACL
 
@@ -207,11 +210,19 @@ ever justifies it.
     ├── approvals/      <ap-id>.json (one-shot commit approvals)
     ├── evidence/       full command output
     ├── locks/          advisory directory locks
-    └── role.json       machine-wide role lease (single-session convenience)
+    └── sessions/       per-session role leases (`<hash>.json`, keyed by session id)
 ```
 
 All writes are atomic (temp file + rename). Writes that must not interleave
 (program config, approvals) take a directory lock with a stale timeout.
+
+`program.yaml` is re-read when its mtime/size/inode changes: every MCP tool
+call, `status` and the dashboard refresh check it, so one agent's config edit is
+visible to the others without a restart. Each reload appends a
+`config_reloaded` event. `status` exposes the loaded content hash, load time,
+mtime and any parse error; a parse error keeps the last good config for
+diagnostics, fails closed in the hooks, and blocks state-changing MCP tools
+until fixed.
 
 `gc` (dry-run by default) removes processed messages and used approvals older
 than 30 days, stale presence records and stale lock directories. Evidence logs
