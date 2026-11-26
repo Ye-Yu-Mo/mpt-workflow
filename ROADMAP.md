@@ -66,6 +66,12 @@ feature surface.
       demand-driven; see [docs/support-scope.md](docs/support-scope.md).
 - [x] **Platform**: macOS / Linux / WSL2 for now; native Windows is deferred.
 
+## 0.10 — 1.0 readiness
+
+- [x] `schema_version: 1`, preview-first `migrate`, generated MCP JSON Schema.
+- [x] Contract snapshot tests and a 0.x-format compatibility lifecycle fixture.
+- [x] Release `0.10.0`.
+
 ## 1.0 — stable contract
 
 Design: [docs/design-1.0-contract.md](docs/design-1.0-contract.md).
