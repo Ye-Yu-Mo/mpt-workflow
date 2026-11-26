@@ -382,6 +382,15 @@ details.ms-detail[open] summary::before { content: "▾"; }
 
   <div class="tiles" id="tiles"></div>
 
+  <section class="card" style="margin-bottom:20px">
+    <div class="card-head"><h2>中转站 · 发给 agent 的消息</h2><span class="count" id="relay-count"></span></div>
+    <div class="msg-help">
+      交互式 Claude Code 会话无法被外部唤醒。这里把待处理消息整理成可直接粘贴的启动提示词：
+      复制后粘贴到对应角色的会话即可（包含 bootstrap、消息 ID 和 ack 要求）。
+    </div>
+    <div class="list" id="relay"></div>
+  </section>
+
   <div class="grid">
     <div class="col">
       <section class="card">
@@ -481,6 +490,7 @@ const QSTATUS = { open: '待回答', answered: '已回答', applied: '已应用'
 let data = null;
 let showClosed = false;
 let messagesData = { unread: 0, blocking: [], messages: [] };
+let relayData = { targets: [] };
 let messageFilter = 'unread';
 let autoRefresh = storeGet('wf-auto') !== 'off';
 let openDetail = null;
@@ -906,6 +916,54 @@ function relayText(q) {
   return lines.join('\n');
 }
 
+function renderRelay(relay) {
+  relayData = relay || { targets: [] };
+  const box = $('#relay');
+  if (!box) return;
+  box.innerHTML = '';
+  const targets = relayData.targets || [];
+  const total = targets.reduce((n, t) => n + (t.count || 0), 0);
+  $('#relay-count').textContent = total
+    ? `${targets.length} 个收件人 · ${total} 条待转交`
+    : '没有待转交消息';
+  if (!targets.length) {
+    box.appendChild(el('div', 'empty', '没有需要转交给 agent 的消息。'));
+    return;
+  }
+  targets.forEach((t, i) => {
+    const name = t.actor.role + (t.actor.repo ? '@' + t.actor.repo : '');
+    const r = el('div', 'row-item');
+    const subjects = (t.messages || []).slice(0, 4).map(m =>
+      `<div class="repo-meta">${esc(m.id)} · ${esc(m.kind)}${m.blocking ? ' · blocking' : ''} · ${esc(m.subject)}</div>`
+    ).join('');
+    r.innerHTML = `
+      <div class="v" style="flex:1">
+        <div><b>${esc(name)}</b> <span class="tag">${t.count} 条</span>${t.blocking ? ` <span class="tag bad">${t.blocking} blocking</span>` : ''}</div>
+        <div class="repo-meta">${esc(t.repoPath)}${t.branch ? ' · ' + esc(t.branch) : ''}</div>
+        ${subjects}
+        <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn" data-relay-copy="${i}">复制给 ${esc(name)} 的提示词</button>
+          <button class="btn ghost" data-relay-view="${i}">查看</button>
+        </div>
+      </div>`;
+    box.appendChild(r);
+  });
+  box.querySelectorAll('[data-relay-copy]').forEach(b => {
+    b.onclick = () => {
+      const t = relayData.targets[Number(b.dataset.relayCopy)];
+      if (t) copyText(t.prompt, b);
+    };
+  });
+  box.querySelectorAll('[data-relay-view]').forEach(b => {
+    b.onclick = () => {
+      const t = relayData.targets[Number(b.dataset.relayView)];
+      if (!t) return;
+      const name = t.actor.role + (t.actor.repo ? '@' + t.actor.repo : '');
+      openModal(`转发给 ${name}`, `<pre class="diff">${esc(t.prompt)}</pre>`);
+    };
+  });
+}
+
 function renderMessageFilters() {
   const box = $('#message-filters');
   const defs = [['unread', '未读'], ['blocking', 'blocking'], ['all', '全部']];
@@ -1143,8 +1201,8 @@ async function load(opts = {}) {
     // Someone started typing while the requests were in flight: do not replace
     // the focused DOM. The next tick will retry.
     if (opts.auto && isEditing()) return;
-    const [eventsRes, doctorRes] = await Promise.allSettled([
-      get('/api/events?limit=120'), get('/api/doctor'),
+    const [eventsRes, doctorRes, relayRes] = await Promise.allSettled([
+      get('/api/events?limit=120'), get('/api/doctor'), get('/api/relay'),
     ]);
     data = st;
     window.__approvals = approvals;
@@ -1152,6 +1210,7 @@ async function load(opts = {}) {
     renderTiles(st);
     renderRepos(st);
     renderQuestions(st);
+    renderRelay(relayRes.status === 'fulfilled' ? relayRes.value : { targets: [] });
     renderMessages();
     renderNext(st);
     renderApprovals();

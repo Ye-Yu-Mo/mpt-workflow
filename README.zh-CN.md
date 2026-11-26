@@ -116,6 +116,9 @@ MCP 工具：`inbox` / `read_message` / `ack_message` / `wait_message` /
 - **幂等**：带 `idempotency_key` 的重复发送只产生一条。
 - **ACL**：`todo@repo → plan@同仓`；`todo → main` 仅 `alert`；`plan → main`；`plan → todo@同仓`；
   `plan → user` 仅 `alert`；`main`/`user`/`system` 不受限；跨仓必须经 main。
+- **唤醒另一个 agent**：交互式 Claude Code 会话无法被本进程注入文本。用看板
+  **中转站**：它按收件人汇总待处理消息，并生成含 bootstrap、消息 ID、ack/close
+  步骤的提示词，复制到对应会话即可。
 - 唤醒是 best-effort：SessionStart hook 会注入未读摘要，但**消息本身以存储为准**。
 
 ### 1.6 问题生命周期
@@ -270,6 +273,9 @@ MCP 进程就在伞仓根目录运行时，`repo` 可以省略。只有 `main` /
 - 顶部：程序进度（hero number）、阻塞问题、进行中的 M、待批准提交、脏工作区。
 - 左：仓库卡片（里程碑轨道、当前 M、证据）+ 问题收件箱。
 - 右：下一步、待批准提交、环境体检、时间线。
+- **中转站**：按收件人汇总 `plan@repo` / `todo@repo` / `main` 的待处理消息，
+  每条收件人记录带一份可直接粘贴的启动提示词（bootstrap、消息 ID、ack 与问题 close 规则）。
+  交互式 Claude Code 会话无法被外部唤醒，所以最后一步仍需你粘贴；看板只是省掉手工组织提示词。
 - 待批准提交可先看 diff（包含新增/未跟踪文件；过大时标注截断）；工作区变化会标记并禁用批准。
 - 自动刷新不会抢输入焦点；写失败用固定 toast 提示；仓库卡片可直接“设为 active”。
 

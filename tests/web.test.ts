@@ -51,6 +51,13 @@ function fixture() {
 
 test('dashboard renders from a live API', async () => {
   const { root, abs, wf } = fixture();
+  wf.msgs.send({
+    from: { role: 'todo', repo: 'repo-a' },
+    to: { role: 'plan', repo: 'repo-a' },
+    kind: 'question',
+    subject: 'relay-render-check',
+    body: 'relay body',
+  });
   const server = await startWebServer(wf, 0);
   const base = server.url;
   const html = fs.readFileSync(path.resolve(process.cwd(), 'src/web/public/index.html'), 'utf8');
@@ -110,6 +117,9 @@ test('dashboard renders from a live API', async () => {
     assert.equal(doc.querySelectorAll('#repos .ms').length, 2, 'milestone chips');
     assert.equal(doc.querySelectorAll('#tiles .tile').length, 5, 'five stat tiles');
     assert.ok(doc.querySelectorAll('#next .row-item').length > 0, 'next actions');
+    assert.match(doc.querySelector('#relay')?.textContent || '', /plan@repo-a/);
+    assert.match(doc.querySelector('#relay')?.textContent || '', /relay-render-check/);
+    assert.ok(doc.querySelector('#relay [data-relay-copy]'), 'relay copy button');
 
     // message panel shows the unread message and explains read vs ack
     assert.match(doc.querySelector('#messages')?.textContent || '', /review M1/);
@@ -218,6 +228,51 @@ test('approval API marks a changed worktree as stale', async () => {
     const res = await fetch(`${server.url}/api/approvals`);
     const list = (await res.json()) as { stale?: boolean }[];
     assert.equal(list[0]?.stale, true);
+  } finally {
+    await server.close();
+  }
+});
+
+test('relay API turns agent messages into pasteable prompts', async () => {
+  const { wf } = fixture();
+  wf.msgs.send({
+    from: { role: 'todo', repo: 'repo-a' },
+    to: { role: 'plan', repo: 'repo-a' },
+    kind: 'question',
+    subject: 'M1 needs a decision',
+    body: 'Should we keep the old field?',
+  });
+  wf.msgs.send({
+    from: { role: 'plan', repo: 'repo-a' },
+    to: { role: 'main' },
+    kind: 'event',
+    subject: 'M1 is ready for review',
+    body: 'Please look at the diff.',
+  });
+
+  const server = await startWebServer(wf, 0);
+  try {
+    const relay = (await (await fetch(`${server.url}/api/relay`)).json()) as {
+      targets: {
+        actor: { role: string; repo?: string };
+        count: number;
+        branch: string;
+        prompt: string;
+        messages: { id: string; kind: string; subject: string }[];
+      }[];
+    };
+    assert.ok(relay.targets.every((t) => t.actor.role !== 'user'));
+    const plan = relay.targets.find((t) => t.actor.role === 'plan' && t.actor.repo === 'repo-a');
+    assert.ok(plan, 'plan@repo-a should have a relay target');
+    assert.equal(plan.branch.length > 0, true);
+    assert.ok(plan.messages.some((m) => m.subject === 'M1 needs a decision'));
+    assert.match(plan.prompt, /bootstrap\(role="plan", repo="repo-a"\)/);
+    assert.match(plan.prompt, /answer\(id/);
+    assert.match(plan.prompt, /ack_message/);
+
+    const main = relay.targets.find((t) => t.actor.role === 'main');
+    assert.ok(main);
+    assert.ok(main.messages.some((m) => m.subject === 'M1 is ready for review'));
   } finally {
     await server.close();
   }
