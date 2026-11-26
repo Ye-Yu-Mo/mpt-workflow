@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `milestone_complete` now records the verified SHA at implementation completion
+  (not only at accept), so the TODO no longer lags between review and acceptance.
+- `bootstrap` says “no unread messages” with a timestamp and points to `inbox`
+  for messages that arrive afterwards.
+- `setTodoSha` updates an existing frontmatter `sha:` instead of inserting a
+  duplicate key.
+
 ## [1.3.0] - 2026-11-26
 
 ### Added

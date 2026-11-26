@@ -426,6 +426,9 @@ export function setTodoSha(text: string, sha: string): string {
   if (/受验\s*SHA[：:]/.test(text)) {
     return text.replace(/(受验\s*SHA[：:]\s*)([^\n　|]+)/, `$1${sha}`);
   }
+  if (/^sha:.*$/m.test(text)) {
+    return text.replace(/^sha:.*$/m, `sha: ${sha}`);
+  }
   if (/^---$/m.test(text)) {
     return text.replace(/^---\n/, `---\nsha: ${sha}\n`);
   }
