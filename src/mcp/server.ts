@@ -5,7 +5,6 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { describeAcl } from '../core/acl.js';
 import { loadConfig, ROOT_REPO_ID } from '../core/config.js';
-import { setRoleLease } from '../core/hooks.js';
 import {
   type Actor,
   actorKey,
@@ -19,6 +18,7 @@ import {
   QUESTION_STATUS_HELP,
   questionsFile,
 } from '../core/questions.js';
+import { ensureSessionKey, sessionLabel, setRoleLease } from '../core/session.js';
 import { logEvent, withLock } from '../core/state.js';
 import type { Role } from '../core/types.js';
 import { isRole } from '../core/types.js';
@@ -76,7 +76,13 @@ function statusText(wf: Workflow, role: Role | null, repo: string | null): strin
   }
   lines.push(`程序: ${st.program}`);
   lines.push(`根目录: ${st.root}`);
-  lines.push(`active repo: ${st.activeRepo ?? '(none)'}`);
+  lines.push(
+    `当前会话: ${st.session ? `${st.session.role}${st.session.repo ? `@${st.session.repo}` : ''}（${st.session.id ? st.session.id.slice(0, 8) : 'env'}）` : '未声明（bootstrap 或 WF_ROLE）'}`,
+  );
+  lines.push(`全局 active repo: ${st.activeRepo ?? '(none)'}`);
+  lines.push(
+    `配置: ${st.config.version} · ${st.config.path}${st.config.error ? ` · 解析失败: ${st.config.error}` : ` · 加载于 ${st.config.loaded_at}`}`,
+  );
   if (role) lines.push(`本会话角色: ${role}${repo ? ` (绑定 ${repo})` : ''}`);
   lines.push('');
   for (const p of st.phases) {
@@ -154,7 +160,12 @@ function buildTools(_opts: ServerOptions): ToolSpec[] {
           return err(`角色 ${role} 必须指定 repo`);
         }
         if (repo) ctx.wf.repoRef(repo);
-        setRoleLease(ctx.wf.root, { role, repo: repo ?? undefined, at: new Date().toISOString() });
+        ensureSessionKey();
+        const lease = setRoleLease(ctx.wf.root, {
+          role,
+          repo: repo ?? undefined,
+          at: new Date().toISOString(),
+        });
         ctx.role = role;
         ctx.repo = repo;
         ctx.declared = true;
@@ -167,7 +178,7 @@ function buildTools(_opts: ServerOptions): ToolSpec[] {
         const recent = ctx.wf.msgs.forActor(me, { limit: 3 });
         logEvent(ctx.wf.root, { role, tool: 'bootstrap', repo: repo ?? undefined, ok: true });
         return [
-          `已绑定角色 ${role}${repo ? ` @ ${repo}` : ''}。`,
+          `已绑定角色 ${role}${repo ? ` @ ${repo}` : ''}。会话 ${sessionLabel(lease)}`,
           '',
           describeAcl(role),
           '',
@@ -845,25 +856,44 @@ function buildTools(_opts: ServerOptions): ToolSpec[] {
     },
     {
       name: 'phase_activate',
-      description: '主 agent 激活一个仓（串行锁），或设置为 null 暂停。',
+      description:
+        '主 agent 激活一个仓（串行锁），可选激活阶段。默认不改其他阶段状态；接受旧 active 阶段需 accept_previous=true。',
       roles: ['main', 'user'],
       schema: {
         repo: z.string().describe('仓库 id；传空字符串表示无'),
         phase: z.string().optional(),
+        accept_previous: z
+          .boolean()
+          .optional()
+          .describe('激活新阶段时把旧 active 阶段显式改为 accepted'),
       },
       handler: (args, ctx) => {
         const repo = String(args.repo || '');
+        // Validate the phase switch before changing the repo lock, so a refused
+        // activation does not leave a half-applied config.
+        if (args.phase) {
+          ctx.wf.assertPhaseActivation(String(args.phase), Boolean(args.accept_previous));
+        }
         ctx.wf.setActiveRepo(repo || null);
-        if (args.phase) ctx.wf.updatePhase(String(args.phase), 'active');
+        const changes = args.phase
+          ? ctx.wf.updatePhase(String(args.phase), 'active', {
+              acceptPrevious: Boolean(args.accept_previous),
+            })
+          : [];
         logEvent(ctx.wf.root, {
           role: ctx.role,
           tool: 'phase_activate',
           repo: repo || undefined,
           ok: true,
+          detail: { phase: args.phase, changes },
         });
-        return repo
-          ? `active repo = ${repo}${args.phase ? `，阶段 ${args.phase} = active` : ''}`
-          : 'active repo 已清空';
+        const lines = [
+          repo ? `active repo = ${repo}` : 'active repo 已清空',
+          ...changes.map(
+            (c) => `阶段 ${c.id}: ${c.from} -> ${c.to}${c.auto ? '（auto, accept_previous）' : ''}`,
+          ),
+        ];
+        return lines.join('\n');
       },
     },
   ];
@@ -958,6 +988,9 @@ export async function runMcpServer(opts: ServerOptions): Promise<void> {
     process.stderr.write(`[workflow] 角色 ${role} 必须通过 --repo 或 WF_REPO 绑定仓库\n`);
     process.exit(1);
   }
+  // Per-session lease: Claude Code provides CLAUDE_CODE_SESSION_ID; otherwise
+  // give this MCP connection its own key (never a machine-wide role file).
+  ensureSessionKey();
   const ctx: Ctx = { wf, role, repo, declared: Boolean(requested) };
   // Do not write the machine-wide role lease at startup: several role sessions
   // may run at once. Hooks should get their role from WF_ROLE/WF_REPO; the
@@ -1039,6 +1072,15 @@ export async function invokeTool(
     );
   }
   try {
+    // program.yaml is shared by several agent processes; pick up edits made by
+    // another session without restarting this MCP server.
+    const refresh = ctx.wf.refreshConfig();
+    // Only diagnostics may run on a broken config; everything else must fail
+    // instead of silently using the previous in-memory snapshot.
+    const diagnostics = new Set(['status', 'doctor']);
+    if (refresh.error && !diagnostics.has(name)) {
+      return err(`[${name}] 配置不可用：${refresh.error}；修复 program.yaml 后重试`);
+    }
     return await t.handler(args, ctx);
   } catch (e) {
     return err(`[${name}] ${(e as Error).message}`);

@@ -43,6 +43,17 @@ The ACL is enforced by hooks, and the role is self-declared:
 - Bash writes are only best-effort checked (obvious `>` redirects). Use the
   pre-commit hook as the backstop.
 
+## `phase_activate` is refused or changes a phase
+
+- Activating a phase (`phase_activate(repo, phase)`) no longer silently accepts
+  the previously active phase. If another phase is `active`, the call fails and
+  names it; pass `accept_previous=true` to move the old phase to `accepted`.
+- The output lists every transition (`P2: active -> accepted (auto,
+  accept_previous)`, `P1: planned -> active`). If no phase is given, only the
+  repository lock changes.
+- `active_repo` and phase status are global (`program.yaml`), not per-session;
+  `status` shows the current value and config version.
+
 ## A question is answered but never closes
 
 Question status is `open → answered → closed` (`canceled` = withdrawn;
@@ -111,6 +122,29 @@ explicit status):
   - `伞仓没有可提交的改动`: nothing changed under the allowlist.
   - The user can still commit the umbrella by hand (`git commit`); the MCP flow
     exists so the diff is reviewed first.
+
+## A `program.yaml` edit is not visible
+
+- 1.0 reloads `program.yaml` when its mtime/size/inode changes: every MCP tool
+  call, `status` and dashboard refresh checks it. No restart is needed.
+- `status` prints the loaded content hash and load time. If it shows a parse
+  error, the last good config is kept and state-changing tools are blocked;
+  fix the YAML and retry.
+- A running `mpt-workflow web` refreshes on each request; a CLI command starts a
+  fresh `Workflow` and always reads the current file.
+
+## A role is not applied / an old `role.json` exists
+
+- Roles are stored per session (`runtime/sessions/<hash>.json`) keyed by
+  `WF_SESSION`, Claude Code's session id, or the MCP connection. A global
+  `runtime/role.json` from an older release is ignored; `doctor` warns about it
+  and it can be deleted.
+- Declare the role with `bootstrap(role, repo)` in the session, or pass
+  `WF_ROLE`/`WF_REPO`. From a terminal, `mpt-workflow role ... --session ID`
+  writes a specific session lease.
+- `status` distinguishes **当前会话** from the **全局 active repo**; a mismatch
+  between them is expected (the session role and the serial repo lock are
+  independent).
 
 ## `evidence_run` fails or times out
 

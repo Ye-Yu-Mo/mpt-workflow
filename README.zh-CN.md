@@ -68,7 +68,9 @@ mpt-workflow init --root /path/to/workspace --install-hooks
 
 ### 1. 开会话时声明角色
 
-每个 Claude Code 会话只做一件事。角色两种声明方式，**并发会话请用环境变量**：
+每个 Claude Code 会话只做一件事。角色**按会话存储**（Claude Code session id /
+`WF_SESSION` / MCP 连接），不再写全局 `role.json`；`bootstrap` 写入的也是本会话的
+lease。并发会话仍推荐环境变量：
 
 ```bash
 # 方式 A：环境变量（推荐，多会话互不干扰）
@@ -79,6 +81,10 @@ WF_ROLE=main claude
 # 方式 B：会话里调用 MCP 工具
 bootstrap(role="plan", repo="my-service")
 ```
+
+`status` 会分开显示 **当前会话**（本会话角色/仓库）和 **全局 active repo**
+（`program.yaml` 里的串行锁），并带上已加载配置的版本 hash 与时间戳。
+`program.yaml` 在 mtime/size 变化时会自动重载，另一个 agent 的修改无需重启即可见。
 
 装了这个 MCP 后，会话第一句就可以是 `status` 或 `next`，不用再解释“我是谁、做到哪了”。
 
@@ -149,7 +155,7 @@ claim/complete/accept/reject。
 ### 2. 主 agent（main）
 
 - `status` / `next` / `doctor` —— 全局视图。
-- `phase_activate(repo="my-service")` —— 串行锁，一次只激活一个仓。
+- `phase_activate(repo="my-service")` —— 串行锁，一次只激活一个仓。切阶段时默认不动旧 active；用 `accept_previous=true` 才把旧阶段改为 accepted。
 - `ask(to="user", ...)` —— 需要用户拍板时提问。
 - 写伞仓 `docs/`、`CLAUDE.md`、`decisions` —— 直接用 Edit/Write，不需要经过工具。
 - 提交伞仓文档：`commit_request(repo="root")` → 用户批准 → `commit(repo="root")`。
@@ -255,7 +261,7 @@ MCP 进程就在伞仓根目录运行时，`repo` 可以省略。只有 `main` /
 | `milestone_accept` / `milestone_reject` | plan/main | 验收 / 打回 |
 | `scope_check` | 全部 | 改动 vs ACL + TODO 文件清单 |
 | `commit_request` / `commit` | 全部（root：main/user） | 提交审批与执行 |
-| `phase_activate` | main/user | 激活仓（串行锁） |
+| `phase_activate` | main/user | 激活仓（串行锁）；切阶段需显式 `accept_previous` |
 | `send_message` / `inbox` / `read_message` / `ack_message` | 全部（按 ACL） | 定向消息 |
 | `wait_message` | 全部 | 长轮询等新消息（30–120s） |
 | `broadcast` / `presence` / `escalate` | main / 全部 / 全部 | 广播、在线状态、升级 |

@@ -1,14 +1,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { checkAcl } from './acl.js';
-import { runtimeDir } from './config.js';
+import { findRoot } from './config.js';
 import { parseTodo } from './docs.js';
-import { exists, readText, writeAtomic } from './fsutil.js';
 import { stagedFiles } from './git.js';
 import { matchGlob } from './glob.js';
 import { QUESTION_STATUS_HELP } from './questions.js';
+import { type RoleLease, readRoleLease, sessionLabel } from './session.js';
 import { isRole, type Role } from './types.js';
 import { isMachineManagedFile, Workflow } from './workflow.js';
+
+export { type RoleLease, readRoleLease, setRoleLease } from './session.js';
 
 export interface HookInput {
   session_id?: string;
@@ -30,31 +32,12 @@ export function readHookInput(): HookInput {
 
 /* ------------------------------ role lease ------------------------------ */
 
-export interface RoleLease {
-  role: Role;
-  repo?: string;
-  at: string;
-}
-
-function leasePath(root: string): string {
-  return path.join(runtimeDir(root), 'role.json');
-}
-
-export function setRoleLease(root: string, lease: RoleLease): void {
-  writeAtomic(leasePath(root), JSON.stringify(lease, null, 2));
-}
-
-export function readRoleLease(root: string): RoleLease | null {
-  const envRole = process.env.WF_ROLE as Role | undefined;
-  const envRepo = process.env.WF_REPO;
-  if (envRole) return { role: envRole, repo: envRepo, at: new Date().toISOString() };
-  const p = leasePath(root);
-  if (!exists(p)) return null;
-  try {
-    return JSON.parse(readText(p)) as RoleLease;
-  } catch {
-    return null;
-  }
+function warnLegacyLease(lease: RoleLease | null): void {
+  if (lease?.source !== 'legacy') return;
+  process.stderr.write(
+    '[workflow] 正在使用旧的全局 runtime/role.json（迁移兼容）；' +
+      '请在会话内 bootstrap 重新声明角色，之后可删除该文件。\n',
+  );
 }
 
 /** Infer which repo owns `abs`, falling back to the lease's repo. */
@@ -98,9 +81,18 @@ function runPretoolInner(): number {
   const input = readHookInput();
   const cwd = input.cwd || process.cwd();
   const wf = Workflow.discover(cwd);
-  if (!wf) return 0; // workflow not active here
+  if (!wf) {
+    // A config file exists but cannot be parsed: fail closed instead of
+    // silently disabling the ACL.
+    if (findRoot(cwd)) {
+      process.stderr.write('[workflow] program.yaml 无法解析；按 fail-closed 拒绝本次调用\n');
+      return 2;
+    }
+    return 0; // workflow not active here
+  }
 
-  const lease = readRoleLease(wf.root);
+  const lease = readRoleLease(wf.root, input.session_id);
+  warnLegacyLease(lease);
   if (!lease) {
     // No role declared: only guard the most dangerous action.
     return guardPush(input) ? 2 : 0;
@@ -252,16 +244,26 @@ export function runSessionStart(): number {
   const cwd = process.env.CLAUDE_PROJECT_DIR || process.cwd();
   const wf = Workflow.discover(cwd);
   if (!wf) return 0;
-  const lease = readRoleLease(wf.root);
+  let session: string | undefined;
+  try {
+    // SessionStart hooks receive session_id on stdin; a terminal invocation
+    // has no JSON to read.
+    if (!process.stdin.isTTY) session = readHookInput().session_id;
+  } catch {
+    /* no stdin: fall back to WF_SESSION / CLAUDE_CODE_SESSION_ID */
+  }
+  const lease = readRoleLease(wf.root, session);
+  warnLegacyLease(lease);
   const st = wf.programStatus();
 
   const lines: string[] = [];
   lines.push('# workflow 状态（自动注入）');
   lines.push(
-    `程序 ${st.program} · active repo: ${st.activeRepo ?? '(none)'}` +
-      (lease
-        ? ` · 本会话角色: ${lease.role}${lease.repo ? `@${lease.repo}` : ''}`
-        : ' · 本会话角色: 未声明'),
+    `程序 ${st.program} · 全局 active repo: ${st.activeRepo ?? '(none)'}` +
+      ` · 当前会话: ${sessionLabel(lease)}` +
+      (st.config.error
+        ? ` · 配置解析失败: ${st.config.error}`
+        : ` · 配置: ${st.config.version} @ ${st.config.mtime}`),
   );
 
   for (const r of st.repos) {
@@ -332,11 +334,18 @@ export function runSessionStart(): number {
 export function runPreCommit(): number {
   const cwd = process.cwd();
   const wf = Workflow.discover(cwd);
-  if (!wf) return 0;
+  if (!wf) {
+    if (findRoot(cwd)) {
+      process.stderr.write('[workflow] program.yaml 无法解析；拒绝提交\n');
+      return 1;
+    }
+    return 0;
+  }
   const owned = wf.repoForPath(cwd);
   if (!owned) return 0; // umbrella commits are the user's own docs
 
   const lease = readRoleLease(wf.root);
+  warnLegacyLease(lease);
   const roleRaw = lease?.role ?? 'user';
   if (!isRole(roleRaw)) {
     process.stderr.write(`[workflow] 无效角色 ${String(roleRaw)}；拒绝提交\n`);

@@ -61,7 +61,7 @@ const TOOL_CONTRACT: Record<string, { roles: string; inputs: string[] }> = {
   scope_check: { roles: 'main,plan,todo,user', inputs: ['milestone', 'repo', 'as_role'] },
   commit_request: { roles: 'main,plan,todo,user', inputs: ['message', 'repo', 'milestone'] },
   commit: { roles: 'main,plan,todo,user', inputs: ['approval', 'repo', 'dry_run'] },
-  phase_activate: { roles: 'main,user', inputs: ['repo', 'phase'] },
+  phase_activate: { roles: 'main,user', inputs: ['repo', 'phase', 'accept_previous'] },
 };
 
 test('MCP tool names, roles and input fields match the 1.0 contract', () => {

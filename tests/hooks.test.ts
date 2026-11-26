@@ -80,15 +80,18 @@ function hookStatus(
   cwd: string,
   tool: string,
   input: Record<string, unknown>,
+  sessionId?: string,
 ): { status: number; stderr: string } {
   const env = { ...process.env } as Record<string, string>;
+  delete env.WF_SESSION;
+  delete env.CLAUDE_CODE_SESSION_ID;
   if (role) env.WF_ROLE = role;
   else delete env.WF_ROLE;
   if (repo) env.WF_REPO = repo;
   else delete env.WF_REPO;
   try {
     execFileSync(process.execPath, [CLI, 'hook', 'pretool'], {
-      input: JSON.stringify({ cwd, tool_name: tool, tool_input: input }),
+      input: JSON.stringify({ cwd, tool_name: tool, tool_input: input, session_id: sessionId }),
       cwd,
       env,
       encoding: 'utf8',
@@ -268,4 +271,35 @@ test('init repairs stale MCP and hook CLI paths', { skip: !fs.existsSync(CLI) },
   };
   assert.ok(repaired.mcpServers.workflow.args[0].endsWith('cli.js'));
   assert.ok(fs.existsSync(repaired.mcpServers.workflow.args[0]));
+});
+
+test('pretool reads the per-session lease instead of a global role file', {
+  skip: !fs.existsSync(CLI),
+}, () => {
+  const { root, a, b } = twoRepoFixture();
+  const env = { ...process.env } as Record<string, string>;
+  delete env.WF_ROLE;
+  delete env.WF_REPO;
+  delete env.WF_SESSION;
+  delete env.CLAUDE_CODE_SESSION_ID;
+  execFileSync(
+    process.execPath,
+    [CLI, 'role', 'plan', '--repo', 'repo-a', '--root', root, '--session', 'sess-hook'],
+    { cwd: a, env, encoding: 'utf8' },
+  );
+
+  assert.equal(
+    hookStatus(null, null, a, 'Write', { file_path: path.join(a, 'PLAN.md') }, 'sess-hook').status,
+    0,
+  );
+  assert.equal(
+    hookStatus(null, null, a, 'Write', { file_path: path.join(b, 'PLAN.md') }, 'sess-hook').status,
+    2,
+  );
+  // A different session has no lease: no role is declared.
+  assert.equal(
+    hookStatus(null, null, a, 'Write', { file_path: path.join(b, 'PLAN.md') }, 'sess-other').status,
+    0,
+  );
+  assert.equal(fs.existsSync(path.join(root, '.workflow/runtime/role.json')), false);
 });

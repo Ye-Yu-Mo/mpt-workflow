@@ -115,6 +115,12 @@ export function startWebServer(wf: Workflow, port: number): Promise<WebHandle> {
     }
     const p = url.pathname;
 
+    // Another agent may have edited program.yaml; refresh before serving.
+    const refresh = wf.refreshConfig();
+    if (refresh.error && p.startsWith('/api/')) {
+      return json(res, { error: `配置不可用：${refresh.error}` }, 500);
+    }
+
     // Loopback-only + same-origin. The server has no authentication, so DNS
     // rebinding, cross-site form posts and other localhost ports must be refused.
     if (!LOCAL_HOSTS.has(hostName(req))) {

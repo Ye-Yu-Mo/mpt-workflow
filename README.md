@@ -192,8 +192,10 @@ The umbrella root is a **sentinel** (`root`), not a configured repo: no role can
 plan or implement there, and only `main`/`user` may commit its docs (see
 [Umbrella (`root`) commits](#umbrella-root-commits)).
 
-Declare the role per session. **Use environment variables when sessions run
-concurrently** — the on-disk lease is machine-wide:
+Declare the role per session. The lease is stored **per session key** — Claude
+Code's session id, `WF_SESSION`, or a generated MCP key — not in one global
+file. Environment variables remain the simplest way to run sessions
+concurrently; `bootstrap` writes the same per-session lease:
 
 ```bash
 WF_ROLE=plan WF_REPO=my-service claude
@@ -203,6 +205,12 @@ WF_ROLE=main claude
 
 Or call `bootstrap(role="plan", repo="my-service")` as the first tool in the
 session.
+
+`status` reports two separate things: **当前会话** (this session's role/repo)
+and **全局 active repo** (the serial lock in `program.yaml`), plus the loaded
+`program.yaml` version hash and timestamp. `program.yaml` is reloaded when its
+mtime/size changes, so another agent's edit is visible without restarting the
+server.
 
 ## The daily loop
 
@@ -399,7 +407,7 @@ state threshold.
 | `milestone_accept` / `milestone_reject` | plan, main | accept with evidence / reject with reason |
 | `scope_check` | all | diff vs declared files and role ACL |
 | `commit_request` / `commit` | all (root: main/user) | request approval, commit with it |
-| `phase_activate` | main, user | serial repo lock |
+| `phase_activate` | main, user | serial repo lock; phase switch is explicit (`accept_previous`) |
 | `send_message` / `inbox` / `read_message` / `ack_message` | all (ACL) | targeted messages |
 | `wait_message` | all | long-poll for the next message |
 | `broadcast` / `presence` / `escalate` | main / all / all | broadcast, presence, escalation |

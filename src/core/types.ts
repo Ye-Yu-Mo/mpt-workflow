@@ -165,10 +165,33 @@ export interface NextAction {
   blocking: boolean;
 }
 
+export interface SessionIdentity {
+  role: Role;
+  repo?: string;
+  /** Short session id for display (full id stays in the lease file). */
+  id?: string;
+}
+
+export interface ConfigStatus {
+  /** Absolute path of the loaded program.yaml. */
+  path: string;
+  /** Content hash of program.yaml (12 chars). */
+  version: string;
+  /** When this process last loaded it. */
+  loaded_at: string;
+  /** File mtime at the last load/stat. */
+  mtime: string;
+  error?: string;
+}
+
 export interface ProgramStatus {
   program: string;
   root: string;
   activeRepo: string | null;
+  /** Role/repo of the calling session (not the global active repo). */
+  session: SessionIdentity | null;
+  /** Version/timestamp of the loaded program.yaml, for staleness detection. */
+  config: ConfigStatus;
   phases: PhaseConfig[];
   repos: RepoState[];
   questions: Question[];
