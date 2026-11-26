@@ -86,18 +86,23 @@ explicit status):
 - `审批 ... 尚未由用户批准`: the human must approve the one-shot approval:
   `mpt-workflow approve ap-...` or the dashboard.
 - `工作区内容已变化`: a legacy approval (created before 1.1) had its worktree
-  changed. Re-request and approve again. New approvals bind the staged index,
-  so worktree-only edits after the request are fine and are not committed.
-- `暂存快照已变化`: something changed the **index** after approval (a new
-  `git add`, another agent staging files). The error lists modified/added/
-  removed files. Run `commit_request` again after the final `git add`.
+  changed. Re-request and approve again. New approvals bind an immutable staged
+  tree; worktree/staged changes after the request are not part of it.
+- `分支在请求后已前进`: another commit landed after the request. Re-run
+  `commit_request` on the new HEAD.
+- `审批 ... 已被 ... 取代`: a newer `commit_request` retired this approval. Use
+  the new id (`mpt-workflow commit <new-id>`).
 - `暂存区内容已变化`: a legacy staged-hash check failed. Re-request and
   approve again.
-- An approval marked **已批准但已失效** is dead: the worktree changed after the
-  request/approval (the agent kept editing, a TODO transition ran, or an older
-  request is still around). It is hidden behind “显示已失效”; run
-  `commit_request` again to create a fresh one. A new request supersedes older
-  pending approvals for the same repo.
+- An approval marked **已批准但已失效** is dead: the branch advanced. It is
+  hidden behind “显示已失效”; run `commit_request` again.
+- To commit only some files from a shared worktree, pass
+  `commit_request(files=["src/a.ts", ...])`; the approval contains only those
+  paths and the real index is never staged by the request.
+- A pre-commit failure for one path can be handled narrowly with
+  `mpt-workflow commit <id> --allow-path <path> --reason "..."` or
+  `WF_ALLOW_PATHS=path WF_ALLOW_REASON="..."`; `WF_ALLOW_COMMIT=1` (legacy)
+  still bypasses everything.
 - `scope 检查未通过`: changed files are outside the current TODO's
   **影响文件** list (todo role) or violate the ACL. Update the TODO or revert.
 - `pre-commit scope 检查未通过`: the git hook repeats the TODO/ACL check. The

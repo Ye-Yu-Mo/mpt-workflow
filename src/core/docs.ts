@@ -84,28 +84,45 @@ export function listTodoFiles(repoAbs: string): string[] {
     });
 }
 
+function parseFileList(raw: string): string[] {
+  const text = raw.trim();
+  if (!text) return [];
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    if (Array.isArray(parsed)) {
+      return parsed.map((x) => String(x).trim()).filter(Boolean);
+    }
+  } catch {
+    /* fall back to comma/newline list */
+  }
+  return text
+    .split(/[,\n]/)
+    .map((s) =>
+      s
+        .trim()
+        .replace(/^['"`]|['"`]$/g, '')
+        .trim(),
+    )
+    .filter(Boolean);
+}
+
 function collectFilesUnder(body: string, marker: RegExp): string[] {
   const lines = body.split('\n');
   const out: string[] = [];
-  let active = false;
-  for (const line of lines) {
-    if (marker.test(line)) {
-      active = true;
-      out.push(...inlineCode(line));
-      continue;
+  for (let i = 0; i < lines.length; i++) {
+    if (!marker.test(lines[i])) continue;
+    out.push(...inlineCode(lines[i]));
+    for (let j = i + 1; j < lines.length; j++) {
+      const line = lines[j];
+      if (/^#{1,6}\s+/.test(line)) break;
+      if (/^-\s+\*\*/.test(line)) break; // next bold bullet
+      if (line.trim() === '') continue;
+      if (/^\s*[-*]\s+/.test(line) || /^\s+/.test(line)) {
+        out.push(...inlineCode(line));
+        continue;
+      }
+      break;
     }
-    if (!active) continue;
-    if (/^#{1,6}\s+/.test(line)) break;
-    if (/^-\s+\*\*/.test(line)) break; // next bold bullet
-    if (line.trim() === '') {
-      // blank line ends the list only if the next non-blank is not a list item
-      continue;
-    }
-    if (/^\s*[-*]\s+/.test(line) || /^\s+/.test(line)) {
-      out.push(...inlineCode(line));
-      continue;
-    }
-    break;
   }
   return out;
 }
@@ -161,6 +178,10 @@ export function parseTodo(fileAbs: string): TodoDoc | null {
   }
   if (Array.isArray(fm.data.files)) {
     for (const f of fm.data.files as unknown[]) if (typeof f === 'string') allowed.add(f);
+  }
+  // Robust marker: <!-- files: ["src/a.ts", "src/b.ts"] -->
+  for (const m of body.matchAll(/<!--\s*files\s*:\s*([\s\S]*?)-->/gi)) {
+    for (const f of parseFileList(m[1])) allowed.add(f);
   }
 
   const acceptanceText = section(body, /验收标准/) || '';
@@ -325,6 +346,26 @@ export function setTodoStatus(text: string, status: MilestoneStatus): string {
   }
   // No marker: add one right after the title.
   return text.replace(/^(#\s+TODO-M\d+[^\n]*\n)/, `$1\n> 状态：${label}\n`);
+}
+
+/** Tick `- [ ]` items inside `## 验收标准` when the milestone is accepted. */
+export function markAcceptanceDone(text: string): string {
+  const lines = text.split('\n');
+  let active = false;
+  let level = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const h = /^(#{1,6})\s+(.*)$/.exec(lines[i]);
+    if (h) {
+      if (active && h[1].length <= level) active = false;
+      if (/验收标准/.test(h[2])) {
+        active = true;
+        level = h[1].length;
+      }
+      continue;
+    }
+    if (active) lines[i] = lines[i].replace(/^(\s*[-*]\s*)\[\s?\]/, '$1[x]');
+  }
+  return lines.join('\n');
 }
 
 export function setTodoSha(text: string, sha: string): string {

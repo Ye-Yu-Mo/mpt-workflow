@@ -165,13 +165,14 @@ test('a new root commit request supersedes older pending approvals', () => {
   assert.equal(wf.approvals().find((a) => a.id === second.approval.id)?.superseded_by, undefined);
 });
 
-test('root approval is bound to the staged snapshot', () => {
+test('root approval is invalidated when the branch advances', () => {
   const { root, wf } = fixture();
   fs.writeFileSync(path.join(root, 'docs/a.md'), 'a2\n');
   const req = wf.requestCommit({ repoId: 'root', message: 'docs: a', role: 'main' });
   fs.writeFileSync(path.join(root, 'docs/a.md'), 'a3\n');
   git(root, ['add', 'docs/a.md']);
-  assert.throws(() => wf.approve(req.approval.id), /暂存快照已变化[\s\S]*docs\/a\.md/);
+  git(root, ['commit', '-qm', 'advance']);
+  assert.throws(() => wf.approve(req.approval.id), /分支在请求后已前进/);
 });
 
 test('worktree edits after a root request do not enter the commit', () => {

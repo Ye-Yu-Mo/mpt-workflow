@@ -303,3 +303,27 @@ test('pretool reads the per-session lease instead of a global role file', {
   );
   assert.equal(fs.existsSync(path.join(root, '.workflow/runtime/role.json')), false);
 });
+
+test('WF_ALLOW_PATHS exempts only the named paths', { skip: !fs.existsSync(CLI) }, () => {
+  const { a } = twoRepoFixture();
+  fs.writeFileSync(path.join(a, 'src/extra.rs'), 'fn g() {}\n');
+  git(a, ['add', 'src/extra.rs']);
+  git(a, ['commit', '-qm', 'feat: allowed'], {
+    WF_ROLE: 'todo',
+    WF_REPO: 'repo-a',
+    WF_ALLOW_PATHS: 'src/extra.rs',
+    WF_ALLOW_REASON: 'reviewed manually',
+  });
+
+  fs.writeFileSync(path.join(a, 'src/extra2.rs'), 'fn h() {}\n');
+  git(a, ['add', 'src/extra2.rs']);
+  try {
+    git(a, ['commit', '-qm', 'feat: blocked'], { WF_ROLE: 'todo', WF_REPO: 'repo-a' });
+    assert.fail('a different out-of-scope file should still be blocked');
+  } catch (e) {
+    const err = e as { status?: number; stderr?: string };
+    assert.equal(err.status, 1);
+    assert.match(String(err.stderr), /影响文件/);
+    assert.match(String(err.stderr), /mpt-workflow commit/);
+  }
+});

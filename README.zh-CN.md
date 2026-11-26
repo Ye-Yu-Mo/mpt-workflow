@@ -199,12 +199,14 @@ agent: commit(approval="ap-xxx")
    → 只做本地 git commit，永不 push
 ```
 
+- `commit_request` 在**临时 index** 里构建评审快照，绑定精确 tree oid + 每文件 hash；
+  你的真实 index 不会被改。传 `files: ["src/a.ts", ...]` 可只包含所选路径，
+  让 PLAN/TODO 在同一工作区各提交自己的文件。
+- 看板 review 的是这份快照，`commit` 通过临时 index 直接提交，不会再次 `git add`。
+  pre-commit hook 只校验“提交文件 == 审批覆盖”，跳过提交者 ACL；scope 按
+  `requested_by` 判定。分支前进会让审批失效；请求后的工作区改动不影响。
 - Bash 的 `git commit` / `git push` 以及 `mpt-workflow approve|commit` 都会被 hook 拒绝；
   agent 只能走 MCP `commit`，push 由用户手工执行。
-- `commit_request` 会暂存并绑定**精确的 index tree oid**（外加每个文件的 hash）。
-  看板 review 的是暂存快照，`commit` 直接提交这份快照，不会再次 `git add`；
-  请求之后的工作区改动不会进入本次提交。只有**暂存区**变化才会让审批失效，
-  错误信息会列出变化的文件。
 - 审批是**防误操作**，不是防恶意：同机同用户，agent 理论上能绕过。
   真正的护栏是 hook + 你 review diff 的习惯。
 
@@ -242,7 +244,9 @@ MCP 进程就在伞仓根目录运行时，`repo` 可以省略。只有 `main` /
 **Markdown 是唯一事实源**（可 git diff、可 review）：
 
 - `PLAN.md` —— M 总览表
-- `TODO-Mn.md` —— `状态：` 行 / front-matter；`## 证据记录`；`## 验收记录`
+- `TODO-Mn.md` —— `状态：` 行 / front-matter；`## 证据记录`；`## 验收记录`。
+  影响文件可写多处 `**影响文件**`，也支持 front-matter `files: [...]` 或
+  `<!-- files: ["a.ts", "b.ts"] -->`（多块合并，后两种更抗手改）。
 - `docs/agent-questions.md` —— 问答
 - `.workflow/program.yaml` —— 阶段、active repo、契约版本
 

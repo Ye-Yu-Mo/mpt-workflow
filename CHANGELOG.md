@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Partial commit requests.** `commit_request(files=[...])` builds the review
+  snapshot in a temporary index containing only the selected paths. The real
+  index is never staged by the request or the commit, so PLAN and TODO can
+  commit their own files from a shared worktree without `git stash`.
+- **Approval-aware pre-commit.** The MCP commit sets `WF_APPROVAL_ID`; the hook
+  verifies the committed files exactly match the approved set and skips the
+  committer's ACL. A narrow `WF_ALLOW_PATHS` + `WF_ALLOW_REASON` escape hatch
+  (and `mpt-workflow commit --allow-path ... --reason ...`) replaces the
+  all-or-nothing `WF_ALLOW_COMMIT`.
+- **Robust TODO file lists.** `parseTodo` merges every `**影响文件**` block and
+  also accepts frontmatter `files: [...]` and
+  `<!-- files: ["a.ts", ...] -->`; `scope_check` echoes the parsed list.
+- **Focused `next`.** Repo-bound `plan`/`todo` sessions no longer get other
+  repos' non-blocking actions in `next` (blocking items still surface).
+
+### Fixed
+
+- `questions(status="closed")` now returns closed questions; only the default
+  view hides them.
+- `ask` strips a leading `A)` / `B.` / `C、` from option text instead of
+  rendering it twice.
+- `milestone_accept` ticks `- [ ]` items in `## 验收标准`.
+- Superseded approvals report their replacement instead of a generic stale
+  error; accepting/committing one is refused.
+
 ## [1.1.1] - 2026-11-26
 
 ### Fixed

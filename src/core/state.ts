@@ -162,6 +162,8 @@ export interface Approval {
   staged_hash?: string;
   /** Exact index tree oid at request time (new approvals). */
   staged_tree?: string;
+  /** HEAD at request time; the commit refuses if the branch moved. */
+  base_head?: string;
   /** Index path -> "mode oid" at request time, for stale diagnostics. */
   file_hashes?: Record<string, string>;
   message: string;

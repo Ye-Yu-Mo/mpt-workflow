@@ -12,7 +12,7 @@ import {
   gitInfo,
   hasUnstagedChanges,
   recentLog,
-  stagedTreeOid,
+  treeExists,
   workingTreeHash,
 } from '../core/git.js';
 import { type Actor, relayPrompt } from '../core/messages.js';
@@ -167,11 +167,14 @@ export function startWebServer(wf: Workflow, port: number): Promise<WebHandle> {
           const approvals = wf.approvals().map((a) => {
             try {
               const ref = wf.repoRef(a.repo);
-              const current = a.staged_tree ? stagedTreeOid(ref.abs) : workingTreeHash(ref.abs);
-              const expected = a.staged_tree ?? a.tree_hash;
+              const head = gitInfo(ref.abs).head;
+              const stale = a.staged_tree
+                ? Boolean(a.base_head && head !== a.base_head) ||
+                  !treeExists(ref.abs, a.staged_tree)
+                : workingTreeHash(ref.abs) !== a.tree_hash;
               return {
                 ...a,
-                stale: !current || current !== expected,
+                stale,
                 // Worktree-only edits are not part of a snapshot approval.
                 worktree_changed: hasUnstagedChanges(ref.abs),
               };

@@ -11,7 +11,7 @@ import {
   QUESTION_STATUS_HELP,
   questionsFile,
 } from '../src/core/questions.js';
-import { Workflow } from '../src/core/workflow.js';
+import { nextForRole, Workflow } from '../src/core/workflow.js';
 import { buildTools, invokeTool } from '../src/mcp/server.js';
 
 function git(cwd: string, args: string[]): void {
@@ -40,6 +40,20 @@ function fixture() {
   });
   return { root, abs, wf };
 }
+
+test('nextForRole hides other-repo non-blocking actions', () => {
+  const next = [
+    { actor: 'todo' as const, action: 'other-repo', detail: '', repo: 'repo-b', blocking: false },
+    { actor: 'plan' as const, action: 'same-repo', detail: '', repo: 'repo-a', blocking: false },
+    { actor: 'user' as const, action: 'blocking', detail: '', repo: 'repo-b', blocking: true },
+    { actor: 'main' as const, action: 'global', detail: '', blocking: false },
+  ];
+  assert.deepEqual(
+    nextForRole(next, 'todo', 'repo-a').map((n) => n.action),
+    ['same-repo', 'blocking'],
+  );
+  assert.equal(nextForRole(next, 'main', null).length, 4);
+});
 
 test('the question board documents its status lifecycle', () => {
   assert.match(defaultQuestionsHeader(), /open/);
@@ -95,6 +109,37 @@ test('closing an unanswered blocking question clears the blocker', async () => {
   assert.ok(q);
   wf.closeQuestion(q, 'withdrawn', { role: 'user' });
   assert.equal(wf.msgs.blockingFor({ role: 'plan', repo: 'repo-a' }).length, 0);
+});
+
+test('questions status=closed works and option prefixes are stripped', async () => {
+  const { wf } = fixture();
+  const tools = buildTools({ root: wf.root });
+  const ctx = { wf, role: 'plan' as const, repo: 'repo-a' };
+  const textOf = (out: unknown): string =>
+    typeof out === 'string'
+      ? out
+      : ((out as { content?: { text: string }[] }).content ?? []).map((c) => c.text).join('\n');
+  const out = await invokeTool(
+    tools,
+    'ask',
+    {
+      to: 'main',
+      context: 'pick one',
+      options: ['A) first', 'B. second'],
+      repo: 'repo-a',
+    },
+    ctx,
+  );
+  const q = wf.allQuestions().find((x) => x.context === 'pick one');
+  assert.ok(q, textOf(out));
+  assert.deepEqual(q.options, [
+    { id: 'A', text: 'first' },
+    { id: 'B', text: 'second' },
+  ]);
+
+  wf.closeQuestion(q, 'done', { role: 'user' });
+  const closed = await invokeTool(tools, 'questions', { status: 'closed' }, ctx);
+  assert.match(textOf(closed), new RegExp(q.id));
 });
 
 test('next tells both sides what to do and close finishes the loop', async () => {

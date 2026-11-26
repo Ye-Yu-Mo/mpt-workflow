@@ -22,7 +22,7 @@ import { ensureSessionKey, sessionLabel, setRoleLease } from '../core/session.js
 import { logEvent, withLock } from '../core/state.js';
 import type { Role } from '../core/types.js';
 import { isRole } from '../core/types.js';
-import { Workflow } from '../core/workflow.js';
+import { nextForRole, Workflow } from '../core/workflow.js';
 import { VERSION } from '../version.js';
 
 type ToolReturn = string | { content: { type: 'text'; text: string }[]; isError: boolean };
@@ -243,12 +243,13 @@ function buildTools(_opts: ServerOptions): ToolSpec[] {
           for (const m of blocking) lines.push(`  ${m.id}  ${m.subject}`);
           lines.push('');
         }
-        if (!st.next.length) {
+        const scoped = nextForRole(st.next, ctx.role, ctx.repo);
+        if (!scoped.length) {
           lines.push('没有识别到待办；检查程序配置。');
           return lines.join('\n');
         }
         lines.push(
-          st.next
+          scoped
             .map(
               (n) =>
                 `[${n.actor}] ${n.action}${n.repo ? ` — ${n.repo}${n.milestone ? '/' + n.milestone : ''}` : ''}\n    ${n.detail}`,
@@ -291,7 +292,11 @@ function buildTools(_opts: ServerOptions): ToolSpec[] {
         if (args.to) qs = qs.filter((q) => q.to === args.to);
         if (args.status) qs = qs.filter((q) => q.status === args.status);
         if (args.blocking !== undefined) qs = qs.filter((q) => q.blocking === args.blocking);
-        if (!args.all) qs = qs.filter((q) => q.status !== 'closed' && q.status !== 'canceled');
+        // An explicit status filter is authoritative; only the default view
+        // hides closed/canceled questions.
+        if (!args.all && !args.status) {
+          qs = qs.filter((q) => q.status !== 'closed' && q.status !== 'canceled');
+        }
         if (!qs.length) return '没有匹配的问题。';
         const body = qs
           .map((q) => {
@@ -351,7 +356,7 @@ function buildTools(_opts: ServerOptions): ToolSpec[] {
             : questionsFile(ctx.wf.repoRef(repoId as string).abs);
         const rawOptions = (args.options as string[] | undefined) || [];
         const options = rawOptions.map((s, i) => {
-          const m = /^([A-Za-z0-9]+)\s*[:：]\s*(.*)$/.exec(s);
+          const m = /^([A-Za-z0-9]+)\s*[).、:：]\s*(.*)$/.exec(s);
           return m ? { id: m[1], text: m[2] } : { id: String.fromCharCode(65 + i), text: s };
         });
         const id = withLock(ctx.wf.root, 'questions', () => {
@@ -792,6 +797,7 @@ function buildTools(_opts: ServerOptions): ToolSpec[] {
           `${r.pass ? 'PASS' : 'FAIL'} ${r.repo}${r.milestone ? '/' + r.milestone : ''}`,
           `改动 ${r.changed.length} 个文件:`,
           ...r.changed.map((f) => `  - ${f}`),
+          `影响文件清单: ${r.allowedFiles.length ? r.allowedFiles.join(', ') : '(未声明，仅按 ACL)'}`,
         ];
         if (r.violations.length) {
           lines.push('', '违规:');
@@ -807,12 +813,16 @@ function buildTools(_opts: ServerOptions): ToolSpec[] {
     {
       name: 'commit_request',
       description:
-        '请求提交：校验 scope 后生成一次性审批 id，需要用户执行 mpt-workflow approve <id>。',
+        '请求提交：校验 scope 后生成一次性审批 id，需要用户执行 mpt-workflow approve <id>。可选 files 只提交所选路径。',
       roles: READ_ROLES,
       schema: {
         message: z.string().describe('commit message'),
         repo: repoParam,
         milestone: msParam.optional().describe('要提交的里程碑；默认取已验收待提交的 M'),
+        files: z
+          .array(z.string())
+          .optional()
+          .describe('只包含这些仓库相对路径；省略则提交全部改动'),
       },
       handler: (args, ctx) => {
         const repo = commitRepo(args, ctx);
@@ -821,6 +831,7 @@ function buildTools(_opts: ServerOptions): ToolSpec[] {
           message: String(args.message),
           role: ctx.role,
           milestone: args.milestone as string | undefined,
+          files: Array.isArray(args.files) ? (args.files as string[]) : undefined,
         });
         return [
           `审批已创建: ${r.approval.id}`,
