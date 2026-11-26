@@ -14,6 +14,7 @@ import {
 } from './core/hooks.js';
 import { formatInitResult, init } from './core/init.js';
 import { formatMessage, type MessageKind } from './core/messages.js';
+import { migrateConfig, SCHEMA_VERSION } from './core/migrate.js';
 import { updateQuestion } from './core/questions.js';
 import { withLock } from './core/state.js';
 import { isRole, type Role } from './core/types.js';
@@ -34,6 +35,7 @@ function usage(): string {
   mpt-workflow gc [--root DIR] [--older-than DAYS] [--evidence-days DAYS] [--apply] [--json]
   mpt-workflow next [--root DIR]
   mpt-workflow doctor [--root DIR]
+  mpt-workflow migrate [--root DIR] [--apply]
   mpt-workflow questions [--root DIR] [--json] [--all]
   mpt-workflow answer <Q-id> --answer TEXT [--resolution TEXT] [--root DIR]
   mpt-workflow inbox [--role R] [--repo NAME] [--unread] [--all] [--json]
@@ -256,6 +258,25 @@ async function main() {
           if (f.hint) console.log(`      → ${f.hint}`);
         }
         process.exitCode = findings.some((f) => f.level === 'FAIL') ? 1 : 0;
+        return;
+      }
+
+      case 'migrate': {
+        const wf = resolveWorkflow(flags);
+        const apply = boolFlag(flags, 'apply');
+        const r = migrateConfig(wf.root, apply);
+        if (r.changes.length === 0) {
+          console.log(`配置已是最新（schema_version=${SCHEMA_VERSION}）。`);
+          return;
+        }
+        console.log(`${apply ? '已迁移' : '迁移预览'} .workflow/program.yaml：`);
+        for (const c of r.changes) console.log(`  - ${c}`);
+        if (!apply) {
+          console.log('');
+          console.log(r.after.trimEnd());
+          console.log('');
+          console.log('预览模式；加 --apply 写入。');
+        }
         return;
       }
 

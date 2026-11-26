@@ -87,7 +87,9 @@ contracts?:                # optional
 - `root` is runtime state, not configuration; it is not written back.
 - Unknown keys and hand-written comments are preserved on mutation.
 - `program.yaml` stays tracked by git.
-- 1.0 adds an optional `schema_version: 1`; a missing value is treated as 1.
+- `schema_version: 1` is written on the next mutation; a missing value is
+  treated as 1. `mpt-workflow migrate` makes it explicit without rewriting
+  comments.
 
 ### 2.3 Markdown documents
 
@@ -149,12 +151,15 @@ possible, accept the old spelling as an alias for the whole 1.x line.
   planned.
 - `program.yaml` gains `schema_version: 1` on the next write. Unknown 0.x keys
   stay untouched.
+- `mpt-workflow migrate` previews (default) and `--apply`s the configuration
+  migration: it adds `schema_version: 1`, removes the machine-specific `root`
+  field, preserves comments/unknown keys, refuses a newer schema and is
+  idempotent.
 - Status labels and document headings keep their 0.x aliases.
 - If a future 1.x adds a required field, `doctor` reports it and
-  `mpt-workflow migrate` (planned for 1.0) applies idempotent, preview-first
-  edits.
-- The upgrade guide lives in `CHANGELOG` plus `docs/troubleshooting.md`; a
-  dedicated `docs/upgrade-1.0.md` is added before the release.
+  `mpt-workflow migrate` applies idempotent, preview-first edits.
+- The upgrade guide lives in [upgrade-1.0.md](upgrade-1.0.md); a
+  dedicated deprecation ledger is added before the release.
 
 ## 5. Contract tests
 
@@ -165,22 +170,22 @@ Before 1.0, freeze the surface mechanically:
    - `program.yaml` fixtures normalize to the documented defaults;
    - TODO/PLAN/question fixtures parse to the documented states;
    - CLI `--help` lists every frozen command.
-2. `schemas/` (generated)
-   - JSON Schema exported from the zod tool inputs at build time;
-   - CI fails when the generated files differ from the committed ones.
+2. `schemas/mcp-tools.json` (generated, in place)
+   - JSON Schema exported from the zod tool inputs by `npm run schemas`;
+   - CI runs `npm run schemas:check` and fails when the committed file is stale.
 3. `examples/` remain parsed by `tests/examples.test.ts` (already true).
-4. A small "compat" fixture runs plan → todo → evidence → accept → commit on
-   every supported Node/OS matrix in CI.
+4. A compat fixture runs plan → todo → evidence → accept → commit on every
+   supported Node/OS matrix (`tests/compat.test.ts`).
 
 ## 6. 1.0 checklist
 
 - [x] Tool/config/CLI snapshot test in CI (`tests/contract.test.ts`).
-- [ ] Generated JSON Schemas and their CI diff check.
-- [ ] Every 0.x status label/heading still parses.
-- [ ] `doctor` reports `schema_version` and legacy fields.
-- [ ] `migrate` is preview-first and idempotent.
-- [ ] Upgrade guide and deprecation ledger exist.
-- [ ] At least three release trains (0.7 → 0.9 already exercised) pass.
+- [x] Generated JSON Schemas and their CI diff check.
+- [x] Every 0.x status label/heading still parses (`tests/compat.test.ts`).
+- [x] `doctor` warns when `schema_version` is newer than supported.
+- [x] `migrate` is preview-first and idempotent.
+- [x] Upgrade guide exists.
+- [x] At least three release trains (0.7 → 0.9 already exercised) pass.
 - [ ] No open P1 correctness/security findings.
 - [ ] `CHANGELOG` has no unreleased breaking changes.
 

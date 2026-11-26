@@ -1189,6 +1189,15 @@ export class Workflow {
     if (!exists(path.join(this.root, '.workflow/program.yaml'))) {
       push({ level: 'FAIL', code: 'config', message: '缺少 .workflow/program.yaml' });
     }
+    const schemaVersion = this.cfg.schema_version ?? 1;
+    if (schemaVersion > 1) {
+      push({
+        level: 'WARN',
+        code: 'schema-version',
+        message: `program.yaml schema_version=${schemaVersion} 高于当前支持（1）`,
+        hint: '升级 mpt-workflow；旧版本不会自动降级配置',
+      });
+    }
 
     const active = this.cfg.active_repo;
     if (active && !this.cfg.repos.some((r) => r.id === active)) {

@@ -36,6 +36,9 @@ jobs:
         run: '! grep -q "registry.npmmirror.com" package-lock.json'
       - run: npm run lint
       - run: npm run build
+      - name: MCP schemas are up to date
+        if: matrix.os == 'ubuntu-latest' && matrix.node == 22
+        run: npm run schemas:check
       - run: npm test
         if: matrix.os != 'ubuntu-latest' || matrix.node != 22
       - name: coverage

@@ -14,6 +14,7 @@ belongs to an unrelated project.
    ```bash
    npm run typecheck
    npm run build
+   npm run schemas:check
    npm test
    npm run test:coverage
    npm pack --dry-run
@@ -75,9 +76,9 @@ tag run that failed after publishing can be re-run safely.
 A version containing `-` (for example `v0.8.0-rc.1`) is published under the
 `next` dist-tag and marked as a prerelease on GitHub. Stable tags use `latest`.
 
-The workflow runs typecheck, test typecheck, lint, build, coverage and
-`npm pack --dry-run` before publishing; `--ignore-scripts` keeps `NPM_TOKEN`
-away from package lifecycle scripts.
+The workflow runs typecheck, test typecheck, lint, build, the generated-schema
+check, coverage and `npm pack --dry-run` before publishing; `--ignore-scripts`
+keeps `NPM_TOKEN` away from package lifecycle scripts.
 
 ## Troubleshooting
 

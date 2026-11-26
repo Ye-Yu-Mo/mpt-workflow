@@ -1,0 +1,699 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "mpt-workflow MCP tools (v1)",
+  "schema_version": 1,
+  "tools": {
+    "ack_message": {
+      "roles": [
+        "main",
+        "plan",
+        "todo",
+        "user"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    "answer": {
+      "roles": [
+        "main",
+        "plan",
+        "todo",
+        "user"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "answer": {
+            "type": "string"
+          },
+          "resolution": {
+            "description": "回写到 PLAN/TODO/decisions 的位置",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "answer"
+        ]
+      }
+    },
+    "ask": {
+      "roles": [
+        "main",
+        "plan",
+        "todo",
+        "user"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "to": {
+            "type": "string",
+            "enum": [
+              "main",
+              "PLAN",
+              "user"
+            ],
+            "description": "问谁"
+          },
+          "context": {
+            "type": "string",
+            "description": "为什么需要决定；相关文件/PLAN 条目"
+          },
+          "blocking": {
+            "default": false,
+            "type": "boolean"
+          },
+          "blocking_note": {
+            "type": "string"
+          },
+          "options": {
+            "description": "候选方案，每项形如 \"A: ...\"",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "recommendation": {
+            "type": "string"
+          },
+          "repo": {
+            "description": "仓库 id；默认用绑定仓或 active repo；`root` 表示伞仓文档",
+            "type": "string"
+          }
+        },
+        "required": [
+          "to",
+          "context"
+        ]
+      }
+    },
+    "bootstrap": {
+      "roles": [
+        "main",
+        "plan",
+        "todo",
+        "user"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "main",
+              "plan",
+              "todo",
+              "user"
+            ],
+            "description": "本会话角色"
+          },
+          "repo": {
+            "description": "绑定的仓库 id（plan/todo 必填）",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role"
+        ]
+      }
+    },
+    "broadcast": {
+      "roles": [
+        "main"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "default": "event",
+            "type": "string",
+            "enum": [
+              "event",
+              "alert"
+            ]
+          },
+          "subject": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "refs": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "subject"
+        ]
+      }
+    },
+    "close": {
+      "roles": [
+        "main",
+        "plan",
+        "todo",
+        "user"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "resolution": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    "commit": {
+      "roles": [
+        "main",
+        "plan",
+        "todo",
+        "user"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "approval": {
+            "type": "string"
+          },
+          "repo": {
+            "description": "仓库 id；默认用绑定仓或 active repo；`root` 表示伞仓文档",
+            "type": "string"
+          },
+          "dry_run": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "approval"
+        ]
+      }
+    },
+    "commit_request": {
+      "roles": [
+        "main",
+        "plan",
+        "todo",
+        "user"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "commit message"
+          },
+          "repo": {
+            "description": "仓库 id；默认用绑定仓或 active repo；`root` 表示伞仓文档",
+            "type": "string"
+          },
+          "milestone": {
+            "description": "要提交的里程碑；默认取已验收待提交的 M",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ]
+      }
+    },
+    "doctor": {
+      "roles": [
+        "main",
+        "plan",
+        "todo",
+        "user"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    "escalate": {
+      "roles": [
+        "main",
+        "plan",
+        "todo",
+        "user"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "reason"
+        ]
+      }
+    },
+    "evidence_run": {
+      "roles": [
+        "todo",
+        "plan",
+        "main"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "string",
+            "description": "要执行的命令，如 cargo test --workspace --locked"
+          },
+          "milestone": {
+            "type": "string",
+            "description": "里程碑编号，如 M2"
+          },
+          "repo": {
+            "description": "仓库 id；默认用绑定仓或 active repo；`root` 表示伞仓文档",
+            "type": "string"
+          },
+          "cwd": {
+            "description": "相对仓库根目录的工作目录",
+            "type": "string"
+          },
+          "timeout_ms": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "command",
+          "milestone"
+        ]
+      }
+    },
+    "inbox": {
+      "roles": [
+        "main",
+        "plan",
+        "todo",
+        "user"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "main",
+              "plan",
+              "todo",
+              "user"
+            ]
+          },
+          "repo": {
+            "type": "string"
+          },
+          "unread_only": {
+            "type": "boolean"
+          },
+          "include_acked": {
+            "type": "boolean"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "question",
+              "answer",
+              "event",
+              "handoff",
+              "alert",
+              "approval_request"
+            ]
+          },
+          "limit": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "milestone_accept": {
+      "roles": [
+        "plan",
+        "main"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "milestone": {
+            "type": "string",
+            "description": "里程碑编号，如 M2"
+          },
+          "repo": {
+            "description": "仓库 id；默认用绑定仓或 active repo；`root` 表示伞仓文档",
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "force": {
+            "description": "跳过状态/证据检查（仅限明确授权）",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "milestone"
+        ]
+      }
+    },
+    "milestone_claim": {
+      "roles": [
+        "todo",
+        "main"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "milestone": {
+            "type": "string",
+            "description": "里程碑编号，如 M2"
+          },
+          "repo": {
+            "description": "仓库 id；默认用绑定仓或 active repo；`root` 表示伞仓文档",
+            "type": "string"
+          }
+        },
+        "required": [
+          "milestone"
+        ]
+      }
+    },
+    "milestone_complete": {
+      "roles": [
+        "todo",
+        "main"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "milestone": {
+            "type": "string",
+            "description": "里程碑编号，如 M2"
+          },
+          "repo": {
+            "description": "仓库 id；默认用绑定仓或 active repo；`root` 表示伞仓文档",
+            "type": "string"
+          }
+        },
+        "required": [
+          "milestone"
+        ]
+      }
+    },
+    "milestone_reject": {
+      "roles": [
+        "plan",
+        "main"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "milestone": {
+            "type": "string",
+            "description": "里程碑编号，如 M2"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "repo": {
+            "description": "仓库 id；默认用绑定仓或 active repo；`root` 表示伞仓文档",
+            "type": "string"
+          }
+        },
+        "required": [
+          "milestone",
+          "reason"
+        ]
+      }
+    },
+    "next": {
+      "roles": [
+        "main",
+        "plan",
+        "todo",
+        "user"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    "phase_activate": {
+      "roles": [
+        "main",
+        "user"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "repo": {
+            "type": "string",
+            "description": "仓库 id；传空字符串表示无"
+          },
+          "phase": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "repo"
+        ]
+      }
+    },
+    "presence": {
+      "roles": [
+        "main",
+        "plan",
+        "todo",
+        "user"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "session": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "questions": {
+      "roles": [
+        "main",
+        "plan",
+        "todo",
+        "user"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "to": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "blocking": {
+            "type": "boolean"
+          },
+          "all": {
+            "description": "包含已关闭的问题",
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "read_message": {
+      "roles": [
+        "main",
+        "plan",
+        "todo",
+        "user"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    "scope_check": {
+      "roles": [
+        "main",
+        "plan",
+        "todo",
+        "user"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "milestone": {
+            "type": "string",
+            "description": "里程碑编号，如 M2"
+          },
+          "repo": {
+            "description": "仓库 id；默认用绑定仓或 active repo；`root` 表示伞仓文档",
+            "type": "string"
+          },
+          "as_role": {
+            "description": "按哪个角色检查 ACL；默认实现者(todo)，PLAN 验收时用这个看实现方视角",
+            "type": "string",
+            "enum": [
+              "todo",
+              "plan",
+              "main"
+            ]
+          }
+        }
+      }
+    },
+    "send_message": {
+      "roles": [
+        "main",
+        "plan",
+        "todo",
+        "user"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "to": {
+            "type": "string",
+            "enum": [
+              "main",
+              "plan",
+              "todo",
+              "user"
+            ]
+          },
+          "to_repo": {
+            "description": "plan/todo 的仓库；默认自己的仓",
+            "type": "string"
+          },
+          "kind": {
+            "default": "event",
+            "type": "string",
+            "enum": [
+              "question",
+              "answer",
+              "event",
+              "handoff",
+              "alert",
+              "approval_request"
+            ]
+          },
+          "subject": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "refs": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "blocking": {
+            "default": false,
+            "type": "boolean"
+          },
+          "expires_at": {
+            "type": "string"
+          },
+          "idempotency_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "to",
+          "subject"
+        ]
+      }
+    },
+    "status": {
+      "roles": [
+        "main",
+        "plan",
+        "todo",
+        "user"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "repo": {
+            "description": "只看某个仓库",
+            "type": "string"
+          }
+        }
+      }
+    },
+    "wait_message": {
+      "roles": [
+        "main",
+        "plan",
+        "todo",
+        "user"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "main",
+              "plan",
+              "todo",
+              "user"
+            ]
+          },
+          "repo": {
+            "type": "string"
+          },
+          "timeout_ms": {
+            "type": "number"
+          }
+        }
+      }
+    }
+  }
+}

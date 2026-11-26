@@ -12,6 +12,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 1.0 compatibility design (`docs/design-1.0-contract.md`) and the first
   contract snapshot test (`tests/contract.test.ts`) covering MCP tool
   names/roles/inputs, `program.yaml` defaults and CLI commands.
+- `schema_version: 1` in `program.yaml` (written on the next mutation; missing
+  means 1). `mpt-workflow migrate` previews and `--apply`s the 0.x → 1.0
+  configuration migration (idempotent, comment-preserving); `doctor` warns when
+  the file was written by a newer schema.
+- `schemas/mcp-tools.json`, generated from the zod tool inputs by
+  `npm run schemas`; CI and the release gate run `schemas:check`.
+- `tests/compat.test.ts`: a 0.x-format workspace runs the full
+  plan → todo → evidence → accept → commit lifecycle, and every documented
+  status label still parses. Upgrade guide: `docs/upgrade-1.0.md`.
 
 ## [0.9.0] - 2026-11-26
 

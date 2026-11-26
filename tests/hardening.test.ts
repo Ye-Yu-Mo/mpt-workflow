@@ -137,6 +137,7 @@ custom_key: keep-me
   const text = fs.readFileSync(path.join(root, '.workflow/program.yaml'), 'utf8');
   assert.match(text, /# hand-written comment/);
   assert.match(text, /custom_key: keep-me/);
+  assert.match(text, /schema_version: 1/);
   assert.doesNotMatch(text, /^root:/m);
   assert.match(text, /repo-b/);
   assert.match(text, /program: keep-me/);
