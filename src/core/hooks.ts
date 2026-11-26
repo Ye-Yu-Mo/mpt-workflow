@@ -6,6 +6,7 @@ import { parseTodo } from './docs.js';
 import { exists, readText, writeAtomic } from './fsutil.js';
 import { stagedFiles } from './git.js';
 import { matchGlob } from './glob.js';
+import { QUESTION_STATUS_HELP } from './questions.js';
 import { isRole, type Role } from './types.js';
 import { isMachineManagedFile, Workflow } from './workflow.js';
 
@@ -321,6 +322,7 @@ export function runSessionStart(): number {
     '规则：只用 MCP 的 workflow 工具推进状态；不要手改 PLAN/TODO 状态；' +
       '有歧义先提问（ask）；提交需用户批准；blocking 消息要 ack 才能继续。',
   );
+  lines.push(`问题：${QUESTION_STATUS_HELP}`);
   process.stdout.write(lines.join('\n') + '\n');
   return 0;
 }

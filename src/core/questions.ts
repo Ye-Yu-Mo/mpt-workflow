@@ -5,6 +5,10 @@ import type { Question, QuestionStatus, Role } from './types.js';
 const HEADING_RE = /^##\s+(Q-[\w-]+)\s*(?:\[([a-z_]+)\])?\s*to:\s*([^\s]+)\s*$/;
 const FIELD_RE = /^-\s+([A-Za-z_]+)\s*[:：]\s*(.*)$/;
 
+/** Shared agent-facing explanation of the question lifecycle. */
+export const QUESTION_STATUS_HELP =
+  '问题状态：open=待回答；answered=已回答（提问方必须应用结论并 close）；applied/closed=已处理；canceled=作废。只 answer 不 close，问题会一直未闭合。';
+
 export function questionsFile(repoAbs: string): string {
   return path.join(repoAbs, 'docs', 'agent-questions.md');
 }
@@ -150,6 +154,7 @@ export function defaultQuestionsHeader(): string {
 > 协议：见 \`CLAUDE.md\` 与伞仓 \`docs/template/AGENT-QUESTIONS.md\`。
 > \`to: main\` 由用户转发主 agent；\`to: PLAN\` 由本仓 PLAN agent 回答后提醒用户转发 TODO agent。
 > 规则：blocking: yes 必须停；回答必须回写 PLAN/TODO/decisions，不能只留在问答文件。
+> ${QUESTION_STATUS_HELP}
 
 `;
 }

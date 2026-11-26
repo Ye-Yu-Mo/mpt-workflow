@@ -271,6 +271,31 @@ and ad-hoc files. The approval is bound to the working tree and staged hashes
 like any other commit; a later edit makes it stale. Root commits are local only;
 `git push` stays a human action.
 
+## Questions
+
+Questions live in `docs/agent-questions.md`, but they have a status lifecycle.
+The asker owns the last step:
+
+| Status | Meaning | Who acts |
+|---|---|---|
+| `open` | waiting for an answer | the addressee (`to`) |
+| `answered` | answer written; apply it | the asker (`from`) |
+| `applied` | a resolution is recorded (derived from the file) | — |
+| `closed` | the asker/user closed it | — |
+| `canceled` | withdrawn | — |
+
+```
+ask ──▶ open ──answer──▶ answered ──apply + close──▶ closed
+```
+
+After receiving an answer, the asker must **write the conclusion into
+`PLAN.md` / `TODO-Mn.md` / `decisions` and then call `close(id,
+resolution=...)`**. A question that is only answered stays in the unclosed
+list forever. `next` surfaces both sides: `回答非阻塞问题` for the addressee and
+`应用回答并 close` for the asker. `bootstrap`, `status`, `questions` and the
+SessionStart hook print the same status legend. Blocking (`blocking: yes`)
+questions stop claim/complete/accept/reject until answered.
+
 ## Messaging and notifications
 
 Agents don't need a human relay anymore. Events and messages are persisted,

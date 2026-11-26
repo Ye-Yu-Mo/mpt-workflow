@@ -43,6 +43,20 @@ The ACL is enforced by hooks, and the role is self-declared:
 - Bash writes are only best-effort checked (obvious `>` redirects). Use the
   pre-commit hook as the backstop.
 
+## A question is answered but never closes
+
+Question status is `open → answered → applied/closed` (`canceled` = withdrawn):
+
+- The addressee answers with `answer(id, ...)`; the asker is notified.
+- The **asker** must then apply the decision — write it into `PLAN.md`,
+  `TODO-Mn.md` or `decisions` — and call `close(id, resolution=...)`.
+- A question that is only answered stays in `status`/`questions` as `answered`
+  forever; `next` shows `应用回答并 close` for the asker.
+- `applied` is derived when a `resolution` is present; `close` records it
+  anyway. `canceled` means the question was withdrawn and needs no action.
+- Only the asker (`from`), `main` or `user` can close; a blocking question
+  blocks claim/complete/accept/reject until answered.
+
 ## A milestone transition is refused
 
 - **blocking message**: `mpt-workflow inbox --role <role> --repo <repo>` then

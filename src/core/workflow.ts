@@ -368,7 +368,7 @@ export class Workflow {
     const repos = this.repoRefs().map((r) => this.repoState(r.id));
     const questions = this.allQuestions();
     const blocking = questions.filter((q) => q.blocking && q.status === 'open');
-    const next = this.nextActions(repos, blocking);
+    const next = this.nextActions(repos, blocking, questions);
     const rootFiles = this.rootPendingFiles();
     if (rootFiles.length) {
       next.push({
@@ -399,7 +399,7 @@ export class Workflow {
     return allChangedFiles(this.root).filter((f) => isRootCommitAllowed(f));
   }
 
-  nextActions(repos: RepoState[], blocking: Question[]): NextAction[] {
+  nextActions(repos: RepoState[], blocking: Question[], questions: Question[]): NextAction[] {
     const out: NextAction[] = [];
 
     for (const q of blocking) {
@@ -412,6 +412,29 @@ export class Workflow {
         question: q.id,
         blocking: true,
       });
+    }
+
+    // Answered questions belong to the asker: apply the decision, then close.
+    for (const q of questions) {
+      if (q.status === 'answered') {
+        out.push({
+          actor: nextActor(String(q.from)),
+          action: '应用回答并 close',
+          detail: `${q.id} 已回答：先把结论回写到 PLAN/TODO/decisions，再 close(${q.id}, resolution=...)；只 answer 不 close 会一直未闭合`,
+          repo: q.repo,
+          question: q.id,
+          blocking: false,
+        });
+      } else if (q.status === 'open' && !q.blocking) {
+        out.push({
+          actor: nextActor(String(q.to)),
+          action: '回答非阻塞问题',
+          detail: `${q.id} (${q.from} → ${q.to})：${q.context.split('\n')[0].slice(0, 120)}`,
+          repo: q.repo,
+          question: q.id,
+          blocking: false,
+        });
+      }
     }
 
     const activeId = this.cfg.active_repo;
@@ -1373,6 +1396,12 @@ export class Workflow {
 }
 
 /* ------------------------------ helpers ------------------------------ */
+
+/** Map a question's from/to label (PLAN, TODO@repo, system, …) to a Role. */
+function nextActor(label: string): Role {
+  const actor = actorFromRole(label);
+  return actor.role === 'system' ? 'main' : actor.role;
+}
 
 export const ROOT_COMMIT_ALLOW = [
   'CLAUDE.md',

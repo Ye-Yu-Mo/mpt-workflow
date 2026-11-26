@@ -13,6 +13,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   partially rewriting it; the explicit `schema_version` guard matches `doctor`
   and `migrate`.
 
+### Changed
+
+- Question lifecycle is visible to agents: `bootstrap`, `status`, `questions`
+  and the SessionStart hook print the `open → answered → closed` legend; `next`
+  tells the addressee to answer and the asker to apply the decision and
+  `close`; `ask` reminds the asker to close; the generated question board
+  documents the statuses.
+
 ## [0.10.0] - 2026-11-26
 
 ### Added

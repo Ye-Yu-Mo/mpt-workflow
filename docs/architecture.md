@@ -80,7 +80,9 @@ approval stays bound to exactly the tree the user reviewed.
 Transitions are implemented in `Workflow` (`src/core/workflow.ts`) and exposed by
 both MCP tools and the CLI, so there is one implementation.
 
-**Question**: `open → answered → applied → closed`, or `canceled`.
+**Question**: `open → answered → applied → closed`, or `canceled`. The asker
+owns the final step: apply the answer to `PLAN.md`/`TODO-Mn.md`/`decisions`,
+then `close`; an answered-but-unclosed question stays visible in `next`.
 
 **Message**: `queued → unread → read → acked`, plus `expired` / `failed`.
 Delivery is at-least-once: the message is written before any wake-up attempt.

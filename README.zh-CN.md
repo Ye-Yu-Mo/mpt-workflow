@@ -118,6 +118,29 @@ MCP 工具：`inbox` / `read_message` / `ack_message` / `wait_message` /
   `plan → user` 仅 `alert`；`main`/`user`/`system` 不受限；跨仓必须经 main。
 - 唤醒是 best-effort：SessionStart hook 会注入未读摘要，但**消息本身以存储为准**。
 
+### 1.6 问题生命周期
+
+问题写在 `docs/agent-questions.md`，但有明确的状态；最后一步由**提问方**完成：
+
+| 状态 | 含义 | 谁处理 |
+|---|---|---|
+| `open` | 等待回答 | 被问方（`to`） |
+| `answered` | 已回答，需要应用结论 | 提问方（`from`） |
+| `applied` | 已记录 resolution（从文件推导） | — |
+| `closed` | 提问方/用户已关闭 | — |
+| `canceled` | 作废 | — |
+
+```
+ask ──▶ open ──answer──▶ answered ──应用并 close──▶ closed
+```
+
+收到回答后，提问方必须把结论**回写到 `PLAN.md` / `TODO-Mn.md` / `decisions`，再
+`close(id, resolution=...)`**。只 answer 不 close，问题会一直留在未闭合列表。
+
+`next` 会同时提示两侧：被问方看到“回答非阻塞问题”，提问方看到“应用回答并 close”。
+`bootstrap`、`status`、`questions` 和 SessionStart hook 都会打印同样的状态说明。
+`blocking: yes` 的问题在回答前会拦截 claim/complete/accept/reject。
+
 ### 2. 主 agent（main）
 
 - `status` / `next` / `doctor` —— 全局视图。
