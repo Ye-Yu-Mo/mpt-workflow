@@ -68,6 +68,8 @@ feature surface.
 
 ## 1.0 — stable contract
 
+Design: [docs/design-1.0-contract.md](docs/design-1.0-contract.md).
+
 - Freeze tool names/schemas and the `program.yaml` schema, with migrations.
 - Prove the release train across at least three releases.
 - Explicit deprecation policy and upgrade guide.

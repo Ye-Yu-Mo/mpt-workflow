@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- 1.0 compatibility design (`docs/design-1.0-contract.md`) and the first
+  contract snapshot test (`tests/contract.test.ts`) covering MCP tool
+  names/roles/inputs, `program.yaml` defaults and CLI commands.
+
 ## [0.9.0] - 2026-11-26
 
 ### Fixed

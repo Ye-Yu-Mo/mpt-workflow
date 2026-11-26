@@ -3,6 +3,7 @@
 | Document | What it covers |
 |---|---|
 | [architecture.md](architecture.md) | Layers, state machines, ACL, enforcement, evidence, messaging, storage, rejected alternatives |
+| [design-1.0-contract.md](design-1.0-contract.md) | What 1.0 freezes: MCP tools, `program.yaml`, Markdown contracts, CLI, hooks; change policy and migration |
 | [requirements-messaging.md](requirements-messaging.md) | Requirement-to-implementation mapping for the messaging layer (v0.1) |
 | [design-notes-v0.1.md](design-notes-v0.1.md) | Original design draft (Chinese). Some paths refer to the source project's umbrella repo. |
 | [requirements-agent-messaging-v0.1.md](requirements-agent-messaging-v0.1.md) | Original messaging requirements (Chinese), as received |
