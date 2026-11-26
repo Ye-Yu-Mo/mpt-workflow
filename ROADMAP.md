@@ -75,6 +75,11 @@ feature surface.
 - [x] Release `0.10.2` (dashboard relay station).
 - [x] Release `0.10.3` (pre-1.0 audit fixes, approval lifecycle).
 
+## 1.4 — scoped question ids
+
+- [x] New question ids carry the repo scope; legacy ids still parse.
+- [x] Release `1.4.0`.
+
 ## 1.3 — evidence and approval lifecycle
 
 - [x] Tracked evidence JSONL, short approval ids/prefixes, manual cancel.
