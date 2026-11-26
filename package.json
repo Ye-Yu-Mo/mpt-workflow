@@ -1,6 +1,6 @@
 {
   "name": "mpt-workflow",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "A local MCP server, CLI and dashboard that turn a multi-agent, multi-repo PLAN/TODO/accept/commit workflow into an enforceable state machine.",
   "type": "module",
   "bin": {
