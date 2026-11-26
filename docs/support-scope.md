@@ -1,6 +1,7 @@
 # Language and client support
 
-Decided for the 0.x line (2026-11-25). This is a scope decision, not a bug.
+Decided for the 0.x line (2026-11-25) and kept for 1.x. This is a scope
+decision, not a bug.
 
 ## Language: Chinese-first
 

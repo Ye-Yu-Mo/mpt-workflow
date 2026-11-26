@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-26
+
+### Changed
+
+- **1.0 compatibility contract is in effect.** The 25 MCP tool names, roles and
+  input fields, the `program.yaml` schema (`schema_version: 1`), the Markdown
+  document contracts, CLI commands/exit codes and hook integration points are
+  frozen; changes within 1.x are additive, and removals require a major release
+  plus the deprecation ledger. See
+  [docs/design-1.0-contract.md](docs/design-1.0-contract.md).
+- No code changes since 0.10.3. 0.x workspaces keep working; run
+  `mpt-workflow migrate` to make `schema_version` explicit. The upgrade guide is
+  [docs/upgrade-1.0.md](docs/upgrade-1.0.md).
+- Documentation is updated for the stable line: status, contract checklist,
+  upgrade guide, deprecation ledger and architecture reference.
+
 ## [0.10.3] - 2026-11-26
 
 ### Fixed
@@ -351,7 +367,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   timeline.
 - 16 tests.
 
-[Unreleased]: https://github.com/Ye-Yu-Mo/mpt-workflow/compare/v0.10.3...HEAD
+[Unreleased]: https://github.com/Ye-Yu-Mo/mpt-workflow/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/Ye-Yu-Mo/mpt-workflow/compare/v0.10.3...v1.0.0
 [0.10.3]: https://github.com/Ye-Yu-Mo/mpt-workflow/compare/v0.10.2...v0.10.3
 [0.10.2]: https://github.com/Ye-Yu-Mo/mpt-workflow/compare/v0.10.1...v0.10.2
 [0.10.1]: https://github.com/Ye-Yu-Mo/mpt-workflow/compare/v0.10.0...v0.10.1

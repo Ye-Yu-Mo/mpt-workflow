@@ -10,7 +10,7 @@ PLAN → TODO → implement → accept → commit workflow into an enforceable s
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D22-brightgreen.svg)](package.json)
 
-> Status: pre-1.0. See [ROADMAP.md](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/ROADMAP.md) for the current release and
+> Status: 1.0 stable. See [ROADMAP.md](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/ROADMAP.md) for the current release and
 > next steps.
 
 ---

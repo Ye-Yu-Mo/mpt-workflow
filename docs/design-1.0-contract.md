@@ -1,8 +1,7 @@
 # 1.0 compatibility contract (design)
 
-> Status: current surface as of v0.10.2; the remaining 1.0 items are tracked in
-> §6. The document describes the contract the 1.0 line promises to keep stable,
-> plus how it evolves and how users migrate.
+> Status: frozen in v1.0.0 (2026-11-26). The contract is effective; changes
+> within 1.x are additive unless a major release + deprecation path applies.
 
 ## 1. Why 1.0
 
@@ -181,7 +180,7 @@ Before 1.0, freeze the surface mechanically:
 4. A compat fixture runs plan → todo → evidence → accept → commit on every
    supported Node/OS matrix (`tests/compat.test.ts`).
 
-## 6. 1.0 checklist
+## 6. 1.0 checklist (complete)
 
 - [x] Tool/config/CLI snapshot test in CI (`tests/contract.test.ts`).
 - [x] Generated JSON Schemas and their CI diff check.
@@ -191,8 +190,9 @@ Before 1.0, freeze the surface mechanically:
 - [x] Upgrade guide exists.
 - [x] Deprecation ledger exists (`docs/deprecation.md`).
 - [x] At least three release trains (0.7 → 0.10) pass.
-- [ ] No open P1 correctness/security findings.
-- [ ] `CHANGELOG` has no unreleased breaking changes.
+- [x] No open P1 correctness/security findings (0.10.2 audit fixes shipped in
+  0.10.3).
+- [x] `CHANGELOG` has no unreleased breaking changes.
 
 ## 7. Explicit non-goals for 1.0
 
