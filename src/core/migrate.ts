@@ -1,9 +1,8 @@
 import YAML from 'yaml';
-import { configPath } from './config.js';
+import { configPath, SCHEMA_VERSION } from './config.js';
 import { exists, readText, writeAtomic } from './fsutil.js';
 
-/** Supported `program.yaml` schema version. */
-export const SCHEMA_VERSION = 1;
+export { SCHEMA_VERSION };
 
 export interface ConfigMigration {
   changes: string[];

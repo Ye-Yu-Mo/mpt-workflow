@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
+import { loadConfig, saveConfig } from '../src/core/config.js';
 import { migrateConfig, previewConfigMigration, SCHEMA_VERSION } from '../src/core/migrate.js';
 
 const CLI = path.resolve(process.cwd(), 'dist/cli.js');
@@ -66,6 +67,9 @@ test('migrate refuses invalid YAML and a newer schema version', () => {
 
   const future = legacyRoot('program: p\nschema_version: 2\nrepos: []\nphases: []\n');
   assert.throws(() => previewConfigMigration(future), /高于当前支持/);
+  const cfg = loadConfig(future);
+  assert.ok(cfg);
+  assert.throws(() => saveConfig(future, cfg), /高于当前支持/);
 });
 
 test('CLI migrate is a preview unless --apply is passed', { skip: !fs.existsSync(CLI) }, () => {

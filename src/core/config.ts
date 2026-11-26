@@ -14,6 +14,9 @@ export const RUNTIME_DIR = 'runtime';
  */
 export const ROOT_REPO_ID = 'root';
 
+/** Current `program.yaml` schema version. See docs/design-1.0-contract.md. */
+export const SCHEMA_VERSION = 1;
+
 export function workflowDir(root: string): string {
   return path.join(root, WORKFLOW_DIR);
 }
@@ -51,7 +54,7 @@ export function loadConfig(root: string): ProgramConfig | null {
 export function normalizeConfig(cfg: ProgramConfig, root: string): ProgramConfig {
   const version = Number(cfg.schema_version);
   return {
-    schema_version: Number.isFinite(version) && version > 0 ? version : 1,
+    schema_version: Number.isFinite(version) && version > 0 ? version : SCHEMA_VERSION,
     program: cfg.program || path.basename(root),
     root,
     repos: (cfg.repos || []).map((r) => ({ ...r })),
@@ -68,11 +71,17 @@ export function normalizeConfig(cfg: ProgramConfig, root: string): ProgramConfig
 }
 
 export function saveConfig(root: string, cfg: ProgramConfig): void {
+  const version = cfg.schema_version ?? SCHEMA_VERSION;
+  if (version > SCHEMA_VERSION) {
+    throw new Error(
+      `program.yaml schema_version=${version} 高于当前支持（${SCHEMA_VERSION}）；请升级 mpt-workflow`,
+    );
+  }
   ensureDir(workflowDir(root));
   const p = configPath(root);
   const data = {
     program: cfg.program,
-    schema_version: cfg.schema_version ?? 1,
+    schema_version: version,
     active_repo: cfg.active_repo,
     repos: cfg.repos,
     phases: cfg.phases,
