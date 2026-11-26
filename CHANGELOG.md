@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-11-26
+
 ### Fixed
 
 - Config mutations refuse a `program.yaml` written by a newer schema instead of
@@ -301,7 +303,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   timeline.
 - 16 tests.
 
-[Unreleased]: https://github.com/Ye-Yu-Mo/mpt-workflow/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/Ye-Yu-Mo/mpt-workflow/compare/v0.10.1...HEAD
+[0.10.1]: https://github.com/Ye-Yu-Mo/mpt-workflow/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/Ye-Yu-Mo/mpt-workflow/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/Ye-Yu-Mo/mpt-workflow/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/Ye-Yu-Mo/mpt-workflow/compare/v0.7.1...v0.8.0

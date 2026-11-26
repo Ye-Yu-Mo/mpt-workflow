@@ -71,6 +71,7 @@ feature surface.
 - [x] `schema_version: 1`, preview-first `migrate`, generated MCP JSON Schema.
 - [x] Contract snapshot tests and a 0.x-format compatibility lifecycle fixture.
 - [x] Release `0.10.0`.
+- [x] Release `0.10.1` (schema write guard, question lifecycle).
 
 ## 1.0 — stable contract
 
