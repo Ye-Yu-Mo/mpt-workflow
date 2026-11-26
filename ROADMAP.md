@@ -75,6 +75,12 @@ feature surface.
 - [x] Release `0.10.2` (dashboard relay station).
 - [x] Release `0.10.3` (pre-1.0 audit fixes, approval lifecycle).
 
+## 1.2 — shared-worktree commits
+
+- [x] Partial `commit_request(files=[...])` via an isolated temporary index.
+- [x] Approval-coverage pre-commit, unified scope, `WF_ALLOW_PATHS`.
+- [x] Release `1.2.0`.
+
 ## 1.1 — multi-session consistency
 
 - [x] Per-session role leases, config hot reload with fail-closed errors.
