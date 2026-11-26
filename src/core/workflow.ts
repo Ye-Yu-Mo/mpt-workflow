@@ -368,6 +368,18 @@ export class Workflow {
     const repos = this.repoRefs().map((r) => this.repoState(r.id));
     const questions = this.allQuestions();
     const blocking = questions.filter((q) => q.blocking && q.status === 'open');
+    const next = this.nextActions(repos, blocking);
+    const rootFiles = this.rootPendingFiles();
+    if (rootFiles.length) {
+      next.push({
+        actor: 'main',
+        action: '提交伞仓文档',
+        detail: `${rootFiles.length} 个文件待提交：${rootFiles.slice(0, 5).join(', ')}${
+          rootFiles.length > 5 ? ' …' : ''
+        }；commit_request(repo="root")`,
+        blocking: false,
+      });
+    }
     return {
       program: this.cfg.program,
       root: this.root,
@@ -376,9 +388,15 @@ export class Workflow {
       repos,
       questions,
       blockingQuestions: blocking,
-      next: this.nextActions(repos, blocking),
+      next,
       generatedAt: isoNow(),
     };
+  }
+
+  /** Allowlisted umbrella files with uncommitted changes (empty without a git root). */
+  rootPendingFiles(): string[] {
+    if (!gitInfo(this.root).available) return [];
+    return allChangedFiles(this.root).filter((f) => isRootCommitAllowed(f));
   }
 
   nextActions(repos: RepoState[], blocking: Question[]): NextAction[] {

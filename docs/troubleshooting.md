@@ -101,6 +101,9 @@ The ACL is enforced by hooks, and the role is self-declared:
 - A timeout kills the whole process group (no orphan test processes).
 - Evidence is written to `.workflow/runtime/evidence/<repo>/<M>/`; the TODO gets
   a truncated copy under `## 证据记录`.
+- Evidence output is fenced and parsed fence-aware: a test printing `### E2`,
+  `exit: 0` or `## 验收记录` cannot create a fake entry or cut the section
+  short. Only the metadata lines before the fence are treated as evidence.
 
 ## Dashboard is blank or returns 403
 

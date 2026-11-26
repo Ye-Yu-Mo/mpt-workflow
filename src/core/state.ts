@@ -74,7 +74,19 @@ export function acquireLock(root: string, name: string, staleMs = 30_000): LockH
     try {
       const st = fs.statSync(p);
       if (now - st.mtimeMs > staleMs) {
-        fs.rmSync(p, { recursive: true, force: true });
+        // Reclaim atomically: only one process can rename the stale directory
+        // away, so two waiters cannot both delete each other's fresh lock.
+        const dead = `${p}.stale-${process.pid}-${Date.now()}`;
+        try {
+          fs.renameSync(p, dead);
+        } catch {
+          return null;
+        }
+        try {
+          fs.rmSync(dead, { recursive: true, force: true });
+        } catch {
+          /* best-effort cleanup of the renamed directory */
+        }
         fs.mkdirSync(p);
         fs.writeFileSync(path.join(p, 'pid'), String(process.pid));
       } else {

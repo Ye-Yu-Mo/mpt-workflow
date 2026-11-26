@@ -156,7 +156,43 @@ export function diffUnified(repoAbs: string, file?: string): string {
   const args = ['diff', 'HEAD'];
   if (file) args.push('--', file);
   const r = git(repoAbs, args);
-  return r.ok ? r.out : '';
+  let out = r.ok ? r.out : '';
+  // `git diff HEAD` ignores untracked files. Include them so a dashboard diff
+  // (or any caller that has not staged yet) never hides new files.
+  const untracked = git(repoAbs, ['ls-files', '--others', '--exclude-standard', '-z'])
+    .out.split('\0')
+    .filter(Boolean);
+  const targets = file ? untracked.filter((f) => f === file) : untracked;
+  for (const f of targets) {
+    if (out && !out.endsWith('\n')) out += '\n';
+    out += untrackedDiff(repoAbs, f);
+  }
+  return out;
+}
+
+const UNTRACKED_DIFF_MAX = 256 * 1024;
+
+/** Render one untracked file as a new-file diff, capped for browser review. */
+function untrackedDiff(repoAbs: string, file: string): string {
+  let size = 0;
+  try {
+    size = fs.statSync(path.join(repoAbs, file)).size;
+  } catch {
+    return '';
+  }
+  if (size > UNTRACKED_DIFF_MAX) {
+    return [
+      `diff --git a/${file} b/${file}`,
+      'new file mode 100644',
+      '--- /dev/null',
+      `+++ b/${file}`,
+      `@@ 未跟踪文件 ${size} 字节，超过 diff 预览上限 ${UNTRACKED_DIFF_MAX} 字节 @@`,
+      '',
+    ].join('\n');
+  }
+  // `--no-index` produces a correct new-file diff (including binary detection);
+  // its exit code is 1 for a difference, so read stdout regardless of `ok`.
+  return git(repoAbs, ['diff', '--no-index', '--', '/dev/null', file]).out;
 }
 
 export function recentLog(repoAbs: string, n = 5): string[] {

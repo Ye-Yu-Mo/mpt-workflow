@@ -33,12 +33,56 @@ export function splitFrontMatter(text: string): FrontMatter {
   };
 }
 
+/** A fenced code block delimiter: the fence character and its length. */
+export interface Fence {
+  ch: '`' | '~';
+  len: number;
+}
+
+/** Opening fence of a fenced code block (info string allowed). */
+export function fenceStart(line: string): Fence | null {
+  const m = /^\s*(`{3,}|~{3,})/.exec(line);
+  return m ? { ch: m[1][0] as '`' | '~', len: m[1].length } : null;
+}
+
+/** Closing fence: same character, at least as long, nothing else on the line. */
+export function fenceEnd(line: string, fence: Fence): boolean {
+  const m = /^\s*(`{3,}|~{3,})\s*$/.exec(line);
+  return !!m && m[1][0] === fence.ch && m[1].length >= fence.len;
+}
+
+/**
+ * Per-line flags: true when the line is outside any fenced code block.
+ * Headings and entry markers inside output fences must not be parsed as
+ * document structure (evidence logs are fenced).
+ */
+export function outsideFences(text: string): boolean[] {
+  const lines = text.split('\n');
+  const outside = new Array<boolean>(lines.length).fill(true);
+  let fence: Fence | null = null;
+  for (let i = 0; i < lines.length; i++) {
+    if (fence) {
+      outside[i] = false;
+      if (fenceEnd(lines[i], fence)) fence = null;
+      continue;
+    }
+    const start = fenceStart(lines[i]);
+    if (start) {
+      fence = start;
+      outside[i] = false;
+    }
+  }
+  return outside;
+}
+
 /** Get a markdown section body between a heading and the next same-or-higher heading. */
 export function section(text: string, headingPattern: RegExp): string | null {
   const lines = text.split('\n');
+  const outside = outsideFences(text);
   let start = -1;
   let level = 0;
   for (let i = 0; i < lines.length; i++) {
+    if (!outside[i]) continue;
     const m = /^(#{1,6})\s+(.*)$/.exec(lines[i]);
     if (m && headingPattern.test(m[2])) {
       start = i + 1;
@@ -49,6 +93,10 @@ export function section(text: string, headingPattern: RegExp): string | null {
   if (start === -1) return null;
   const out: string[] = [];
   for (let i = start; i < lines.length; i++) {
+    if (!outside[i]) {
+      out.push(lines[i]);
+      continue;
+    }
     const m = /^(#{1,6})\s+/.exec(lines[i]);
     if (m && m[1].length <= level) break;
     out.push(lines[i]);
@@ -78,9 +126,11 @@ export function stripQuotes(s: string): string {
  */
 export function appendToSection(text: string, headingPattern: RegExp, block: string): string {
   const lines = text.split('\n');
+  const outside = outsideFences(text);
   let start = -1;
   let level = 0;
   for (let i = 0; i < lines.length; i++) {
+    if (!outside[i]) continue;
     const m = /^(#{1,6})\s+(.*)$/.exec(lines[i]);
     if (m && headingPattern.test(m[2])) {
       start = i;
@@ -96,6 +146,7 @@ export function appendToSection(text: string, headingPattern: RegExp, block: str
 
   let end = lines.length;
   for (let i = start + 1; i < lines.length; i++) {
+    if (!outside[i]) continue;
     const m = /^(#{1,6})\s+/.exec(lines[i]);
     if (m && m[1].length <= level) {
       end = i;

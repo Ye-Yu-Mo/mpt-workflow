@@ -67,15 +67,38 @@ export function normalizeConfig(cfg: ProgramConfig, root: string): ProgramConfig
 
 export function saveConfig(root: string, cfg: ProgramConfig): void {
   ensureDir(workflowDir(root));
+  const p = configPath(root);
   const data = {
     program: cfg.program,
-    root: cfg.root,
     active_repo: cfg.active_repo,
     repos: cfg.repos,
     phases: cfg.phases,
     contracts: cfg.contracts,
   };
-  writeAtomic(configPath(root), YAML.stringify(data, { lineWidth: 0 }));
+
+  // Update only the keys that changed, so hand-written comments and unknown
+  // keys survive a mutation. `root` is runtime state (the path this process
+  // opened) and is deliberately not written back.
+  if (exists(p)) {
+    try {
+      const doc = YAML.parseDocument(readText(p));
+      if (doc.errors.length === 0) {
+        const current = normalizeConfig((doc.toJS() ?? {}) as ProgramConfig, root);
+        for (const [key, value] of Object.entries(data)) {
+          const before = (current as unknown as Record<string, unknown>)[key];
+          if (JSON.stringify(before ?? null) !== JSON.stringify(value ?? null)) {
+            doc.set(key, value);
+          }
+        }
+        doc.delete('root');
+        writeAtomic(p, doc.toString({ lineWidth: 0 }));
+        return;
+      }
+    } catch {
+      /* fall through to a full rewrite */
+    }
+  }
+  writeAtomic(p, YAML.stringify(data, { lineWidth: 0 }));
 }
 
 /** Find the umbrella root by walking up from `start` looking for .workflow/program.yaml. */

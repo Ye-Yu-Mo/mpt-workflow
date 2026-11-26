@@ -316,8 +316,9 @@ mpt-workflow watch --role main
   adopt the recommendation, or copy a relay message
 - message panel with read/ack and **未读 / blocking / 全部** filters
 - pending commit approvals with a **diff review** (file list, stat, unified
-  diff) before you approve; a changed worktree is flagged and approval is
-  disabled
+  diff, including new/untracked files) before you approve; a changed worktree is
+  flagged and approval is disabled, and an oversized diff is marked as
+  truncated
 - copyable agent session command (`WF_ROLE=… WF_REPO=… claude`) for each next
   action, and a **设为 active** control on each repo card
 - environment checks and an event timeline

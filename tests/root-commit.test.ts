@@ -77,6 +77,10 @@ contracts: []
 test('main can commit umbrella docs through the approval flow', () => {
   const { root, repo, wf } = fixture();
   fs.writeFileSync(path.join(root, 'docs/a.md'), 'a2\n');
+  assert.ok(
+    wf.programStatus().next.some((n) => n.action === '提交伞仓文档'),
+    'status should suggest the pending umbrella commit',
+  );
 
   const req = wf.requestCommit({ repoId: 'root', message: 'docs: a', role: 'main' });
   assert.equal(req.approval.repo, 'root');
@@ -89,6 +93,7 @@ test('main can commit umbrella docs through the approval flow', () => {
   assert.equal(git(root, ['log', '-1', '--format=%s']).trim(), 'docs: a');
   assert.equal(git(repo, ['log', '-1', '--format=%s']).trim(), 'repo init');
   assert.equal(git(repo, ['status', '--porcelain']).trim(), '');
+  assert.ok(!wf.programStatus().next.some((n) => n.action === '提交伞仓文档'));
 });
 
 test('plan and todo cannot request or execute a root commit', () => {
@@ -213,7 +218,9 @@ test('root commit without a root git repository is refused', () => {
 test('dashboard API exposes root approvals and root diffs', async () => {
   const { root, wf } = fixture();
   fs.writeFileSync(path.join(root, 'docs/a.md'), 'a2\n');
+  fs.writeFileSync(path.join(root, 'docs/new.md'), 'brand new\n');
   const req = wf.requestCommit({ repoId: 'root', message: 'docs: dashboard', role: 'main' });
+  assert.ok(req.files.includes('docs/new.md'));
   const server = await startWebServer(wf, 0);
   try {
     const approvals = (await (await fetch(`${server.url}/api/approvals`)).json()) as {
@@ -229,6 +236,8 @@ test('dashboard API exposes root approvals and root diffs', async () => {
       diff: string;
     };
     assert.match(diff.diff, /docs\/a\.md/);
+    assert.match(diff.diff, /docs\/new\.md/);
+    assert.match(diff.diff, /\+brand new/);
   } finally {
     await server.close();
   }
