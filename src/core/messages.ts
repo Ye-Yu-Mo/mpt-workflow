@@ -503,3 +503,61 @@ export function formatMessage(m: Message, opts: { full?: boolean } = {}): string
   if (m.ack_note) lines.push(`  ack: ${m.ack_note}`);
   return lines.join('\n');
 }
+
+/**
+ * Ready-to-paste prompt for relaying a batch of messages to an agent session.
+ * Interactive Claude Code sessions cannot be woken from another process, so the
+ * dashboard/CLI hands the user a prompt instead of trying to inject one.
+ */
+export function relayPrompt(input: {
+  role: MsgRole;
+  repo?: string;
+  repoPath: string;
+  branch?: string;
+  messages: Message[];
+}): string {
+  const who = input.repo ? `${input.role}@${input.repo}` : input.role;
+  const lines = [
+    `你在 ${input.repoPath} 扮演 ${who} agent${input.repo ? '' : '（主 agent）'}。`,
+    `先调用 bootstrap(role="${input.role}"${input.repo ? `, repo="${input.repo}"` : ''})，再用 status / next 了解上下文；读完材料前不要改文件。`,
+  ];
+  if (input.branch) lines.push(`当前分支：${input.branch}`);
+  lines.push('', `待处理消息（${input.messages.length} 条）：`);
+  let hasQuestion = false;
+  for (const m of input.messages) {
+    const tags = [m.kind, m.blocking ? 'blocking' : '', m.status].filter(Boolean).join(', ');
+    lines.push('', `- ${m.id} [${tags}] ${m.subject}`);
+    if (m.body) lines.push(...m.body.split('\n').map((l) => `  ${l}`));
+    const refs = Object.entries(m.refs).filter(([, v]) => (Array.isArray(v) ? v.length : v));
+    if (refs.length) {
+      lines.push(
+        `  refs: ${refs.map(([k, v]) => `${k}=${Array.isArray(v) ? v.join(',') : v}`).join(' ')}`,
+      );
+    }
+    const hint = relayHint(m);
+    if (hint) lines.push(`  处理提示：${hint}`);
+    if (m.kind === 'question' || m.kind === 'answer') hasQuestion = true;
+  }
+  lines.push('', '处理完对每条消息调用 ack_message(id, note="...")。');
+  if (hasQuestion) {
+    lines.push(
+      '问题状态：open → answered（提问方应用结论并回写）→ closed；只 answer 不 close 会一直未闭合。',
+    );
+  }
+  return lines.join('\n');
+}
+
+function relayHint(m: Message): string {
+  switch (m.kind) {
+    case 'question':
+      return '你是被问方：用 questions 查看上下文并 answer(id, answer, resolution)；提问方应用后会 close。';
+    case 'answer':
+      return '这是对你问题的回答：把结论回写到 PLAN/TODO/decisions，然后 close(id, resolution=...)。';
+    case 'approval_request':
+      return '需要用户批准：不要自行 commit。';
+    case 'alert':
+      return '检查 alert 原因并处理；必要时 escalate。';
+    default:
+      return '';
+  }
+}

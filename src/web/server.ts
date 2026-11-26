@@ -4,7 +4,8 @@ import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { exists, readText, realPath, within } from '../core/fsutil.js';
-import { diffStat, diffUnified, recentLog, workingTreeHash } from '../core/git.js';
+import { diffStat, diffUnified, gitInfo, recentLog, workingTreeHash } from '../core/git.js';
+import { type Actor, relayPrompt } from '../core/messages.js';
 import { logEvent, readEvents } from '../core/state.js';
 import type { Workflow } from '../core/workflow.js';
 import { VERSION } from '../version.js';
@@ -155,6 +156,54 @@ export function startWebServer(wf: Workflow, port: number): Promise<WebHandle> {
             }
           });
           return json(res, approvals);
+        }
+        if (req.method === 'GET' && p === '/api/relay') {
+          // Messages to agents cannot be injected into an interactive Claude
+          // Code session; the dashboard returns a ready-to-paste prompt.
+          const targets: Actor[] = [{ role: 'main' }];
+          for (const r of wf.cfg.repos) {
+            targets.push({ role: 'plan', repo: r.id }, { role: 'todo', repo: r.id });
+          }
+          wf.msgs.expireDue();
+          const infoCache = new Map<string, { path: string; branch: string }>();
+          const infoFor = (repo?: string): { path: string; branch: string } => {
+            const key = repo ?? '';
+            const cached = infoCache.get(key);
+            if (cached) return cached;
+            const repoPath = repo ? wf.repoRef(repo).abs : wf.root;
+            const gi = gitInfo(repoPath);
+            const info = { path: repoPath, branch: gi.available ? gi.branch : '' };
+            infoCache.set(key, info);
+            return info;
+          };
+          const out = [];
+          for (const target of targets) {
+            wf.msgs.promoteQueued(target);
+            const unread = wf.msgs.forActor(target, { unreadOnly: true, limit: 100 });
+            const blocking = wf.msgs.blockingFor(target);
+            const byId = new Map([...unread, ...blocking].map((m) => [m.id, m]));
+            const messages = [...byId.values()].sort((a, b) =>
+              a.created_at.localeCompare(b.created_at),
+            );
+            if (messages.length === 0) continue;
+            const info = infoFor(target.repo);
+            out.push({
+              actor: target,
+              repoPath: info.path,
+              branch: info.branch,
+              count: messages.length,
+              blocking: messages.filter((m) => m.blocking).length,
+              messages,
+              prompt: relayPrompt({
+                role: target.role,
+                repo: target.repo,
+                repoPath: info.path,
+                branch: info.branch || undefined,
+                messages,
+              }),
+            });
+          }
+          return json(res, { targets: out });
         }
         if (req.method === 'GET' && p === '/api/messages') {
           const role = (url.searchParams.get('role') || 'user') as

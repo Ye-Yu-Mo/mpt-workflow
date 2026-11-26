@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Dashboard **relay station**: pending messages for `plan@repo`, `todo@repo`
+  and `main` grouped by recipient, with a ready-to-paste prompt containing the
+  bootstrap call, message IDs, ack requirement and question close rule.
+  Interactive sessions still need the paste; the card removes the manual
+  prompt-writing.
+
 ## [0.10.1] - 2026-11-26
 
 ### Fixed

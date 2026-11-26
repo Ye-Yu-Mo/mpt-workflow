@@ -330,6 +330,11 @@ mpt-workflow watch --role main
   `plan → main`; `plan → todo@same-repo`; `plan → user` only for `alert`;
   `main`, `user` and `system` are unrestricted. Cross-repo traffic goes through
   `main`.
+- **Waking another agent.** An interactive Claude Code session cannot be
+  injected with text from this process. Use the dashboard **relay station**:
+  it groups pending messages per recipient and generates a prompt with the
+  bootstrap call, message IDs, and the ack/close steps. Paste it into that
+  agent's session.
 
 ## Dashboard
 
@@ -340,6 +345,11 @@ mpt-workflow watch --role main
 - question inbox — answer inline (writes back to Markdown, notifies the asker),
   adopt the recommendation, or copy a relay message
 - message panel with read/ack and **未读 / blocking / 全部** filters
+- **Relay station** — pending messages for `plan@repo`, `todo@repo` and `main`
+  grouped by recipient, each with a ready-to-paste prompt (bootstrap, message
+  IDs, ack and question-close rules). Interactive Claude Code sessions cannot be
+  woken from another process, so the final paste is still yours; the dashboard
+  removes the manual prompt-writing.
 - pending commit approvals with a **diff review** (file list, stat, unified
   diff, including new/untracked files) before you approve; a changed worktree is
   flagged and approval is disabled, and an oversized diff is marked as
