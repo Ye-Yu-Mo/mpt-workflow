@@ -73,6 +73,7 @@ feature surface.
 - [x] Release `0.10.0`.
 - [x] Release `0.10.1` (schema write guard, question lifecycle).
 - [x] Release `0.10.2` (dashboard relay station).
+- [x] Release `0.10.3` (pre-1.0 audit fixes, approval lifecycle).
 
 ## 1.0 — stable contract
 
