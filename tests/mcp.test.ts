@@ -154,18 +154,20 @@ test('full lifecycle through the MCP tool layer', async () => {
     options: ['A: v1', 'B: v2'],
     blocking: true,
   });
-  assert.match(asked.text, /Q-001/);
+  assert.match(asked.text, /Q-repo-a-001/);
+  const qid = /Q-[A-Za-z0-9-]+/.exec(asked.text)?.[0];
+  assert.ok(qid, asked.text);
   const qs = await plan('questions', {});
-  assert.match(qs.text, /Q-001/);
+  assert.match(qs.text, new RegExp(qid));
   assert.match(qs.text, /blocking/);
 
   // main answers and the asker closes
   const main = caller(wf, 'main');
-  const ans = await main('answer', { id: 'Q-001', answer: '用 A', resolution: 'PLAN §3' });
+  const ans = await main('answer', { id: qid, answer: '用 A', resolution: 'PLAN §3' });
   assert.ok(!ans.isError, ans.text);
-  const closed = await plan('close', { id: 'Q-001' });
+  const closed = await plan('close', { id: qid });
   assert.ok(!closed.isError, closed.text);
-  assert.equal(wf.findQuestion('Q-001')?.status, 'closed');
+  assert.equal(wf.findQuestion(qid)?.status, 'closed');
 
   // todo: claim -> evidence -> complete
   const claim = await todo('milestone_claim', { milestone: 'M1' });

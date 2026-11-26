@@ -132,6 +132,8 @@ test('question lifecycle: ask, answer, close', () => {
 
 test('nextQuestionId does not reuse closed ids', () => {
   assert.equal(nextQuestionId([{ id: 'Q-001' }, { id: 'Q-007' }]), 'Q-008');
+  assert.equal(nextQuestionId([{ id: 'Q-001' }, { id: 'Q-repo-a-002' }], 'repo-a'), 'Q-repo-a-003');
+  assert.equal(nextQuestionId([], 'root'), 'Q-root-001');
 });
 
 /* --------------------------------- acl ---------------------------------- */

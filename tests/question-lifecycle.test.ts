@@ -101,7 +101,7 @@ test('closing an unanswered blocking question clears the blocker', async () => {
     { to: 'PLAN', context: 'need a decision', blocking: true, repo: 'repo-a' },
     ctx,
   );
-  const id = /Q-\d+/.exec(String(out))?.[0];
+  const id = /Q-[A-Za-z0-9-]+/.exec(String(out))?.[0];
   assert.ok(id, String(out));
   assert.ok(wf.msgs.blockingFor({ role: 'plan', repo: 'repo-a' }).length > 0);
 

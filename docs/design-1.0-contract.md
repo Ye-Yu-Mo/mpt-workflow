@@ -96,7 +96,7 @@ contracts?:                # optional
 | `<repo>/PLAN.md` | milestone table `| M1 | title | ... |` and/or `### M1 — title` headings; `版本` / `状态` / `程序阶段` lines |
 | `<repo>/TODO-Mn.md` | `# TODO-Mn: title`; status line `> 状态：…` (or front-matter `status:`); `**影响文件**` list (multiple blocks merge; frontmatter `files: [...]` and `<!-- files: [...] -->` also accepted); `## 验收标准`; `## 验收记录`; legacy `## 证据记录` still parsed |
 | `<repo>/docs/evidence/Mn.jsonl` | tracked evidence records (one JSON object per line); full logs stay in `.workflow/runtime/evidence/` |
-| `docs/agent-questions.md` | `## Q-n to: role` heading, `- field: value` lines, options, answer/resolution |
+| `docs/agent-questions.md` | `## Q-<scope>-n to: role` heading (legacy `## Q-n` still parses), `- field: value` lines, options, answer/resolution |
 
 Status labels: `草稿`/`planned` → `待实现`/`todo_ready` → `实现中`/`implementing`
 → `待验收`/`review` → `已验收`/`accepted` → `已提交`/`committed`;
