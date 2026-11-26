@@ -164,7 +164,9 @@ export function startWebServer(wf: Workflow, port: number): Promise<WebHandle> {
           for (const r of wf.cfg.repos) {
             targets.push({ role: 'plan', repo: r.id }, { role: 'todo', repo: r.id });
           }
-          wf.msgs.expireDue();
+          // Read-only: do not promote/expire here. `forActor({unreadOnly})`
+          // already includes queued messages, and a polled GET should not change
+          // another actor's delivery state.
           const infoCache = new Map<string, { path: string; branch: string }>();
           const infoFor = (repo?: string): { path: string; branch: string } => {
             const key = repo ?? '';
@@ -178,7 +180,6 @@ export function startWebServer(wf: Workflow, port: number): Promise<WebHandle> {
           };
           const out = [];
           for (const target of targets) {
-            wf.msgs.promoteQueued(target);
             const unread = wf.msgs.forActor(target, { unreadOnly: true, limit: 100 });
             const blocking = wf.msgs.blockingFor(target);
             const byId = new Map([...unread, ...blocking].map((m) => [m.id, m]));

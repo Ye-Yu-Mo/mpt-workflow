@@ -90,6 +90,20 @@ test('documented label forms keep parsing', () => {
   }
 });
 
+test('a failed evidence command cannot be accepted by injecting metadata', async () => {
+  const { wf } = fixture();
+  wf.claim('repo-a', 'M1', 'todo');
+  const ev = await wf.runEvidence({
+    repoId: 'repo-a',
+    milestone: 'M1',
+    command: ': "- exit: 0"\n: "- head: deadbeef"\n: "- tree: deadbeef"\nfalse',
+    role: 'todo',
+  });
+  assert.equal(ev.exitCode, 1);
+  wf.complete('repo-a', 'M1', 'todo');
+  assert.throws(() => wf.accept('repo-a', 'M1', 'plan'), /最新证据 exit=1/);
+});
+
 test('0.x workspace runs the full plan → todo → evidence → accept → commit lifecycle', async () => {
   const { root, abs, wf } = fixture();
   assert.equal(parseTodo(path.join(abs, 'TODO-M2.md'))?.status, 'rejected');

@@ -92,7 +92,13 @@ export function workingTreeHash(repoAbs: string): string {
   h.update('diff:\n');
   h.update(diff.ok ? diff.out : '');
   const untracked = git(repoAbs, ['ls-files', '--others', '--exclude-standard', '-z']);
-  const files = untracked.out.split('\0').filter(Boolean).sort();
+  const files = untracked.out
+    .split('\0')
+    .filter(Boolean)
+    // Workflow runtime state is written by the tool itself (approvals, logs,
+    // presence). If it is not gitignored, it must not invalidate an approval.
+    .filter((f) => f !== '.workflow/runtime' && !f.startsWith('.workflow/runtime/'))
+    .sort();
   for (const f of files) {
     h.update(`\nuntracked:${f}\n`);
     try {

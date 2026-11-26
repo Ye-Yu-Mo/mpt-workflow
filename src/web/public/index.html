@@ -434,7 +434,11 @@ details.ms-detail[open] summary::before { content: "▾"; }
       </section>
 
       <section class="card">
-        <div class="card-head"><h2>待批准提交</h2></div>
+        <div class="card-head"><h2>待批准提交</h2><span class="count" id="approval-count"></span>
+          <label class="pill" style="margin-left:auto;cursor:pointer">
+            <input type="checkbox" id="show-stale-approvals" style="margin:0" /> 显示已失效
+          </label>
+        </div>
         <div class="list" id="approvals"></div>
       </section>
 
@@ -489,6 +493,7 @@ const QSTATUS = { open: '待回答', answered: '已回答', applied: '已应用'
 
 let data = null;
 let showClosed = false;
+let showStaleApprovals = false;
 let messagesData = { unread: 0, blocking: [], messages: [] };
 let relayData = { targets: [] };
 let messageFilter = 'unread';
@@ -556,7 +561,7 @@ function isEditing() {
 function captureFocus() {
   const a = document.activeElement;
   if (!a || a === document.body) return null;
-  for (const attr of ['data-filter', 'data-ms', 'data-approval', 'data-ack', 'data-read', 'data-diff', 'data-approve']) {
+  for (const attr of ['data-filter', 'data-ms', 'data-approval', 'data-ack', 'data-read', 'data-diff', 'data-approve', 'data-relay-copy', 'data-relay-view']) {
     const v = a.getAttribute(attr);
     if (v) {
       return () => {
@@ -647,7 +652,7 @@ function renderTiles(st) {
     { label: '阻塞问题', value: blocking, hint: blocking ? '实现必须先停下回答' : '没有阻塞', sym: blocking ? 'crit' : 'good', ch: blocking ? '!' : '✓' },
     { label: '未读消息', value: messagesData.unread, hint: messagesData.blocking.length ? `${messagesData.blocking.length} 条 blocking` : 'inbox 里没有新消息', sym: messagesData.blocking.length ? 'crit' : messagesData.unread ? 'info' : 'good', ch: messagesData.blocking.length ? '!' : '●' },
     { label: '进行中的 M', value: inProgress, hint: '实现中 + 待验收', sym: 'info', ch: '◐' },
-    { label: '待批准提交', value: (window.__approvals || []).filter(a => !a.used_at).length, hint: '需要用户 review diff', sym: 'warn', ch: '!' },
+    { label: '待批准提交', value: (window.__approvals || []).filter(a => !a.used_at && !a.superseded_at && !a.stale).length, hint: '需要用户 review diff', sym: 'warn', ch: '!' },
     { label: '工作区有改动', value: dirty + ' / ' + st.repos.length, hint: '仓库未提交状态', sym: dirty ? 'warn' : 'good', ch: dirty ? '●' : '✓' },
   ];
   const box = $('#tiles');
@@ -917,15 +922,22 @@ function relayText(q) {
 }
 
 function renderRelay(relay) {
+  const failed = relay === null;
   relayData = relay || { targets: [] };
   const box = $('#relay');
   if (!box) return;
   box.innerHTML = '';
   const targets = relayData.targets || [];
   const total = targets.reduce((n, t) => n + (t.count || 0), 0);
-  $('#relay-count').textContent = total
-    ? `${targets.length} 个收件人 · ${total} 条待转交`
-    : '没有待转交消息';
+  $('#relay-count').textContent = failed
+    ? '加载失败'
+    : total
+      ? `${targets.length} 个收件人 · ${total} 条待转交`
+      : '没有待转交消息';
+  if (failed) {
+    box.appendChild(el('div', 'empty', '中转站加载失败，请点「刷新」重试。'));
+    return;
+  }
   if (!targets.length) {
     box.appendChild(el('div', 'empty', '没有需要转交给 agent 的消息。'));
     return;
@@ -1122,19 +1134,34 @@ async function openDiff(a) {
 
 function renderApprovals() {
   const box = $('#approvals');
-  const list = (window.__approvals || []).filter(a => !a.used_at);
+  const all = (window.__approvals || []).filter(a => !a.used_at && !a.superseded_at);
+  const stale = all.filter(a => a.stale);
+  const list = showStaleApprovals ? all : all.filter(a => !a.stale);
+  const superseded = (window.__approvals || []).filter(a => !a.used_at && a.superseded_at).length;
+  const count = $('#approval-count');
+  if (count) {
+    count.textContent = `${list.length} 待处理` +
+      (!showStaleApprovals && stale.length ? ` · ${stale.length} 已失效` : '') +
+      (superseded ? ` · ${superseded} 已被新请求替代` : '');
+  }
   box.innerHTML = '';
-  if (!list.length) { box.appendChild(el('div', 'empty', '没有待批准的提交。')); return; }
+  if (!list.length) {
+    box.appendChild(el('div', 'empty', stale.length && !showStaleApprovals
+      ? '没有可批准的提交。勾选「显示已失效」查看旧快照。'
+      : '没有待批准的提交。'));
+    return;
+  }
   for (const a of list) {
     const files = (a.files || []).map(f => `<li><code>${esc(f)}</code></li>`).join('');
     const repoLabel = a.repo === 'root' ? 'root（伞仓文档）' : a.repo;
+    const staleLabel = a.approved_at ? '已批准但已失效' : '工作区已变化';
     const r = el('div', 'row-item');
     r.innerHTML = `
       <div class="v" style="flex:1">
-        <div><code>${esc(a.id)}</code> · ${esc(repoLabel)} ${a.stale ? '<span class="tag bad">工作区已变化</span>' : a.approved_at ? '<span class="tag ok">已批准</span>' : '<span class="tag">待批准</span>'}</div>
+        <div><code>${esc(a.id)}</code> · ${esc(repoLabel)} ${a.stale ? `<span class="tag bad">${staleLabel}</span>` : a.approved_at ? '<span class="tag ok">已批准</span>' : '<span class="tag">待批准</span>'}</div>
         <div style="color:var(--ink-2)">${esc(a.message)}</div>
         <div class="repo-meta">${(a.files || []).length} 个文件 · tree ${esc(a.tree_hash)}</div>
-        ${a.stale ? '<div class="repo-meta" style="color:var(--critical)">工作区已变化，请重新 commit_request</div>' : ''}
+        ${a.stale ? '<div class="repo-meta" style="color:var(--critical)">已失效：工作区在请求/批准后发生变化；请重新 commit_request</div>' : ''}
         <details class="repo-meta" style="margin-top:4px">
           <summary>查看文件列表</summary>
           <ul style="margin:4px 0 0;padding-left:18px">${files}</ul>
@@ -1210,14 +1237,14 @@ async function load(opts = {}) {
     renderTiles(st);
     renderRepos(st);
     renderQuestions(st);
-    renderRelay(relayRes.status === 'fulfilled' ? relayRes.value : { targets: [] });
+    renderRelay(relayRes.status === 'fulfilled' ? relayRes.value : null);
     renderMessages();
     renderNext(st);
     renderApprovals();
     renderDoctor(doctorRes.status === 'fulfilled' ? doctorRes.value : []);
     renderTimeline(eventsRes.status === 'fulfilled' ? eventsRes.value : []);
-    if (eventsRes.status === 'rejected' || doctorRes.status === 'rejected') {
-      showToast('部分面板加载失败（doctor/events）');
+    if (eventsRes.status === 'rejected' || doctorRes.status === 'rejected' || relayRes.status === 'rejected') {
+      showToast('部分面板加载失败（doctor/events/relay）');
     } else {
       hideError();
     }
@@ -1247,6 +1274,7 @@ autoBox.onchange = () => {
 $('#refresh').onclick = () => load();
 $('#retry').onclick = () => load();
 $('#show-closed').onchange = (e) => { showClosed = e.target.checked; if (data) renderQuestions(data); };
+$('#show-stale-approvals').onchange = (e) => { showStaleApprovals = e.target.checked; renderApprovals(); };
 $('#theme').onclick = () => {
   const cur = document.documentElement.getAttribute('data-theme');
   const next = cur === 'dark' ? 'light' : cur === 'light' ? 'dark' : (matchMedia('(prefers-color-scheme: dark)').matches ? 'light' : 'dark');

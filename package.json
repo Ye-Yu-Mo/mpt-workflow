@@ -22,9 +22,9 @@
     "typecheck:tests": "tsc -p tsconfig.test.json --noEmit",
     "lint": "biome check .",
     "format": "biome check --write .",
-    "prepublishOnly": "npm run build && npm test",
-    "schemas": "node scripts/gen-schemas.mjs",
-    "schemas:check": "node scripts/gen-schemas.mjs --check"
+    "prepublishOnly": "npm run build && npm run schemas:check && npm test",
+    "schemas": "node --import tsx scripts/gen-schemas.mjs",
+    "schemas:check": "node --import tsx scripts/gen-schemas.mjs --check"
   },
   "publishConfig": {
     "access": "public"

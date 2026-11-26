@@ -45,7 +45,9 @@ The ACL is enforced by hooks, and the role is self-declared:
 
 ## A question is answered but never closes
 
-Question status is `open → answered → applied/closed` (`canceled` = withdrawn):
+Question status is `open → answered → closed` (`canceled` = withdrawn;
+`applied` is a legacy state for hand-written files with a resolution but no
+explicit status):
 
 - The addressee answers with `answer(id, ...)`; the asker is notified.
 - The **asker** must then apply the decision — write it into `PLAN.md`,
@@ -76,6 +78,11 @@ Question status is `open → answered → applied/closed` (`canceled` = withdraw
   also refused; run `commit_request` again after the final edit.
 - `暂存区内容已变化`: the staged content changed after approval. Re-request and
   approve again.
+- An approval marked **已批准但已失效** is dead: the worktree changed after the
+  request/approval (the agent kept editing, a TODO transition ran, or an older
+  request is still around). It is hidden behind “显示已失效”; run
+  `commit_request` again to create a fresh one. A new request supersedes older
+  pending approvals for the same repo.
 - `scope 检查未通过`: changed files are outside the current TODO's
   **影响文件** list (todo role) or violate the ACL. Update the TODO or revert.
 - `pre-commit scope 检查未通过`: the git hook repeats the TODO/ACL check. The

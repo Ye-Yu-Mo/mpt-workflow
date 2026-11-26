@@ -154,6 +154,17 @@ test('a nested repository inside an allowed docs directory is refused', () => {
   );
 });
 
+test('a new root commit request supersedes older pending approvals', () => {
+  const { root, wf } = fixture();
+  fs.writeFileSync(path.join(root, 'docs/a.md'), 'a2\n');
+  const first = wf.requestCommit({ repoId: 'root', message: 'docs: first', role: 'main' });
+  const second = wf.requestCommit({ repoId: 'root', message: 'docs: second', role: 'main' });
+  const old = wf.approvals().find((a) => a.id === first.approval.id);
+  assert.equal(old?.superseded_by, second.approval.id);
+  assert.ok(old?.superseded_at);
+  assert.equal(wf.approvals().find((a) => a.id === second.approval.id)?.superseded_by, undefined);
+});
+
 test('root approval is bound to the staged content', () => {
   const { root, wf } = fixture();
   fs.writeFileSync(path.join(root, 'docs/a.md'), 'a2\n');

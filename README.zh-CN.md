@@ -30,8 +30,9 @@ npm install -g mpt-workflow
 # 0. 想先看效果：在 $TMPDIR 建一个一次性工作区，不碰任何现有目录
 mpt-workflow demo
 
-# 1. 在工作流根目录（伞仓）初始化，采用已有 PLAN/TODO/questions，不覆盖任何文件
-mpt-workflow init --root /path/to/workspace --adopt
+# 1. 在工作流根目录（伞仓）初始化，默认采用已有 PLAN/TODO/questions，不覆盖任何文件
+mpt-workflow init --root /path/to/workspace
+# 只想生成配置、不采用现有文档时加 --no-adopt
 
 # 2. 看一眼状态
 mpt-workflow status --root /path/to/workspace
@@ -129,8 +130,8 @@ MCP 工具：`inbox` / `read_message` / `ack_message` / `wait_message` /
 |---|---|---|
 | `open` | 等待回答 | 被问方（`to`） |
 | `answered` | 已回答，需要应用结论 | 提问方（`from`） |
-| `applied` | 已记录 resolution（从文件推导） | — |
 | `closed` | 提问方/用户已关闭 | — |
+| `applied` | 旧/手写文件：有 resolution 但没有显式状态 | — |
 | `canceled` | 作废 | — |
 
 ```
@@ -141,8 +142,9 @@ ask ──▶ open ──answer──▶ answered ──应用并 close──▶
 `close(id, resolution=...)`**。只 answer 不 close，问题会一直留在未闭合列表。
 
 `next` 会同时提示两侧：被问方看到“回答非阻塞问题”，提问方看到“应用回答并 close”。
-`bootstrap`、`status`、`questions` 和 SessionStart hook 都会打印同样的状态说明。
-`blocking: yes` 的问题在回答前会拦截 claim/complete/accept/reject。
+`bootstrap` 和 SessionStart hook 总会打印状态说明；MCP `status`/`questions`
+在存在 answered 问题时也会打印。`blocking: yes` 的问题在回答前会拦截
+claim/complete/accept/reject。
 
 ### 2. 主 agent（main）
 
@@ -277,9 +279,10 @@ MCP 进程就在伞仓根目录运行时，`repo` 可以省略。只有 `main` /
   每条收件人记录带一份可直接粘贴的启动提示词（bootstrap、消息 ID、ack 与问题 close 规则）。
   交互式 Claude Code 会话无法被外部唤醒，所以最后一步仍需你粘贴；看板只是省掉手工组织提示词。
 - 待批准提交可先看 diff（包含新增/未跟踪文件；过大时标注截断）；工作区变化会标记并禁用批准。
+  新的 `commit_request` 会让同一仓的旧待批准请求失效；已失效的请求默认隐藏在“显示已失效”后。
 - 自动刷新不会抢输入焦点；写失败用固定 toast 提示；仓库卡片可直接“设为 active”。
 
-唯一写操作：回答问题、关闭问题、批准提交、切换 active repo。
+唯一写操作：回答问题、关闭问题、批准提交、ack / 标记已读消息、切换 active repo。
 
 ## 运维
 
@@ -343,7 +346,7 @@ mpt-workflow gc --apply --evidence-days 90   # 同时删除 90 天前的完整�
 npm run typecheck
 npm run lint      # Biome：格式 + lint
 npm run format    # Biome：写入安全修复
-npm test          # 72 个测试（含示例、MCP stdio 与看板端到端）
+npm test          # node:test 全套（含示例、MCP stdio 与看板端到端）
 npm run build
 ```
 

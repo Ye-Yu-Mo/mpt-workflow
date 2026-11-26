@@ -5,13 +5,15 @@ import { z } from 'zod';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
-const dist = path.join(root, 'dist', 'mcp', 'server.js');
-if (!fs.existsSync(dist)) {
-  console.error('[schemas] dist/mcp/server.js 不存在；先运行 npm run build');
+// Import the TypeScript source (run via `node --import tsx`) so a stale dist
+// build cannot produce a valid-looking but outdated schema file.
+const source = path.join(root, 'src', 'mcp', 'server.ts');
+if (!fs.existsSync(source)) {
+  console.error(`[schemas] ${source} 不存在`);
   process.exit(1);
 }
 
-const { buildTools } = await import(pathToFileURL(dist).href);
+const { buildTools } = await import(pathToFileURL(source).href);
 const tools = buildTools({ root }).sort((a, b) => a.name.localeCompare(b.name));
 
 const doc = {

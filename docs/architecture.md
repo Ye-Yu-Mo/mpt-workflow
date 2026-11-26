@@ -80,9 +80,10 @@ approval stays bound to exactly the tree the user reviewed.
 Transitions are implemented in `Workflow` (`src/core/workflow.ts`) and exposed by
 both MCP tools and the CLI, so there is one implementation.
 
-**Question**: `open → answered → applied → closed`, or `canceled`. The asker
-owns the final step: apply the answer to `PLAN.md`/`TODO-Mn.md`/`decisions`,
-then `close`; an answered-but-unclosed question stays visible in `next`.
+**Question**: `open → answered → closed`, or `canceled`; `applied` remains as a
+legacy derived state for hand-written files. The asker owns the final step:
+apply the answer to `PLAN.md`/`TODO-Mn.md`/`decisions`, then `close`; an
+answered-but-unclosed question stays visible in `next`.
 
 **Message**: `queued → unread → read → acked`, plus `expired` / `failed`.
 Delivery is at-least-once: the message is written before any wake-up attempt.
@@ -125,9 +126,9 @@ it:
 
 1. **`PreToolUse` hook** (`.claude/settings.json`): receives the tool call on
    stdin, maps `Edit`/`Write`/`NotebookEdit` to a path and checks the ACL;
-   blocks `git push`; requires an approved, unused, hash-matching approval for
-   `git commit`. Exit code 2 blocks the call and feeds the reason back to the
-   model.
+   blocks `git push`; refuses every agent Bash `git commit` (commit approvals
+   and hash checks live in the MCP `commit` tool/`Workflow`, not in the hook).
+   Exit code 2 blocks the call and feeds the reason back to the model.
 2. **git `pre-commit` hook**: checks staged files against the current
    milestone's declared file list. It is a backstop for shell writes the
    `PreToolUse` hook could not parse.
@@ -159,7 +160,9 @@ not-yet-committed one by default), stages the worktree, and records both a
 working-tree hash and a staged-tree hash in the approval. `approve` refuses a
 stale worktree; `commit` re-checks the staged hash before the local commit, so
 the approval always refers to what the user reviewed. The approval is
-single-use and local-only; there is no push path.
+single-use and local-only; there is no push path. A newer `commit_request`
+supersedes older pending approvals for the same repo (they stay on disk for
+audit), and the dashboard counts only actionable, non-stale approvals.
 
 The umbrella root is committed through the same flow with the sentinel id
 `root`. It is not a configured repo (no PLAN/TODO/milestone, not eligible as

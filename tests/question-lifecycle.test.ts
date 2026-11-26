@@ -47,6 +47,56 @@ test('the question board documents its status lifecycle', () => {
   assert.match(defaultQuestionsHeader(), /close/);
 });
 
+test('question labels with @repo map to the role, not main', () => {
+  const { abs, wf } = fixture();
+  const file = questionsFile(abs);
+  appendQuestion(file, {
+    id: 'Q-002',
+    to: 'plan',
+    from: 'TODO@repo-a',
+    blocking: false,
+    context: 'todo asked this',
+  });
+  appendQuestion(file, {
+    id: 'Q-003',
+    to: 'TODO@repo-a',
+    from: 'plan',
+    blocking: false,
+    context: 'plan asks todo',
+  });
+  const q2 = wf.findQuestion('Q-002');
+  assert.ok(q2);
+  wf.answerQuestion(q2, 'do it', undefined, { role: 'plan', repo: 'repo-a' });
+
+  const next = wf.programStatus().next.filter((n) => n.question);
+  const answered = next.find((n) => n.question === 'Q-002');
+  assert.equal(answered?.actor, 'todo');
+  assert.equal(answered?.action, '应用回答并 close');
+  const open = next.find((n) => n.question === 'Q-003');
+  assert.equal(open?.actor, 'todo');
+  assert.equal(open?.action, '回答非阻塞问题');
+});
+
+test('closing an unanswered blocking question clears the blocker', async () => {
+  const { wf } = fixture();
+  const tools = buildTools({ root: wf.root });
+  const ctx = { wf, role: 'todo' as const, repo: 'repo-a' };
+  const out = await invokeTool(
+    tools,
+    'ask',
+    { to: 'PLAN', context: 'need a decision', blocking: true, repo: 'repo-a' },
+    ctx,
+  );
+  const id = /Q-\d+/.exec(String(out))?.[0];
+  assert.ok(id, String(out));
+  assert.ok(wf.msgs.blockingFor({ role: 'plan', repo: 'repo-a' }).length > 0);
+
+  const q = wf.findQuestion(id);
+  assert.ok(q);
+  wf.closeQuestion(q, 'withdrawn', { role: 'user' });
+  assert.equal(wf.msgs.blockingFor({ role: 'plan', repo: 'repo-a' }).length, 0);
+});
+
 test('next tells both sides what to do and close finishes the loop', async () => {
   const { wf } = fixture();
   const q = wf.findQuestion('Q-001');

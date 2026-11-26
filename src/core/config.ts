@@ -59,6 +59,7 @@ export function normalizeConfig(cfg: ProgramConfig, root: string): ProgramConfig
     root,
     repos: (cfg.repos || []).map((r) => ({ ...r })),
     phases: (cfg.phases || []).map((p) => ({
+      ...p,
       id: p.id,
       title: p.title || p.id,
       status: p.status || 'planned',
@@ -92,25 +93,33 @@ export function saveConfig(root: string, cfg: ProgramConfig): void {
   // keys survive a mutation. `root` is runtime state (the path this process
   // opened) and is deliberately not written back.
   if (exists(p)) {
+    let doc: ReturnType<typeof YAML.parseDocument> | null = null;
     try {
-      const doc = YAML.parseDocument(readText(p));
-      if (doc.errors.length === 0) {
-        const current = normalizeConfig((doc.toJS() ?? {}) as ProgramConfig, root);
-        for (const [key, value] of Object.entries(data)) {
-          const before = (current as unknown as Record<string, unknown>)[key];
-          if (JSON.stringify(before ?? null) !== JSON.stringify(value ?? null)) {
-            doc.set(key, value);
-          }
-        }
-        // Make the schema version explicit on the next write; a missing value
-        // is otherwise indistinguishable from a legacy file.
-        doc.set('schema_version', data.schema_version);
-        doc.delete('root');
-        writeAtomic(p, doc.toString({ lineWidth: 0 }));
-        return;
-      }
+      doc = YAML.parseDocument(readText(p));
     } catch {
-      /* fall through to a full rewrite */
+      doc = null;
+    }
+    if (doc && doc.errors.length === 0) {
+      const current = normalizeConfig((doc.toJS() ?? {}) as ProgramConfig, root);
+      // The on-disk document is authoritative: a caller holding a stale cfg
+      // must not downgrade a file written by a newer schema.
+      if (current.schema_version && current.schema_version > SCHEMA_VERSION) {
+        throw new Error(
+          `program.yaml schema_version=${current.schema_version} 高于当前支持（${SCHEMA_VERSION}）；请升级 mpt-workflow`,
+        );
+      }
+      for (const [key, value] of Object.entries(data)) {
+        const before = (current as unknown as Record<string, unknown>)[key];
+        if (JSON.stringify(before ?? null) !== JSON.stringify(value ?? null)) {
+          doc.set(key, value);
+        }
+      }
+      // Make the schema version explicit on the next write; a missing value
+      // is otherwise indistinguishable from a legacy file.
+      doc.set('schema_version', data.schema_version);
+      doc.delete('root');
+      writeAtomic(p, doc.toString({ lineWidth: 0 }));
+      return;
     }
   }
   writeAtomic(p, YAML.stringify(data, { lineWidth: 0 }));

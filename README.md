@@ -280,8 +280,8 @@ The asker owns the last step:
 |---|---|---|
 | `open` | waiting for an answer | the addressee (`to`) |
 | `answered` | answer written; apply it | the asker (`from`) |
-| `applied` | a resolution is recorded (derived from the file) | — |
 | `closed` | the asker/user closed it | — |
+| `applied` | legacy/hand-written: a resolution exists without an explicit status | — |
 | `canceled` | withdrawn | — |
 
 ```
@@ -292,9 +292,10 @@ After receiving an answer, the asker must **write the conclusion into
 `PLAN.md` / `TODO-Mn.md` / `decisions` and then call `close(id,
 resolution=...)`**. A question that is only answered stays in the unclosed
 list forever. `next` surfaces both sides: `回答非阻塞问题` for the addressee and
-`应用回答并 close` for the asker. `bootstrap`, `status`, `questions` and the
-SessionStart hook print the same status legend. Blocking (`blocking: yes`)
-questions stop claim/complete/accept/reject until answered.
+`应用回答并 close` for the asker. `bootstrap` and the SessionStart hook always
+print the status legend; the MCP `status`/`questions` tools print it when an
+answered question is in the list. Blocking (`blocking: yes`) questions stop
+claim/complete/accept/reject until answered.
 
 ## Messaging and notifications
 
@@ -352,8 +353,9 @@ mpt-workflow watch --role main
   removes the manual prompt-writing.
 - pending commit approvals with a **diff review** (file list, stat, unified
   diff, including new/untracked files) before you approve; a changed worktree is
-  flagged and approval is disabled, and an oversized diff is marked as
-  truncated
+  flagged and approval is disabled. A new `commit_request` supersedes older
+  pending approvals for the repo; stale ones are hidden behind **显示已失效**,
+  and an oversized diff is marked as truncated
 - copyable agent session command (`WF_ROLE=… WF_REPO=… claude`) for each next
   action, and a **设为 active** control on each repo card
 - environment checks and an event timeline
@@ -365,7 +367,7 @@ detail, restores focus after a refresh, and shows a retry banner if the API
 fails.
 
 The only write actions are: answer/close a question, approve a commit, ack a
-message, switch the active repo.
+message, mark a message read, switch the active repo.
 
 ## Maintenance
 
@@ -443,7 +445,7 @@ src/core/     parsing, state machine, ACL, git, evidence, approvals, messages
 src/mcp/      MCP server (25 tools)
 src/web/      HTTP API + single-page dashboard
 src/cli.ts    init / status / doctor / web / mcp / hook / inbox / send ...
-tests/        node:test suites (72 tests, incl. real examples + MCP stdio)
+tests/        node:test suites (incl. real examples + MCP stdio)
 docs/         architecture and requirement notes
 ```
 
@@ -454,7 +456,7 @@ npm run typecheck   # tsc --noEmit
 npm run typecheck:tests  # typecheck the test suite too
 npm run lint        # Biome: formatting + lint
 npm run format      # Biome: write safe fixes
-npm test            # runs the 72 tests via tsx
+npm test            # runs the node:test suites via tsx
 npm run build       # tsc + copies the dashboard assets into dist/
 ```
 

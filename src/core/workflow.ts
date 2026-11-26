@@ -51,6 +51,7 @@ import {
   listApprovals,
   logEvent,
   readApproval,
+  supersedeApprovals,
   withLock,
   writeApproval,
 } from './state.js';
@@ -148,10 +149,12 @@ export class Workflow {
   /* ------------------------------ repos ------------------------------ */
 
   repoRefs(): RepoRef[] {
-    return this.cfg.repos.map((r) => ({
-      id: r.id,
-      abs: path.isAbsolute(r.path) ? r.path : path.join(this.root, r.path),
-    }));
+    return this.cfg.repos
+      .filter((r) => r.id !== ROOT_REPO_ID)
+      .map((r) => ({
+        id: r.id,
+        abs: path.isAbsolute(r.path) ? r.path : path.join(this.root, r.path),
+      }));
   }
 
   repoRef(id: string): RepoRef {
@@ -163,6 +166,9 @@ export class Workflow {
   }
 
   repoConfig(id: string) {
+    if (id === ROOT_REPO_ID) {
+      throw new Error(`'${ROOT_REPO_ID}' 是伞仓保留 id，不是配置中的仓库`);
+    }
     const c = this.cfg.repos.find((r) => r.id === id);
     if (!c) throw new Error(`未知仓库 ${id}`);
     return c;
@@ -252,7 +258,15 @@ export class Workflow {
     } catch {
       /* best-effort */
     }
-    this.msgs.ackByRef(by, 'question_id', q.id);
+    // Closing (even without an answer) must clear the blocking message on both
+    // sides; otherwise the addressee stays gated by a question that is gone.
+    for (const actor of [by, asker, addressee]) {
+      try {
+        this.msgs.ackByRef(actor, 'question_id', q.id);
+      } catch {
+        /* message cleanup is best-effort */
+      }
+    }
   }
 
   /* -------------------------- repo state ---------------------------- */
@@ -560,6 +574,9 @@ export class Workflow {
   /* --------------------------- mutations ---------------------------- */
 
   setActiveRepo(id: string | null): void {
+    if (id === ROOT_REPO_ID) {
+      throw new Error(`'${ROOT_REPO_ID}' 是伞仓保留 id，不能作为 active_repo`);
+    }
     if (id !== null) {
       const ref = this.repoRef(id); // validate
       if (!exists(ref.abs)) throw new Error(`仓库目录不存在: ${ref.abs}`);
@@ -1031,6 +1048,7 @@ export class Workflow {
         message: input.message,
         files,
       });
+      supersedeApprovals(this.root, ROOT_REPO_ID, a.id);
       logEvent(this.root, {
         role: input.role,
         tool: 'commit_request',
@@ -1069,6 +1087,7 @@ export class Workflow {
       message: input.message,
       files,
     });
+    supersedeApprovals(this.root, input.repoId, a.id);
     logEvent(this.root, {
       role: input.role,
       tool: 'commit_request',
@@ -1219,6 +1238,14 @@ export class Workflow {
         code: 'schema-version',
         message: `program.yaml schema_version=${schemaVersion} 高于当前支持（1）`,
         hint: '升级 mpt-workflow；旧版本不会自动降级配置',
+      });
+    }
+    if (this.cfg.repos.some((r) => r.id === ROOT_REPO_ID)) {
+      push({
+        level: 'FAIL',
+        code: 'reserved-repo',
+        message: `repos 不能使用保留 id '${ROOT_REPO_ID}'`,
+        hint: `把该仓库改名为其他 id；'${ROOT_REPO_ID}' 专指伞仓文档`,
       });
     }
 
@@ -1399,7 +1426,8 @@ export class Workflow {
 
 /** Map a question's from/to label (PLAN, TODO@repo, system, …) to a Role. */
 function nextActor(label: string): Role {
-  const actor = actorFromRole(label);
+  const [role, repo] = String(label).split('@');
+  const actor = actorFromRole(role, repo);
   return actor.role === 'system' ? 'main' : actor.role;
 }
 

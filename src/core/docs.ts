@@ -274,11 +274,11 @@ export function parseEvidence(todo: TodoDoc): EvidenceEntry[] {
     const title = block[0].replace(/^###\s+/, '');
     const id = /^(E\d+)/.exec(title)?.[1] || '';
     const at = /—\s*([0-9T:.\-Z]+)/.exec(title)?.[1] || '';
-    const cmd = /command[：:]\s*`([^`]*)`/.exec(header)?.[1] || '';
-    const exit = Number(/exit[：:]\s*(-?\d+)/.exec(header)?.[1] ?? NaN);
-    const head = /head[：:]\s*`?([0-9a-f]{7,40})`?/.exec(header)?.[1] || '';
-    const tree = /tree[：:]\s*`?([0-9a-f]{7,40})`?/.exec(header)?.[1] || '';
-    const dirty = /dirty[：:]\s*(true|false)/.exec(header)?.[1] === 'true';
+    const cmd = /^-\s*command[：:]\s*`([^`]*)`\s*$/m.exec(header)?.[1] || '';
+    const exit = Number(/^-\s*exit[：:]\s*(-?\d+)\s*$/m.exec(header)?.[1] ?? NaN);
+    const head = /^-\s*head[：:]\s*`?([0-9a-f]{7,40})`?\s*$/m.exec(header)?.[1] || '';
+    const tree = /^-\s*tree[：:]\s*`?([0-9a-f]{7,40})`?\s*$/m.exec(header)?.[1] || '';
+    const dirty = /^-\s*dirty[：:]\s*(true|false)\s*$/m.exec(header)?.[1] === 'true';
     out.push({
       id,
       at,
@@ -360,9 +360,12 @@ export function appendEvidenceSection(
     if (m) longest = Math.max(longest, m[1].length);
   }
   const fence = '`'.repeat(Math.max(3, longest + 1));
+  // The command is agent-supplied: collapse CR/LF (and backticks) so it cannot
+  // inject a second `- exit:`/`- head:` metadata line into the record.
+  const commandLine = entry.command.replace(/[\r\n]+/g, ' ⏎ ').replace(/`/g, "'");
   const block = [
     `### ${entry.id} — ${entry.at}`,
-    `- command: \`${entry.command.replace(/`/g, "'")}\``,
+    `- command: \`${commandLine}\``,
     `- exit: ${entry.exitCode}`,
     `- head: \`${entry.head}\``,
     `- tree: \`${entry.tree}\``,
