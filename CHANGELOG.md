@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-26
+
 ### Added
 
 - **Per-session role leases.** Roles are stored under
@@ -395,7 +397,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   timeline.
 - 16 tests.
 
-[Unreleased]: https://github.com/Ye-Yu-Mo/mpt-workflow/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/Ye-Yu-Mo/mpt-workflow/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/Ye-Yu-Mo/mpt-workflow/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/Ye-Yu-Mo/mpt-workflow/compare/v0.10.3...v1.0.0
 [0.10.3]: https://github.com/Ye-Yu-Mo/mpt-workflow/compare/v0.10.2...v0.10.3
 [0.10.2]: https://github.com/Ye-Yu-Mo/mpt-workflow/compare/v0.10.1...v0.10.2

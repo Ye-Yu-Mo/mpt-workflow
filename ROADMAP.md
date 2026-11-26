@@ -75,6 +75,12 @@ feature surface.
 - [x] Release `0.10.2` (dashboard relay station).
 - [x] Release `0.10.3` (pre-1.0 audit fixes, approval lifecycle).
 
+## 1.1 — multi-session consistency
+
+- [x] Per-session role leases, config hot reload with fail-closed errors.
+- [x] `status` session/config fields; explicit `phase_activate` transitions.
+- [x] Release `1.1.0`.
+
 ## 1.0 — stable contract
 
 Design: [docs/design-1.0-contract.md](docs/design-1.0-contract.md).
