@@ -91,6 +91,7 @@ phases:
   );
   const cfg = loadConfig(root);
   assert.ok(cfg);
+  assert.equal(cfg.schema_version, 1);
   assert.equal(cfg.root, path.resolve(root));
   assert.equal(cfg.program, 'demo');
   assert.equal(cfg.active_repo, null);
@@ -100,6 +101,24 @@ phases:
   assert.deepEqual(cfg.phases[0].exit_criteria, []);
 });
 
+test('generated schemas match the tool inventory', () => {
+  const file = path.resolve(process.cwd(), 'schemas/mcp-tools.json');
+  const doc = JSON.parse(fs.readFileSync(file, 'utf8')) as {
+    schema_version: number;
+    tools: Record<string, { roles: string[]; input: { properties?: Record<string, unknown> } }>;
+  };
+  assert.equal(doc.schema_version, 1);
+  const tools = buildTools({ root: process.cwd() });
+  assert.deepEqual(Object.keys(doc.tools).sort(), tools.map((t) => t.name).sort());
+  for (const tool of tools) {
+    assert.deepEqual(
+      Object.keys(doc.tools[tool.name].input.properties ?? {}),
+      Object.keys(tool.schema ?? {}),
+      `${tool.name} schema drift`,
+    );
+  }
+});
+
 test('CLI help still lists every frozen command', { skip: !fs.existsSync(CLI) }, () => {
   const help = execFileSync(process.execPath, [CLI, '--help'], { encoding: 'utf8' });
   for (const cmd of [
@@ -107,6 +126,7 @@ test('CLI help still lists every frozen command', { skip: !fs.existsSync(CLI) },
     'status',
     'next',
     'doctor',
+    'migrate',
     'gc',
     'questions',
     'answer',

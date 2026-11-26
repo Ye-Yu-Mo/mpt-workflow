@@ -40,6 +40,7 @@ jobs:
       - run: npm run typecheck:tests
       - run: npm run lint
       - run: npm run build
+      - run: npm run schemas:check
       - run: npm run test:coverage
 
       - name: package.json and built VERSION agree

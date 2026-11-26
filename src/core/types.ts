@@ -50,6 +50,8 @@ export interface ContractConfig {
 }
 
 export interface ProgramConfig {
+  /** Configuration schema version; missing means 1. See docs/design-1.0-contract.md. */
+  schema_version?: number;
   program: string;
   root: string;
   repos: RepoConfig[];

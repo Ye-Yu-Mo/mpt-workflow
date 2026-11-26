@@ -232,6 +232,11 @@ MCP 进程就在伞仓根目录运行时，`repo` 可以省略。只有 `main` /
 | `wait_message` | 全部 | 长轮询等新消息（30–120s） |
 | `broadcast` / `presence` / `escalate` | main / 全部 / 全部 | 广播、在线状态、升级 |
 
+机器可读的工具输入 schema：
+[`schemas/mcp-tools.json`](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/schemas/mcp-tools.json)
+（`npm run schemas` 生成，`npm run schemas:check` 检查是否过期）。1.0 对这些名称和字段的兼容承诺见
+[docs/design-1.0-contract.md](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/docs/design-1.0-contract.md)。
+
 只保留原生工具**做不到**的：状态推导、跨进程状态、门禁、证据执行、审批。
 读写文件仍然用 Edit/Write，不另造一套。
 
@@ -251,6 +256,8 @@ MCP 进程就在伞仓根目录运行时，`repo` 可以省略。只有 `main` /
 
 ```bash
 mpt-workflow doctor                          # 运行时体积 + 失效 CLI 路径
+mpt-workflow migrate                         # 预览 1.0 配置迁移
+mpt-workflow migrate --apply                 # 写入 schema_version，删除机器相关的 root
 mpt-workflow gc                              # dry-run，只报告
 mpt-workflow gc --apply                      # 删除 30 天前已处理的消息/审批，以及过期 presence/lock
 mpt-workflow gc --apply --evidence-days 90   # 同时删除 90 天前的完整证据日志

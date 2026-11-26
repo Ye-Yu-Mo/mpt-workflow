@@ -49,7 +49,9 @@ export function loadConfig(root: string): ProgramConfig | null {
 }
 
 export function normalizeConfig(cfg: ProgramConfig, root: string): ProgramConfig {
+  const version = Number(cfg.schema_version);
   return {
+    schema_version: Number.isFinite(version) && version > 0 ? version : 1,
     program: cfg.program || path.basename(root),
     root,
     repos: (cfg.repos || []).map((r) => ({ ...r })),
@@ -70,6 +72,7 @@ export function saveConfig(root: string, cfg: ProgramConfig): void {
   const p = configPath(root);
   const data = {
     program: cfg.program,
+    schema_version: cfg.schema_version ?? 1,
     active_repo: cfg.active_repo,
     repos: cfg.repos,
     phases: cfg.phases,
@@ -90,6 +93,9 @@ export function saveConfig(root: string, cfg: ProgramConfig): void {
             doc.set(key, value);
           }
         }
+        // Make the schema version explicit on the next write; a missing value
+        // is otherwise indistinguishable from a legacy file.
+        doc.set('schema_version', data.schema_version);
         doc.delete('root');
         writeAtomic(p, doc.toString({ lineWidth: 0 }));
         return;
