@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Config mutations refuse a `program.yaml` written by a newer schema instead of
+  partially rewriting it; the explicit `schema_version` guard matches `doctor`
+  and `migrate`.
+
 ## [0.10.0] - 2026-11-26
 
 ### Added
