@@ -288,7 +288,9 @@ test('blocking question surfaces in status and next', () => {
 
 test('milestone mutations require the active repo', () => {
   const { wf } = setup();
+  const messagesBefore = wf.msgs.list().length;
   wf.setActiveRepo('repo-b');
+  assert.equal(wf.msgs.list().length, messagesBefore, 'active repo switch sends no messages');
   assert.throws(() => wf.claim('repo-a', 'M1', 'todo'), /不是 active_repo/);
   wf.setActiveRepo('repo-a');
   assert.equal(wf.claim('repo-a', 'M1', 'todo').status, 'implementing');
@@ -635,6 +637,7 @@ files: [src/front.ts]
   );
   const d = parseTodo(f);
   assert.ok(d);
+  if (!d) throw new Error('TODO-M1 should parse');
   assert.deepEqual(
     [...d.allowedFiles].sort(),
     ['src/a.ts', 'src/b.ts', 'src/comment.ts', 'src/front.ts'].sort(),

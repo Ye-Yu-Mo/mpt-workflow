@@ -205,14 +205,23 @@ export function startWebServer(wf: Workflow, port: number): Promise<WebHandle> {
             infoCache.set(key, info);
             return info;
           };
+          const ACTIONABLE = new Set([
+            'question',
+            'answer',
+            'alert',
+            'approval_request',
+            'handoff',
+          ]);
           const out = [];
           for (const target of targets) {
             const unread = wf.msgs.forActor(target, { unreadOnly: true, limit: 100 });
             const blocking = wf.msgs.blockingFor(target);
             const byId = new Map([...unread, ...blocking].map((m) => [m.id, m]));
-            const messages = [...byId.values()].sort((a, b) =>
-              a.created_at.localeCompare(b.created_at),
-            );
+            const messages = [...byId.values()]
+              // Pure information events (active repo switch, commit notices)
+              // belong in inbox/audit, not in a prompt the user must relay.
+              .filter((m) => m.blocking || ACTIONABLE.has(m.kind))
+              .sort((a, b) => a.created_at.localeCompare(b.created_at));
             if (messages.length === 0) continue;
             const info = infoFor(target.repo);
             out.push({

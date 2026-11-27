@@ -330,7 +330,6 @@ queryable and acknowledged:
 | `milestone_reject` | `plan@repo → todo@repo` |
 | `commit_request` | any → `user` |
 | `commit` | any → `main, user` |
-| `phase_activate` | `main → all plan/todo` |
 
 ```bash
 mpt-workflow inbox --role plan --repo my-service --unread
@@ -356,6 +355,10 @@ mpt-workflow watch --role main
   it groups pending messages per recipient and generates a prompt with the
   bootstrap call, message IDs, and the ack/close steps. Paste it into that
   agent's session.
+- **Active repo switches are not messages.** `phase_activate` updates global
+  status (`status`/`next`) and the audit log; it does not spam every inbox or
+  the relay station. The relay also hides pure `event` notifications and only
+  shows actionable kinds (question/answer/alert/handoff/approval).
 
 ## Dashboard
 
