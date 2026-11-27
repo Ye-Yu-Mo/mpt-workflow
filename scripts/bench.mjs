@@ -18,9 +18,9 @@ import { configPath } from '../src/core/config.ts';
 import { appendEvidenceFile } from '../src/core/docs.ts';
 import { gitInfo } from '../src/core/git.ts';
 import { init } from '../src/core/init.ts';
+import { Workflow } from '../src/core/workflow.ts';
 import { buildTools, invokeTool } from '../src/mcp/server.ts';
 import { startWebServer } from '../src/web/server.ts';
-import { Workflow } from '../src/core/workflow.ts';
 
 const num = (name, fallback) => {
   const v = Number(process.env[name]);
@@ -163,10 +163,9 @@ for (let i = 0; i < MSGS; i++) {
 }
 const sendMs = performance.now() - tSend;
 console.log(
-  `message send: ${sendMs.toFixed(0)}ms total, ${(
-    (MSGS / sendMs) *
-    1000
-  ).toFixed(0)} ops/s (${(sendMs / MSGS).toFixed(2)}ms/msg)`,
+  `message send: ${sendMs.toFixed(0)}ms total, ${((MSGS / sendMs) * 1000).toFixed(
+    0,
+  )} ops/s (${(sendMs / MSGS).toFixed(2)}ms/msg)`,
 );
 
 const firstRepo = ids[0];
@@ -174,11 +173,7 @@ const planActor = { role: 'plan', repo: firstRepo };
 const statusCtx = { wf, role: 'main', repo: null };
 
 benchSync('workflow.programStatus', () => wf.programStatus(), STATUS_ITERS);
-benchSync(
-  'gitInfo (one repo)',
-  () => gitInfo(path.join(root, firstRepo)),
-  STATUS_ITERS,
-);
+benchSync('gitInfo (one repo)', () => gitInfo(path.join(root, firstRepo)), STATUS_ITERS);
 benchSync('workflow.repoState', () => wf.repoState(firstRepo), STATUS_ITERS);
 benchSync('workflow.allQuestions', () => wf.allQuestions(), STATUS_ITERS);
 benchSync('messages.list', () => wf.msgs.list(), MSG_ITERS);
@@ -192,10 +187,14 @@ benchSync(
 benchSync('messages.unreadCount', () => wf.msgs.unreadCount(planActor), MSG_ITERS);
 benchSync('messages.blockingFor', () => wf.msgs.blockingFor(planActor), MSG_ITERS);
 benchSync('config stat (no reload)', () => wf.refreshConfig(), 1000);
-benchSync('config read+parse', () => {
-  const text = fs.readFileSync(configPath(root), 'utf8');
-  return text.length;
-}, 1000);
+benchSync(
+  'config read+parse',
+  () => {
+    const text = fs.readFileSync(configPath(root), 'utf8');
+    return text.length;
+  },
+  1000,
+);
 
 // Snapshot request over 50 changed files.
 const repoDir = path.join(root, firstRepo);
