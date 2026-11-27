@@ -49,31 +49,75 @@ export function gitInfo(repoAbs: string): GitInfo {
       error: 'not a git repository',
     };
   }
-  const branch = git(repoAbs, ['rev-parse', '--abbrev-ref', 'HEAD']);
-  const head = git(repoAbs, ['rev-parse', 'HEAD']);
-  const status = git(repoAbs, ['status', '--porcelain=v1', '-z', '--untracked-files=all']);
-  const entries = status.out.split('\0').filter(Boolean);
+  // One process instead of rev-parse x2 + status: porcelain v2 includes the
+  // branch oid/name and every changed/untracked path.
+  const status = git(repoAbs, [
+    'status',
+    '--porcelain=v2',
+    '--branch',
+    '-z',
+    '--untracked-files=all',
+  ]);
+  if (!status.ok) {
+    return {
+      available: false,
+      branch: '',
+      head: '',
+      shortHead: '',
+      dirty: false,
+      changed: [],
+      untracked: [],
+      error: status.err.trim() || 'git status failed',
+    };
+  }
+  const entries = status.out.split('\0');
+  let head = '';
+  let branchName = '';
   const changed: string[] = [];
   const untracked: string[] = [];
   for (let i = 0; i < entries.length; i++) {
     const e = entries[i];
-    const code = e.slice(0, 2);
-    const file = e.slice(3);
-    if (!file) continue;
-    if (code === '??') untracked.push(file);
-    else changed.push(file);
-    // With -z, rename/copy entries are two records: new path, then old path.
-    if ((code[0] === 'R' || code[0] === 'C') && i + 1 < entries.length) i++;
+    if (!e) continue;
+    if (e.startsWith('# branch.oid ')) {
+      const oid = e.slice('# branch.oid '.length).trim();
+      if (oid !== '(initial)') head = oid;
+      continue;
+    }
+    if (e.startsWith('# branch.head ')) {
+      branchName = e.slice('# branch.head '.length).trim();
+      continue;
+    }
+    if (e.startsWith('? ')) {
+      untracked.push(e.slice(2));
+      continue;
+    }
+    if (e.startsWith('1 ')) {
+      const m = /^1 \S+ \S+ \S+ \S+ \S+ \S+ \S+ (.*)$/.exec(e);
+      if (m?.[1]) changed.push(m[1]);
+      continue;
+    }
+    if (e.startsWith('2 ')) {
+      const m = /^2 \S+ \S+ \S+ \S+ \S+ \S+ \S+ \S+ (.*)$/.exec(e);
+      if (m?.[1]) changed.push(m[1]);
+      // Rename/copy: the next NUL record is the original path.
+      if (i + 1 < entries.length) i++;
+      continue;
+    }
+    if (e.startsWith('u ')) {
+      const m = /^u \S+ \S+ \S+ \S+ \S+ \S+ \S+ \S+ \S+ (.*)$/.exec(e);
+      if (m?.[1]) changed.push(m[1]);
+    }
   }
+  const branch = branchName === '(detached)' ? 'HEAD' : branchName;
   return {
-    available: head.ok,
-    branch: branch.out.trim(),
-    head: head.out.trim(),
-    shortHead: head.out.trim().slice(0, 8),
+    available: Boolean(head),
+    branch,
+    head,
+    shortHead: head.slice(0, 8),
     dirty: changed.length + untracked.length > 0,
     changed,
     untracked,
-    error: head.ok ? undefined : head.err.trim() || undefined,
+    error: head ? undefined : 'no commits yet',
   };
 }
 

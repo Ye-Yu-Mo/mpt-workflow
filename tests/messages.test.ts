@@ -139,6 +139,33 @@ test('idempotency key produces one message', () => {
 
 /* ------------------------------- blocking ------------------------------- */
 
+test('message list cache sees other processes and local transitions', () => {
+  const { root, wf } = fixture();
+  const first = wf.msgs.send({
+    from: { role: 'system' },
+    to: { role: 'user' },
+    kind: 'event',
+    subject: 'first',
+  }).message;
+  assert.ok(wf.msgs.list().some((m) => m.id === first.id));
+
+  // Another Workflow instance writes the same directory.
+  const other = new Workflow(root);
+  const second = other.msgs.send({
+    from: { role: 'system' },
+    to: { role: 'user' },
+    kind: 'event',
+    subject: 'second',
+  }).message;
+  assert.ok(
+    wf.msgs.list().some((m) => m.id === second.id),
+    'cache sees another writer',
+  );
+
+  wf.msgs.ack(first.id, 'done');
+  assert.equal(wf.msgs.list().find((m) => m.id === first.id)?.status, 'acked');
+});
+
 test('blocking message gates milestone transitions until acked', () => {
   const { wf } = fixture();
   const plan = { role: 'plan' as const, repo: 'repo-a' };

@@ -13,6 +13,7 @@
 | [support-scope.md](support-scope.md) | Chinese-first language policy; Claude Code as the only supported client |
 | [releasing.md](releasing.md) | Version bump, tag, npm publish and release workflow |
 | [troubleshooting.md](troubleshooting.md) | Role/ACL, hooks, blocking messages, commits, evidence, dashboard and `gc` |
+| [performance.md](performance.md) | Synthetic load benchmark, numbers and scaling notes |
 | [../examples/README.md](../examples/README.md) | Runnable minimal, multi-repo and Rust workspaces |
 
 The user-facing documentation lives in the repository root:

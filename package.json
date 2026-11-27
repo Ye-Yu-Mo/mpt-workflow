@@ -24,7 +24,8 @@
     "format": "biome check --write .",
     "prepublishOnly": "npm run build && npm run schemas:check && npm test",
     "schemas": "node --import tsx scripts/gen-schemas.mjs",
-    "schemas:check": "node --import tsx scripts/gen-schemas.mjs --check"
+    "schemas:check": "node --import tsx scripts/gen-schemas.mjs --check",
+    "bench": "node --import tsx scripts/bench.mjs"
   },
   "publishConfig": {
     "access": "public"

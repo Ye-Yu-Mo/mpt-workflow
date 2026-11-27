@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Performance
+
+- `MessageStore.list()` caches parsed messages keyed by the message directory's
+  mtime/size/count; cross-process writes invalidate it. A 2,000-message scan is
+  now ~1 ms instead of ~26 ms, and `GET /api/relay` dropped from ~800 ms to
+  ~105 ms in the synthetic bench.
+- `gitInfo` uses one `git status --porcelain=v2 --branch` instead of two
+  `rev-parse` calls plus `status`, roughly halving `status` time.
+- Added `npm run bench` and [docs/performance.md](docs/performance.md) with
+  methodology and numbers.
+
 ## [1.4.1] - 2026-11-26
 
 ### Changed
