@@ -15,6 +15,7 @@
 | [troubleshooting.md](troubleshooting.md) | Role/ACL, hooks, blocking messages, commits, evidence, dashboard and `gc` |
 | [performance.md](performance.md) | Synthetic load benchmark, numbers and scaling notes |
 | [field-notes.md](field-notes.md) | Field notes from a real 4-repo rollout: habits, anti-patterns, case notes |
+| [real-usage.md](real-usage.md) | Command-level walkthrough of a real 4-repo, 3-role program, milestone by milestone |
 | [../examples/README.md](../examples/README.md) | Runnable minimal, multi-repo and Rust workspaces |
 
 The user-facing documentation lives in the repository root:
