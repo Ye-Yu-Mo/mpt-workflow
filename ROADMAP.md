@@ -80,6 +80,7 @@ feature surface.
 - [x] New question ids carry the repo scope; legacy ids still parse.
 - [x] Release `1.4.0`.
 - [x] Release `1.4.1` (no messaging on active-repo switch; relay filters events).
+- [x] Release `1.4.2` (message cache, single git status, benchmark).
 
 ## 1.3 — evidence and approval lifecycle
 
