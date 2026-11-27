@@ -367,6 +367,7 @@ npm run typecheck
 npm run lint      # Biome：格式 + lint
 npm run format    # Biome：写入安全修复
 npm test          # node:test 全套（含示例、MCP stdio 与看板端到端）
+npm run bench     # 合成多仓/多消息压测（见 docs/performance.md）
 npm run build
 ```
 

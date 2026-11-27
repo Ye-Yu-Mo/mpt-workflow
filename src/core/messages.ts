@@ -141,6 +141,8 @@ export class MessageStore {
   repos: string[];
   dir: string;
   auditFile: string;
+  /** Parsed messages, invalidated whenever this store writes or the dir changes. */
+  private cache?: { key: string; list: Message[] };
 
   constructor(opts: MessageStoreOptions) {
     this.root = opts.root;
@@ -167,11 +169,17 @@ export class MessageStore {
   list(): Message[] {
     const out: Message[] = [];
     let names: string[] = [];
+    let key = '';
     try {
+      const st = fs.statSync(this.dir);
       names = fs.readdirSync(this.dir).filter((n) => n.endsWith('.json'));
+      // Directory mtime/size + count catches another process adding or
+      // rewriting a message (writes are atomic renames).
+      key = `${st.mtimeMs}:${st.size}:${names.length}`;
     } catch {
       return out;
     }
+    if (this.cache?.key === key) return [...this.cache.list];
     for (const n of names) {
       try {
         const m = JSON.parse(readText(path.join(this.dir, n))) as Message;
@@ -180,7 +188,8 @@ export class MessageStore {
         /* skip corrupt messages */
       }
     }
-    return out;
+    this.cache = { key, list: out };
+    return [...out];
   }
 
   get(id: string): Message | null {
@@ -197,6 +206,7 @@ export class MessageStore {
     const p = this.file(m.id);
     if (!p) throw new Error(`非法消息 id: ${m.id}`);
     writeAtomic(p, JSON.stringify(m, null, 2));
+    this.cache = undefined;
   }
 
   findByKey(key: string): Message | null {

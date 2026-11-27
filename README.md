@@ -483,6 +483,7 @@ npm run typecheck:tests  # typecheck the test suite too
 npm run lint        # Biome: formatting + lint
 npm run format      # Biome: write safe fixes
 npm test            # runs the node:test suites via tsx
+npm run bench       # synthetic multi-repo/message load test (docs/performance.md)
 npm run build       # tsc + copies the dashboard assets into dist/
 ```
 
