@@ -126,6 +126,9 @@ MCP 工具：`inbox` / `read_message` / `ack_message` / `wait_message` /
 - **唤醒另一个 agent**：交互式 Claude Code 会话无法被本进程注入文本。用看板
   **中转站**：它按收件人汇总待处理消息，并生成含 bootstrap、消息 ID、ack/close
   步骤的提示词，复制到对应会话即可。
+- **active repo 切换不发消息**：`phase_activate` 只更新全局状态（`status`/`next`）
+  和审计日志，不刷每个会话的 inbox；中转站也隐藏纯 `event`，只显示
+  question/answer/alert/handoff/approval 等需要处理的消息。
 - 唤醒是 best-effort：SessionStart hook 会注入未读摘要，但**消息本身以存储为准**。
 
 ### 1.6 问题生命周期

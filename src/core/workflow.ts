@@ -699,20 +699,14 @@ export class Workflow {
       this.cfg.active_repo = id;
       this.save();
     });
-    if (id) {
-      this.notifyEvent({
-        from: 'main',
-        to: this.cfg.repos.flatMap((r) => [
-          { role: 'plan' as const, repo: r.id },
-          { role: 'todo' as const, repo: r.id },
-        ]),
-        kind: 'event',
-        subject: `active repo 切换为 ${id}`,
-        body: '串行锁：一次只激活一个仓。未激活的仓暂停实现。',
-        refs: { repo: id },
-        key: `activate:${id}:${Date.now()}`,
-      });
-    }
+    // Active repo is global status; it is visible via status/next and should
+    // not spam every agent's inbox (or the relay station).
+    logEvent(this.root, {
+      role: 'main',
+      tool: 'set_active_repo',
+      repo: id ?? undefined,
+      ok: true,
+    });
   }
 
   /** Validate a phase activation without writing (used before the repo lock). */

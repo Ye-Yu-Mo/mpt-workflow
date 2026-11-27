@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `phase_activate` no longer sends an inbox message for the active-repo switch
+  (it stays in `status`/`next` + the audit log). The dashboard relay only shows
+  actionable messages and hides pure `event` notifications.
+
 ## [1.4.0] - 2026-11-26
 
 ### Changed
