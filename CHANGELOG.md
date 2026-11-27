@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docs/field-notes.md`: a real 4-repo rollout write-up — what the state machine
   bought, the working loop, habits that prevented incidents, anti-patterns and
   case notes, updated for the 1.2+ approval model.
+- `docs/real-usage.md`: command-level walkthrough of the same 4-repo, 3-role
+  program, milestone by milestone.
 
 ## [1.4.2] - 2026-11-27
 

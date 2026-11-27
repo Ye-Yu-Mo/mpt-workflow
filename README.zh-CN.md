@@ -389,6 +389,7 @@ tests/          node:test
 - 变更记录：[CHANGELOG.md](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/CHANGELOG.md)
 - 架构与设计取舍：[docs/architecture.md](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/docs/architecture.md)
 - 真实多仓落地的习惯与反模式：[docs/field-notes.md](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/docs/field-notes.md)
+- 一次真实 4 仓/3 角色的命令级流程：[docs/real-usage.md](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/docs/real-usage.md)
 
 ## 许可证
 

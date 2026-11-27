@@ -491,6 +491,7 @@ See [CONTRIBUTING.md](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/CONTRIB
 [docs/architecture.md](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/docs/architecture.md) for the design rationale.
 Stuck? See [docs/troubleshooting.md](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/docs/troubleshooting.md).
 Real-world habits and anti-patterns: [docs/field-notes.md](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/docs/field-notes.md).
+A command-level walkthrough: [docs/real-usage.md](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/docs/real-usage.md).
 
 ## License
 
