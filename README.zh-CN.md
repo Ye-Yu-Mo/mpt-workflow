@@ -388,6 +388,7 @@ tests/          node:test
 - 行为准则：[CODE_OF_CONDUCT.md](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/CODE_OF_CONDUCT.md)
 - 变更记录：[CHANGELOG.md](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/CHANGELOG.md)
 - 架构与设计取舍：[docs/architecture.md](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/docs/architecture.md)
+- 真实多仓落地的习惯与反模式：[docs/field-notes.md](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/docs/field-notes.md)
 
 ## 许可证
 

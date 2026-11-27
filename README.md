@@ -490,6 +490,7 @@ npm run build       # tsc + copies the dashboard assets into dist/
 See [CONTRIBUTING.md](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/CONTRIBUTING.md) for the full workflow, and
 [docs/architecture.md](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/docs/architecture.md) for the design rationale.
 Stuck? See [docs/troubleshooting.md](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/docs/troubleshooting.md).
+Real-world habits and anti-patterns: [docs/field-notes.md](https://github.com/Ye-Yu-Mo/mpt-workflow/blob/main/docs/field-notes.md).
 
 ## License
 
