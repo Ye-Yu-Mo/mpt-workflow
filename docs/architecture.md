@@ -1,6 +1,6 @@
 # Architecture
 
-> Status: current as of v1.4.0.
+> Status: current as of v1.4.1.
 
 `mpt-workflow` is a state layer over documents that already exist in a repo. It
 does not own the plan; it reads the plan, derives state, enforces role-scoped

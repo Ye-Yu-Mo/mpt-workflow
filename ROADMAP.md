@@ -79,6 +79,7 @@ feature surface.
 
 - [x] New question ids carry the repo scope; legacy ids still parse.
 - [x] Release `1.4.0`.
+- [x] Release `1.4.1` (no messaging on active-repo switch; relay filters events).
 
 ## 1.3 — evidence and approval lifecycle
 
