@@ -14,6 +14,7 @@
 | [releasing.md](releasing.md) | Version bump, tag, npm publish and release workflow |
 | [troubleshooting.md](troubleshooting.md) | Role/ACL, hooks, blocking messages, commits, evidence, dashboard and `gc` |
 | [performance.md](performance.md) | Synthetic load benchmark, numbers and scaling notes |
+| [field-notes.md](field-notes.md) | Field notes from a real 4-repo rollout: habits, anti-patterns, case notes |
 | [../examples/README.md](../examples/README.md) | Runnable minimal, multi-repo and Rust workspaces |
 
 The user-facing documentation lives in the repository root:
